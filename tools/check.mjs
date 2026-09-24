@@ -37,6 +37,14 @@ for (const f of scripts.filter(s => /^src\/(core|data|world|sim)\//.test(s))){
     if (re.test(code)) problems.push(`${name} in simulation file ${f}: use GW.RNG / GW.hashRandom for randomness and GW.Clock for timings`);
   }
 }
+// CLAUDE.md and AGENTS.md carry the same save format rules for AI contributors.
+const rules = f => {
+  const t = fs.existsSync(path.join(ROOT, f)) ? fs.readFileSync(path.join(ROOT, f), 'utf8') : '';
+  const i = t.indexOf('## Save format rules');
+  return i < 0 ? null : t.slice(i).trim();
+};
+if (!rules('CLAUDE.md')) problems.push('CLAUDE.md is missing its "## Save format rules" section');
+else if (rules('CLAUDE.md') !== rules('AGENTS.md')) problems.push('The "Save format rules" sections of CLAUDE.md and AGENTS.md differ; keep them identical');
 try { loadSim(); } catch (e){ problems.push('simulation failed to load: ' + e.message); }
 
 if (problems.length){ console.error(problems.join('\n')); process.exit(1); }

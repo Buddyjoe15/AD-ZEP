@@ -96,6 +96,8 @@ Browser benchmarks (tick budget is 33 ms): 5,000 enemies swarming Vance take abo
 
 ## Saves
 
+AI contributors: the binding rules are under "Save format rules" in [`CLAUDE.md`](../CLAUDE.md) (the same text is in [`AGENTS.md`](../AGENTS.md)).
+
 `GW.Save.serialize()` writes schema `GW.SAVE_SCHEMA` (currently 2). `migrate()` upgrades older saves one step at a time through named functions in `src/sim/save.js` (`migrate_1_to_2`, then `migrate_2_to_3`, and so on), registered in `MIGRATIONS` by the schema they start from. `validate()` then rejects malformed data before anything changes. If rebuilding the world still fails part way, `restore()` rolls back to the game that was running.
 
 Terrain is regenerated from the seed, and `terrainEdits` replays any changes made after generation. The map generator must keep its RNG call order: a terrain fingerprint test fails if generation changes.
