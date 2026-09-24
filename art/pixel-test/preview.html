@@ -29,12 +29,12 @@
 <div id="bar"></div>
 <canvas id="scene"></canvas>
 <div id="sheets" hidden></div>
-<script src="sprites-data.js"></script>
+<script src="../../src/render/pixel-data.js"></script>
 <script>
 'use strict';
 // Preview for the pixel-art test set. Query: view=scene|sheets, zoom=0.333|0.667|1,
 // tiles=v1|v2, shadows=0|1, t=<seconds> (freeze time), hud=0 (hide controls), only=<sheet>.
-const D = window.PIXEL_TEST, Q = new URLSearchParams(location.search);
+const D = window.PIXEL_ART, Q = new URLSearchParams(location.search);
 const S = {
   view: Q.get('view') || 'scene', zoom: +(Q.get('zoom') || 0.667), tiles: Q.get('tiles') || 'v2',
   shadows: Q.get('shadows') !== '0', t: Q.has('t') ? +Q.get('t') : null, hud: Q.get('hud') !== '0', only: Q.get('only')

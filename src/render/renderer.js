@@ -66,11 +66,13 @@
       g.imageSmoothingEnabled = false; g.drawImage(TC.getOverview(), 0, 0, C.WORLD_W, C.WORLD_H); g.imageSmoothingEnabled = true;
       let chunks = 0;
       if (!far){
+        g.imageSmoothingEnabled = !(G.PixelArt.enabled && z * this.dpr >= 1);   // pixel terrain stays crisp up close
         let built = 0;
         for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++){
           if (!TC.has(cx, cy)){ if (built >= C.CHUNKS_BUILT_PER_FRAME) continue; built++; }
           g.drawImage(TC.chunk(cx, cy), cx * ct, cy * ct); chunks++;
         }
+        g.imageSmoothingEnabled = true;
       }
 
       // Resource nodes.
@@ -112,13 +114,17 @@
       for (const site of S.constructionSites){
         if (!inView(site.x, site.y, site.w * T)) continue;
         const px = site.gx * T, py = site.gy * T, pct = 1 - site.remaining / site.buildTime;
+        if (G.PixelArt.buildingSprite(site.type)) G.PixelArt.drawSite(g, site, pct);
+        else {
         g.fillStyle = 'rgba(160,160,145,.28)'; g.strokeStyle = '#d4b96b'; g.lineWidth = 2 / z; g.setLineDash([6 / z, 5 / z]);
         g.fillRect(px + 2, py + 2, T * site.w - 4, T * site.h - 4); g.strokeRect(px + 2, py + 2, T * site.w - 4, T * site.h - 4); g.setLineDash([]);
+        }
         g.fillStyle = '#111'; g.fillRect(px + 4, py + T * site.h - 8, T * site.w - 8, 5);
         g.fillStyle = '#e0c15b'; g.fillRect(px + 5, py + T * site.h - 7, (T * site.w - 10) * G.clamp(pct, 0, 1), 3);
         g.fillStyle = '#fff0b0'; g.font = (9 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(site.remaining.toFixed(1) + 's', site.x, py - 5);
       }
-      // Structures.
+      // Structures (and, with pixel art, the rubble of recently destroyed ones).
+      if (G.PixelArt.enabled) G.PixelArt.drawRubble(g, inView);
       for (const b of S.buildings) if (inView(b.x, b.y, b.w * T)) G.Visuals.drawBuilding(g, b, z, t);
       // Expedition signals.
       const E = S.expedition;
@@ -167,10 +173,11 @@
     // Canvas 2D unit drawing (fallback when hardware WebGL2 is unavailable). Units are
     // stamped from the sprite atlas with one transform + drawImage each; zoomed out,
     // ordinary units become team-coloured markers batched into one path per team.
+    // Pixel-art units first get their shadows, merged in one mask so they don't stack.
     drawUnits2D(g, visible, z, t){
       const S = G.State, C = G.CONFIG, lod = z < C.UNIT_LOD_ZOOM, batches = new Map();
-      const A = G.SpriteAtlas, c = S.camera, k = this.dpr * z;
-      let img = null, lv = 0;   // atlas level nearest to 1:1 for this zoom (chosen on first use)
+      const A = G.SpriteAtlas, c = S.camera, k = this.dpr * z, items = [];
+      let shadows = false;
       for (const u of visible){
         if (u.isShip) continue;
         if (lod && !u.isHero && !S.selected.has(u.id)){
@@ -182,11 +189,30 @@
         }
         const def = G.Defs.units.get(u.type);
         if (!def) continue;
-        const e = A.entryFor(def, u.team), f = A.frame(e, u, t), ang = e.upright ? 0 : u.heading;
-        if (!img){ lv = k >= 1 ? 0 : k >= 0.5 ? 1 : 2; img = A.level(lv); }
-        const s = 1 / (1 << lv), co = Math.cos(ang) * k, si = Math.sin(ang) * k;
-        g.setTransform(co, si, -si, co, (u.x - c.x) * k, (u.y - c.y) * k);
-        g.drawImage(img, (A.cellX(f) + e.px.x) * s, (A.cellY(f) + e.px.y) * s, e.rect.w * A.RES * s, e.rect.h * A.RES * s, e.rect.x, e.rect.y, e.rect.w, e.rect.h);
+        const e = A.entryFor(def, u.team);
+        items.push(u, e, A.frame(e, u, t));
+        if (e.shadow) shadows = true;
+      }
+      if (items.length){
+        const lv = k >= 1 ? 0 : k >= 0.5 ? 1 : 2, s = 1 / (1 << lv);   // atlas level nearest to 1:1 for this zoom
+        const stamp = (ctx, img, u, e, f, dx, dy) => {
+          const ang = e.upright ? 0 : u.heading, co = Math.cos(ang) * k, si = Math.sin(ang) * k, at = e.at[f];
+          ctx.setTransform(co, si, -si, co, (u.x + dx - c.x) * k, (u.y + dy - c.y) * k);
+          ctx.drawImage(img, at[0] * s, at[1] * s, e.rect.w * e.scale * s, e.rect.h * e.scale * s, e.rect.x, e.rect.y, e.rect.w, e.rect.h);
+        };
+        const smooth = g.imageSmoothingEnabled;
+        g.imageSmoothingEnabled = !G.PixelArt.enabled;
+        if (shadows){
+          const mask = this.shadowMask || (this.shadowMask = document.createElement('canvas'));
+          if (mask.width !== this.cv.width || mask.height !== this.cv.height){ mask.width = this.cv.width; mask.height = this.cv.height; }
+          const m = mask.getContext('2d'), sil = A.silhouette(lv);
+          m.setTransform(1, 0, 0, 1, 0, 0); m.clearRect(0, 0, mask.width, mask.height); m.imageSmoothingEnabled = false;
+          for (let i = 0; i < items.length; i += 3){ const e = items[i + 1]; if (e.shadow) stamp(m, sil, items[i], e, items[i + 2], e.shadow[0], e.shadow[1]); }
+          g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = G.PixelArt.SHADOW_ALPHA; g.drawImage(mask, 0, 0); g.globalAlpha = 1;
+        }
+        const img = A.level(lv);
+        for (let i = 0; i < items.length; i += 3) stamp(g, img, items[i], items[i + 1], items[i + 2], 0, 0);
+        g.imageSmoothingEnabled = smooth;
       }
       g.setTransform(k, 0, 0, k, -c.x * k, -c.y * k);   // back to world space
       for (const [col, list] of batches){

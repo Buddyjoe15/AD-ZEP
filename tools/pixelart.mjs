@@ -30,7 +30,8 @@ export const C = Object.fromEntries(PALETTE.map(([n], i) => [n, i + 1]));
 // Team ramps replacing team0..team2 (dark, mid, light).
 export const TEAMS = {
   blue: ['#1f5a99', '#49a4ff', '#a8d6ff'],
-  red: ['#8a2622', '#ef5b55', '#ffb0a6']
+  red: ['#8a2622', '#ef5b55', '#ffb0a6'],
+  neutral: ['#8a7a36', '#d4c46c', '#f0e6a8']
 };
 // One character per palette index in the text encoding ('.' is transparent).
 export const ALPHABET = '.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijk';

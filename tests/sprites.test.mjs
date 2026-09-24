@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { build, dataScript, OUT, FACINGS } from '../tools/sprites.mjs';
+import { build, dataScript, OUT, DATA_FILE, FACINGS } from '../tools/sprites.mjs';
 import { PALETTE, ALPHABET, Grid, rot90, finish } from '../tools/pixelart.mjs';
 
 const { data } = build();
@@ -41,8 +41,8 @@ test('shading lights the top-left edge on every facing', () => {
   }
 });
 
-test('committed sheets and sprites-data.js are up to date (run npm run sprites)', () => {
-  assert.equal(fs.readFileSync(path.join(OUT, 'sprites-data.js'), 'utf8'), dataScript(data));
+test('committed src/render/pixel-data.js is up to date (run npm run sprites)', () => {
+  assert.equal(fs.readFileSync(DATA_FILE, 'utf8'), dataScript(data));
 });
 
 test('sheet PNGs are fully opaque or fully transparent', () => {

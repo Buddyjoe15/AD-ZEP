@@ -39,7 +39,7 @@ npm run save:snapshot  # after bumping GW.SAVE_SCHEMA: record the new save shape
 npm run sprites        # regenerate the pixel-art test set in art/pixel-test (sprites:preview also renders previews)
 ```
 
-**Pixel-art sprites (test branch).** [art/pixel-test](art/pixel-test/README.md) holds a test set of top-down pixel sprites, sheets, palette and phone-sized scene previews. It isn't wired into the game yet.
+**Pixel-art sprites (test branch).** Utility Spiders, drones, Vance, the Repair Station and the grass terrain are drawn with top-down pixel art from [art/pixel-test](art/pixel-test/README.md). Add `?art=classic` to the URL, or use **DEBUG → Pixel-art sprites**, to switch back to the original art. See "Pixel art" in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Changing what a save contains? Follow the checklist in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#changing-the-save-format). The tests fail if the save format changes without a schema bump and migration.
 
@@ -51,6 +51,7 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
 
 ## What changed in v0.7
 
+- **Pixel art (test).** Spiders, drones, Vance, the Repair Station and the grass terrain now use top-down pixel sprites with 8 facings and shadows drawn by the engine. `?art=classic` or the Debug panel switches back to the original art. This is presentation only; saves are unchanged.
 - **Renamed** to *Abyssal Dawn: Zero Earth Protocol* (AD-ZEP). Saves keep their internal `AD-EZP` identifier, so existing saves still load.
 - **Test map.** New games start on open grass with no terrain at all. The testing zone, ship, deposits and signals are placed as before. Add water, trees, mountains, paths and ruins with the Map Editor.
 - **Map Editor** (debug mode). The **MAP EDITOR** button next to DEBUG opens a panel with three tabs:

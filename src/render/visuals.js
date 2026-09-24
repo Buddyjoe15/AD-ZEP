@@ -29,6 +29,7 @@
       g.restore();
     },
     drawBuilding(g, b, z, t){
+      if (G.PixelArt.buildingSprite(b.type)) return G.PixelArt.drawBuilding(g, b, z, t);
       const def = G.Defs.buildables.get(b.type);
       const fn = this.buildings[b.type] || (def && def.symbol ? this.buildings.symbol : this.buildings.generic);
       fn(g, b, z, t, def);
