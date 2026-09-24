@@ -262,7 +262,11 @@ test('5,000 enemies swarm Vance at an interactive frame rate', { skip, timeout: 
     await page.screenshot({ path: path.join(OUT, 'swarm.png') });
     // A frame-rate floor is only meaningful on the renderer the game picks by itself; a
     // forced WebGL run in CI uses a CPU-emulated GPU that fills every pixel in software.
-    if (process.env.RENDERER !== 'gpu') assert.ok(r.fps > 20, 'frame rate ' + r.fps.toFixed(1));
+    // Shared CI runners have no GPU at all, so page compositing alone costs them 40+ ms a
+    // frame and wall-clock fps measures the runner. There, check the game's own work per
+    // frame (simulation tick + drawing) against the 33 ms tick budget instead.
+    if (process.env.CI) assert.ok(r.update + r.draw < 33, `update ${r.update.toFixed(1)} + draw ${r.draw.toFixed(1)} ms per frame`);
+    else if (process.env.RENDERER !== 'gpu') assert.ok(r.fps > 20, 'frame rate ' + r.fps.toFixed(1));
     assert.ok(r.d1 < r.d0 - 250, 'the swarm advanced on Vance');
     assert.ok(r.queue < 200, 'no route-search backlog');
     assert.deepEqual(errors, []);
