@@ -1,0 +1,428 @@
+// Headless simulation tests. Run: node --test tests/
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { loadSim, newGame, ROOT } from './harness.mjs';
+
+const T = 48;
+const fnv = arr => { let h = 2166136261; for (const t of arr){ h ^= t; h = Math.imul(h, 16777619) >>> 0; } return h; };
+const find = (G, type) => G.State.units.find(u => u.type === type && u.hp > 0);
+// An open tile a few tiles south-east of the ship ramp, clear of the testing zone.
+const openTileNear = (G, dx, dy) => {
+  const sh = G.Units.ship(), p = G.State.grid.nearestOpen(sh.gx + 3 + dx, sh.gy + sh.h + dy, 10);
+  return p;
+};
+function pathValid(G, u, pts){
+  let prev = { x: u.x, y: u.y };
+  for (const p of pts){
+    if (!G.State.grid.passableWorld(p.x, p.y)) return false;
+    if (!G.State.grid.lineClear(prev.x, prev.y, p.x, p.y) && G.State.grid.passableWorld(prev.x, prev.y)) return false;
+    prev = p;
+  }
+  return true;
+}
+
+test('content registries are consistent', () => {
+  const G = loadSim();
+  assert.equal(G.Defs.verify(), true);
+  for (const k of ['hero', 'ship', 'survey_drone', 'security_drone', 'utility_spider', 'hostile_machine']) assert.ok(G.Defs.units.has(k), k);
+  assert.throws(() => G.Defs.units.define('Bad Key', { name: 'x', hp: 1, speed: 1, radius: 1 }));
+  assert.throws(() => G.Defs.buildables.define('broken', { name: 'x', w: 1, h: 1, cost: { metal: -5 } }));
+});
+
+test('terrain generation is deterministic and unchanged from v0.5', () => {
+  const G = loadSim();
+  assert.equal(fnv(G.MapGen.forest(72491).tiles), 1434927080);
+  assert.equal(fnv(G.MapGen.forest(1).tiles), 3605140733);
+});
+
+test('grid occupancy and regions follow structures', () => {
+  const G = newGame();
+  const S = G.State, p = openTileNear(G, 4, 3);
+  assert.ok(S.grid.passable(p.x, p.y));
+  const b = G.Buildings.add('wall', p.x, p.y);
+  assert.equal(S.grid.passable(p.x, p.y), false);
+  assert.equal(S.grid.regionAt(p.x, p.y), 0);
+  G.Buildings.remove(b);
+  assert.ok(S.grid.passable(p.x, p.y));
+  assert.ok(S.grid.regionAt(p.x, p.y) > 0);
+  const sh = G.Units.ship();
+  assert.equal(S.grid.passable(sh.gx + 2, sh.gy + 2), false, 'ship footprint blocks movement');
+});
+
+test('pathfinder: valid routes, stand-in goals and partial paths', () => {
+  const G = newGame();
+  const S = G.State, hero = G.Units.hero();
+  // Long route across the river.
+  const far = S.paths.find(hero.x, hero.y, 60 * T, 60 * T);
+  assert.ok(far.length > 0);
+  assert.ok(pathValid(G, hero, far));
+  const end = far[far.length - 1];
+  assert.ok(Math.hypot(end.x - 60 * T, end.y - 60 * T) < 30 * T);
+  // Goal inside the ship: routed to the nearest reachable tile instead.
+  const sh = G.Units.ship();
+  const blocked = S.paths.find(hero.x, hero.y, sh.x, sh.y);
+  assert.ok(blocked.length > 0);
+  assert.ok(S.grid.passableWorld(blocked.at(-1).x, blocked.at(-1).y));
+  // Tiny node budget returns a partial path that still makes progress.
+  const partial = S.paths.find(hero.x, hero.y, 40 * T, 470 * T, 50);
+  assert.ok(partial.length > 0);
+  assert.ok(pathValid(G, hero, partial));
+});
+
+test('pathfinder: an enclosed goal region is rejected without a full search', () => {
+  const G = newGame();
+  const S = G.State, p = openTileNear(G, 8, 6);
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (dx || dy) G.Buildings.add('wall', p.x + dx, p.y + dy);
+  const hero = G.Units.hero(), before = S.metrics.pathCalls;
+  const route = S.paths.find(hero.x, hero.y, (p.x + 0.5) * T, (p.y + 0.5) * T);
+  assert.equal(S.metrics.pathCalls, before + 1);
+  const last = route.at(-1);
+  assert.ok(!(Math.floor(last.x / T) === p.x && Math.floor(last.y / T) === p.y), 'does not enter the sealed tile');
+  assert.equal(S.paths.reachable(hero.x, hero.y, (p.x + 0.5) * T, (p.y + 0.5) * T), false);
+});
+
+test('group moves share a flow field and arrive', () => {
+  const G = newGame();
+  const S = G.State, sh = G.Units.ship(), units = [];
+  for (let i = 0; i < 40; i++){
+    const p = G.openPoint(sh.x - 300 + (i % 10) * 40, sh.y + 420 + Math.floor(i / 10) * 40);
+    units.push(G.Units.spawn('security_drone', p.x, p.y));
+  }
+  G.rebuildSpatial();
+  const before = S.metrics.flowFields;
+  const goal = G.openPoint(sh.x + 1400, sh.y + 900);
+  G.Orders.move(units, goal.x, goal.y);
+  assert.equal(S.metrics.flowFields, before + 1);
+  G.Sim.run(40);
+  const arrived = units.filter(u => Math.hypot(u.x - goal.x, u.y - goal.y) < 420).length;
+  assert.ok(arrived >= 36, `${arrived}/40 arrived`);
+});
+
+test('path requests are served under a per-tick cap', () => {
+  const G = newGame();
+  const S = G.State, sh = G.Units.ship(), units = [];
+  for (let i = 0; i < 300; i++){ const p = G.openPoint(sh.x - 600 + (i % 30) * 40, sh.y + 500 + Math.floor(i / 30) * 40); units.push(G.Units.spawn('survey_drone', p.x, p.y)); }
+  for (const u of units) S.paths.request(u, 100 * T, 100 * T);
+  const served = S.paths.process(Infinity, 96);
+  assert.equal(served, 96);
+  assert.equal(S.paths.length, 204);
+  while (S.paths.length) S.paths.process(Infinity, 96);
+  assert.ok(units.every(u => !u.pathPending));
+  // A newer request replaces an older one for the same unit.
+  S.paths.request(units[0], 10 * T, 10 * T); S.paths.request(units[0], 20 * T, 20 * T);
+  assert.equal(S.paths.process(Infinity, 96), 1);
+});
+
+test('economy tracks spending, income and refunds', () => {
+  const G = newGame();
+  const E = G.Economy;
+  assert.equal(E.get('metal'), 180);
+  assert.equal(E.spend({ metal: 500 }), false);
+  assert.equal(E.get('metal'), 180);
+  assert.ok(E.spend({ metal: 80 }));
+  E.add('metal', 200);
+  E.refund({ metal: 20 });
+  assert.equal(E.get('metal'), 320);
+  const r = E.rate('metal');
+  assert.equal(r.expense, 80);
+  assert.equal(r.income, 220);
+  assert.equal(E.describe({ metal: 60 }), '60 metal');
+});
+
+test('inventory stacks, equipment and backpack capacity', () => {
+  const G = newGame();
+  G.Defs.items.define('test_scrap', { name: 'Test Scrap', kind: 'material', maxStack: 20 });
+  const I = G.Inventory;
+  assert.equal(I.capacity(), 10);
+  const pack = I.items.find(i => i.key === 'simple_backpack');
+  assert.ok(I.equip(pack.id));
+  assert.equal(I.capacity(), 20);
+  I.add(G.Items.create('test_scrap', 15));
+  I.add(G.Items.create('test_scrap', 15));
+  const stacks = I.items.filter(i => i.key === 'test_scrap');
+  assert.deepEqual(Array.from(stacks, s => s.count), [20, 10]);
+  while (I.items.length < 20) I.add(G.Items.create('field_cap'));
+  assert.equal(I.unequip('backpack'), false, 'cannot drop capacity below the carried items');
+  const cap = I.items.find(i => i.key === 'field_cap');
+  assert.ok(I.equip(cap.id));
+  assert.ok(Math.abs(I.damageReduction() - 0.05) < 1e-9);
+});
+
+test('utility spider mines a node and delivers to the ship', () => {
+  const G = newGame();
+  const spider = find(G, 'utility_spider');
+  assert.ok(G.Expedition.action('mine'));
+  G.Sim.run(70);
+  assert.ok(G.State.expedition.progress.delivered >= 600, 'delivered ' + G.State.expedition.progress.delivered);
+  assert.ok(G.Economy.get('metal') >= 180 + 600);
+  assert.ok(G.State.resourceNodes.some(n => n.remaining < 1200));
+  assert.equal(spider.command, 'gather');
+});
+
+test('construction completes, blocks the tile and refunds when cancelled', () => {
+  const G = newGame();
+  const S = G.State, spider = find(G, 'utility_spider'), p = openTileNear(G, 5, 4);
+  const site = G.Construction.order(spider, 'generator', p.x, p.y);
+  assert.ok(site);
+  assert.equal(G.Economy.get('metal'), 80);
+  G.Sim.run(25);
+  const b = S.buildings.find(b => b.type === 'generator' && b.gx === p.x && b.gy === p.y);
+  assert.ok(b, 'generator built');
+  assert.equal(S.grid.passable(p.x, p.y), false);
+  assert.equal(S.expedition.progress.built, 1);
+  // Cancelling through a new order refunds the cost.
+  const q = openTileNear(G, -2, 6);
+  S.resources.metal = 100;
+  assert.ok(G.Construction.order(spider, 'wall', q.x, q.y));
+  assert.equal(G.Economy.get('metal'), 40);
+  G.Orders.move([spider], spider.x + 100, spider.y);
+  assert.equal(G.Economy.get('metal'), 100);
+  assert.equal(S.constructionSites.length, 0);
+  // A dead builder's site is refunded rather than blocking departure forever.
+  assert.ok(G.Construction.order(spider, 'wall', q.x, q.y));
+  spider.hp = 0;
+  G.Sim.run(0.2);
+  assert.equal(S.constructionSites.length, 0);
+  assert.equal(G.Economy.get('metal'), 100);
+});
+
+test('built chests are containers, not solid buildings', () => {
+  const G = newGame();
+  const spider = find(G, 'utility_spider'), p = openTileNear(G, 3, 5), n = G.State.containers.length;
+  assert.ok(G.Construction.order(spider, 'chest', p.x, p.y));
+  G.Sim.run(15);
+  assert.equal(G.State.containers.length, n + 1);
+  assert.ok(G.State.grid.passable(p.x, p.y));
+});
+
+test('fabrication queues, respects capacity and refunds destroyed owners', () => {
+  const G = newGame();
+  const S = G.State, ship = G.Units.ship();
+  S.resources.metal = 10000;
+  for (let i = 0; i < 5; i++) assert.ok(G.Fabrication.enqueue(ship, 'survey_drone'));
+  assert.equal(G.Fabrication.enqueue(ship, 'survey_drone'), false, 'queue full');
+  G.Sim.run(9);
+  assert.equal(S.units.filter(u => u.type === 'survey_drone').length, 2);
+  G.Fabrication.refundQueue(ship);
+  assert.equal(G.Economy.get('metal'), 10000 - 100, 'one drone built, four refunded');
+  G.CONFIG.POPULATION_CAP = G.Fabrication.population() + 1;
+  assert.ok(G.Fabrication.enqueue(ship, 'security_drone'));
+  assert.match(G.Fabrication.blocker(ship, 'security_drone'), /capacity/);
+  // Fabricator buildings produce too.
+  G.CONFIG.POPULATION_CAP = 32;
+  const fab = S.buildings.find(b => b.type === 'fabricator');
+  assert.ok(G.Fabrication.enqueue(fab, 'utility_spider'));
+  G.Sim.run(13);
+  assert.equal(S.units.filter(u => u.type === 'utility_spider').length, 2);
+});
+
+test('hostile waves fight, walls reduce damage and repair stations heal', () => {
+  const G = newGame();
+  const S = G.State, E = S.expedition;
+  E.elapsed = E.waveAt - 0.01;
+  G.Sim.run(0.1);
+  const foes = S.units.filter(u => u.team === 'red');
+  assert.equal(foes.length, 3);
+  const guard = find(G, 'security_drone');
+  foes[0].x = guard.x + 70; foes[0].y = guard.y;
+  const hp = guard.hp;
+  G.Sim.run(3);
+  assert.ok(guard.hp < hp || foes[0].hp < 65);
+  // Wall aura.
+  const b = S.buildings.find(b => b.type === 'wall');
+  const probe = { team: 'blue', x: b.x + 20, y: b.y, radius: 10 };
+  assert.equal(G.Buildings.damageReduction(probe), 0.2);
+  // Repair aura.
+  const rep = S.buildings.find(b => b.type === 'repair');
+  const drone = find(G, 'survey_drone');
+  for (const f of S.units.filter(u => u.team === 'red')) f.hp = 0;
+  G.Sim.run(0.1);
+  drone.x = rep.x + 60; drone.y = rep.y + 70; drone.path = []; drone.hp = 100;
+  G.Sim.run(2);
+  assert.ok(drone.hp > 105, 'healed to ' + drone.hp);
+});
+
+test('sensor stations and surveyors study signals', () => {
+  const G = newGame();
+  const S = G.State, E = S.expedition, sensor = S.buildings.find(b => b.type === 'sensor');
+  E.sites = [{ id: 's1', x: sensor.x + 120, y: sensor.y, kind: 'Archive', done: false, progress: 0 }];
+  const metal = G.Economy.get('metal');
+  G.Sim.run(5);
+  assert.ok(E.sites[0].done);
+  assert.equal(G.Economy.get('metal'), metal + 70);
+  E.sites.push({ id: 's2', x: 20 * T, y: 20 * T, kind: 'Element P', done: false, progress: 0 });
+  const survey = find(G, 'survey_drone');
+  survey.x = 20 * T + 40; survey.y = 20 * T;
+  G.Sim.run(5);
+  assert.equal(E.elementP, 1);
+  E.readiness = 100;
+  assert.ok(G.Expedition.action('boost'));
+  assert.equal(E.readiness, 10);
+});
+
+test('saves round-trip and invalid data is rejected without side effects', () => {
+  const G = newGame();
+  G.Expedition.action('mine');
+  G.Sim.run(20);
+  const a = G.Save.serialize();
+  G.Save.validate(a);
+  G.Save.restore(JSON.parse(JSON.stringify(a)), 1);
+  const b = G.Save.serialize();
+  delete a.savedAt; delete b.savedAt;
+  assert.deepEqual(b, a);
+  G.Sim.run(5);
+  const bad = JSON.parse(JSON.stringify(a));
+  bad.units[0].hp = -3;
+  const snapshot = JSON.stringify(G.Save.serialize().units);
+  assert.throws(() => G.Save.restore(bad, 1), /Invalid expedition save/);
+  assert.equal(JSON.stringify(G.Save.serialize().units), snapshot);
+  const wrong = JSON.parse(JSON.stringify(a)); wrong.expedition.queue = undefined; wrong.units.find(u => u.isShip).fabQueue = [{ recipe: 'nope', left: 1 }];
+  assert.throws(() => G.Save.validate(wrong));
+  // Storage slots.
+  assert.ok(G.Save.save(2));
+  assert.equal(G.Save.info(2).world, 1);
+  assert.equal(G.Save.newestSlot(), 2);
+  assert.ok(G.Save.load(2));
+});
+
+test('v0.5 (schema 1) saves migrate and keep playing', () => {
+  const G = loadSim();
+  const v1 = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/fixtures/save-v1.json'), 'utf8'));
+  const S = G.Save.restore(v1, 1);
+  S.paused = false;
+  const types = Array.from(S.units, u => u.type).sort();
+  assert.deepEqual(types, ['hero', 'security_drone', 'security_drone', 'ship', 'survey_drone', 'utility_spider']);
+  const spider = find(G, 'utility_spider');
+  assert.equal(spider.command, 'build');
+  assert.equal(S.constructionSites.length, 1);
+  assert.equal(S.resources.coins, undefined);
+  G.Sim.run(20);
+  assert.equal(S.constructionSites.length, 0, 'the in-progress wall finishes');
+  assert.equal(S.buildings.filter(b => b.type === 'wall').length, 2);
+  G.Save.validate(G.Save.serialize());
+});
+
+test('transit keeps the crew, leaves structures and caps carried metal', () => {
+  const G = newGame();
+  const S = G.State, E = S.expedition;
+  S.resources.metal = 1000;
+  assert.ok(G.Expedition.action('repair'));
+  const hero = G.Units.hero(), sh = G.Units.ship();
+  E.readiness = 0;
+  hero.x = sh.x + 1200;
+  assert.equal(G.Expedition.transit(), false, 'Vance is away from the ship');
+  assert.equal(E.world, 1);
+  G.Expedition.action('recall');
+  G.Sim.run(25);
+  const ids = Array.from(G.Units.friendly(), u => u.id).sort(), seed = S.seed;
+  assert.ok(G.Expedition.departure().ready, G.Expedition.departure().reasons.join('; '));
+  assert.ok(G.Expedition.transit());
+  assert.equal(S.expedition.world, 2);
+  assert.notEqual(S.seed, seed);
+  assert.deepEqual(Array.from(G.Units.friendly(), u => u.id).sort(), ids);
+  assert.ok(S.buildings.every(b => b.testZone), 'field structures left behind');
+  assert.equal(S.resources.metal, 300);
+  assert.equal(S.expedition.lastReport.leftMetal, 600);
+  G.Save.validate(G.Save.serialize());
+  G.Sim.run(5);
+});
+
+test('defeat is reported when the commander dies', () => {
+  const G = newGame();
+  let reason = null;
+  G.Events.on('game:defeat', e => { reason = e.reason; });
+  G.Units.hero().hp = 0;
+  G.Sim.run(0.1);
+  assert.equal(G.State.gameOver, true);
+  assert.match(reason, /Vance/);
+});
+
+test('scale: 2,000 units in combat stay within the tick budget', () => {
+  const G = newGame();
+  const S = G.State, C = G.CONFIG;
+  C.POPULATION_CAP = 1e9;
+  const cx = C.WORLD_W / 2;
+  for (let i = 0; i < 1000; i++){
+    const a = G.openPoint(cx - 3000 + (i % 50) * 60, 150 * T + Math.floor(i / 50) * 60);
+    const b = G.openPoint(cx - 3000 + (i % 50) * 60, 150 * T + 1300 + Math.floor(i / 50) * 60);
+    G.Units.spawn('security_drone', a.x, a.y);
+    G.Units.spawn('hostile_machine', b.x, b.y);
+  }
+  G.rebuildSpatial();
+  G.Sim.run(1);   // warm up
+  const t0 = performance.now();
+  G.Sim.run(5);
+  const perTick = (performance.now() - t0) / 150;
+  assert.ok(perTick < 30, `average tick ${perTick.toFixed(2)} ms`);
+  assert.ok(S.units.length < 2005, 'combat resolved some units');
+});
+
+test('new units, recipes, structures and behaviours work from data alone (docs example)', () => {
+  const G = newGame();
+  G.Defs.units.define('heavy_drone', {
+    name: 'Heavy Drone', hp: 400, speed: 90, radius: 14, range: 240, damage: 30, reload: 1.4, sight: 700,
+    capabilities: ['fight'], visual: 'rifle'
+  });
+  G.Defs.recipes.define('heavy_drone', { name: 'Heavy Drone', unit: 'heavy_drone', cost: { metal: 300 }, time: 18 });
+  G.Behaviors.register('produce', {
+    update(b, cfg, dt){ b.timer = (b.timer || 0) + dt; if (b.timer >= cfg.interval){ b.timer = 0; G.Economy.add(cfg.resource, cfg.amount, 'production'); } }
+  });
+  G.Defs.buildables.define('refinery', {
+    name: 'Refinery', w: 2, h: 2, hp: 600, buildTime: 12, cost: { metal: 250 }, symbol: 'RF',
+    behaviors: [{ type: 'produce', resource: 'metal', amount: 5, interval: 10 }]
+  });
+  assert.equal(G.Defs.verify(), true);
+  const S = G.State;
+  S.resources.metal = 1000;
+  assert.ok(G.Fabrication.enqueue(G.Units.ship(), 'heavy_drone'));
+  const p = openTileNear(G, 6, 4);
+  G.Buildings.add('refinery', p.x, p.y);
+  const metal = G.Economy.get('metal');
+  G.Sim.run(21);
+  assert.ok(S.units.some(u => u.type === 'heavy_drone'));
+  assert.ok(G.Economy.get('metal') >= metal + 10);
+  G.Save.validate(G.Save.serialize());
+});
+
+test('Hostile Fabricator spawns at the chosen speed up to the chosen count', () => {
+  const G = newGame();
+  const S = G.State, b = S.buildings.find(b => b.type === 'hostile_fabricator');
+  assert.ok(b, 'testing zone includes the Hostile Fabricator');
+  assert.equal(b.team, 'red');
+  assert.equal(G.Spawner.state(b).running, false, 'idle until started');
+  G.Sim.run(2);
+  assert.equal(S.units.filter(u => u.team === 'red').length, 0);
+  G.Spawner.configure(b, { rate: 20, amount: 50 });
+  G.Spawner.start(b);
+  G.Sim.run(1);
+  const afterOne = G.Spawner.spawnedBy(b).length;
+  assert.ok(afterOne >= 18 && afterOne <= 22, `~20 spawned in 1 s, got ${afterOne}`);
+  G.Sim.run(3);
+  assert.equal(G.Spawner.spawnedBy(b).length, 50);
+  assert.equal(G.Spawner.state(b).running, false, 'stops at the requested count');
+  // Held units do not hunt; switching to hunt sends them after the crew.
+  assert.ok(G.Spawner.spawnedBy(b).every(u => u.aiHold && !u.path.length));
+  G.Spawner.configure(b, { hold: false });
+  G.Sim.run(2);
+  assert.ok(G.Spawner.spawnedBy(b).some(u => u.path.length || u.pathPending), 'hunters plan routes');
+  // Settings survive a save; removing clears only this spawner's units.
+  const d = G.Save.serialize();
+  G.Save.validate(d);
+  G.Save.restore(d, 1);
+  S.paused = false;   // gameplay resumes after a load (the UI does this when it enters the scene)
+  const b2 = S.buildings.find(x => x.id === b.id);
+  assert.equal(G.Spawner.state(b2).amount, 50);
+  assert.equal(G.Spawner.clear(b2), 50);
+  assert.equal(S.units.filter(u => u.team === 'red').length, 0);
+  // Very fast rates are spread over ticks, and the whole run still completes.
+  G.Spawner.configure(b2, { rate: 1000, amount: 1200, hold: true });
+  G.Spawner.start(b2);
+  G.Sim.step();
+  assert.ok(G.Spawner.spawnedBy(b2).length <= G.Spawner.MAX_PER_TICK);
+  G.Sim.run(3);
+  assert.equal(G.Spawner.state(b2).spawned, 1200, 'counted as spawned (nearby crew may already be shooting some)');
+  assert.equal(G.Spawner.state(b2).running, false);
+  assert.equal(G.Defs.buildables.get('hostile_fabricator').debugOnly, true, 'not in the Spider build menu');
+});

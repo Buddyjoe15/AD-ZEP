@@ -1,0 +1,38 @@
+/* Unit definitions. Behaviour is chosen by capabilities, never by unit key:
+     fight      – acquires targets and fires (needs range and damage)
+     survey     – studies signals when nearby
+     build      – constructs buildables (Utility Spider)
+     gather     – harvests resource nodes
+     carry      – hauls cargo (cargoCapacity) back to a dropoff
+     storage    – carries an item container (storageSlots)
+     fabricate  – owns a production queue (see `fabricator`)
+     dropoff    – accepts hauled cargo
+     command    – the Commander; losing it ends the expedition
+   `visual` selects a renderer in src/render/visuals.js; unknown visuals fall back to a
+   generic marker, so new units are playable before they have art. */
+GW.Defs.units.defineAll({
+  hero: {
+    name: 'Commander Elias Vance', hp: 300, speed: 125, radius: 18, range: 210, damage: 15, reload: 0.66, sight: 760,
+    capabilities: ['command', 'survey', 'fight', 'interact'], visual: 'hero', barOffset: 70
+  },
+  ship: {
+    name: 'UES Aster Vale', hp: 5000, speed: 0, radius: 144, sight: 900, footprint: { w: 6, h: 6 },
+    capabilities: ['fabricate', 'dropoff'], fabricator: { queueMax: 5 }, visual: 'ship', selectable: true
+  },
+  survey_drone: {
+    name: 'Survey Drone', hp: 260, speed: 175, radius: 15, sight: 800,
+    capabilities: ['survey'], visual: 'scout'
+  },
+  security_drone: {
+    name: 'Security Drone', hp: 100, speed: 118, radius: 10, range: 205, damage: 12, reload: 0.72, sight: 650,
+    capabilities: ['fight'], visual: 'rifle'
+  },
+  utility_spider: {
+    name: 'Utility Spider', hp: 520, speed: 132, radius: 17, sight: 720, cargoCapacity: 600, storageSlots: 10,
+    capabilities: ['build', 'gather', 'carry', 'storage'], visual: 'utility'
+  },
+  hostile_machine: {
+    name: 'Hostile Autonomous Machine', team: 'red', hp: 65, speed: 118, radius: 10, range: 140, damage: 6, reload: 0.72, sight: 650,
+    capabilities: ['fight'], visual: 'rifle', ai: 'hunter', selectable: false
+  }
+});
