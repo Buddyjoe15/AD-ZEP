@@ -36,7 +36,10 @@ npm test               # static checks + headless simulation and save-format tes
 npm run test:browser   # real-browser tests: desktop, touch, bundled build, 2,000-unit stress
 npm run build          # dist/ad-ezp.html, one self-contained file
 npm run save:snapshot  # after bumping GW.SAVE_SCHEMA: record the new save shape and fixture
+npm run sprites        # regenerate the pixel-art test set in art/pixel-test (sprites:preview also renders previews)
 ```
+
+**Pixel-art sprites (test branch).** [art/pixel-test](art/pixel-test/README.md) holds a test set of top-down pixel sprites, sheets, palette and phone-sized scene previews. It isn't wired into the game yet.
 
 Changing what a save contains? Follow the checklist in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#changing-the-save-format). The tests fail if the save format changes without a schema bump and migration.
 

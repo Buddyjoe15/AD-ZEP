@@ -1,0 +1,21 @@
+{
+  "name": "dust_plain_v2",
+  "frameWidth": 24,
+  "frameHeight": 24,
+  "variants": 8,
+  "hash": "mix32",
+  "formula": "fmix32(x * 0x9E3779B1 ^ y * 0x85EBCA77 ^ seed) mod total weight",
+  "weights": [
+    6,
+    6,
+    6,
+    4,
+    3,
+    2,
+    1,
+    1
+  ],
+  "image": "dust_plain_v2.png",
+  "sheetWidth": 192,
+  "sheetHeight": 24
+}

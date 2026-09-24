@@ -1,0 +1,54 @@
+{
+  "name": "spider",
+  "frameWidth": 25,
+  "frameHeight": 25,
+  "origin": [
+    12,
+    12
+  ],
+  "worldPxPerArtPx": 2,
+  "rows": "facing",
+  "facings": [
+    "up",
+    "up-right",
+    "right",
+    "down-right",
+    "down",
+    "down-left",
+    "left",
+    "up-left"
+  ],
+  "authoredFacings": [
+    "up",
+    "up-right"
+  ],
+  "animations": {
+    "idle": {
+      "start": 0,
+      "frames": 2,
+      "fps": 2
+    },
+    "walk": {
+      "start": 2,
+      "frames": 4,
+      "fps": 8
+    },
+    "work": {
+      "start": 6,
+      "frames": 4,
+      "fps": 6
+    }
+  },
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      1,
+      2
+    ],
+    "elevation": "ground"
+  },
+  "team": "team0..team2 (magenta ramp)",
+  "image": "spider.png",
+  "sheetWidth": 250,
+  "sheetHeight": 200
+}

@@ -1,0 +1,49 @@
+{
+  "name": "vance",
+  "frameWidth": 25,
+  "frameHeight": 25,
+  "origin": [
+    12,
+    12
+  ],
+  "worldPxPerArtPx": 2,
+  "rows": "facing",
+  "facings": [
+    "up",
+    "up-right",
+    "right",
+    "down-right",
+    "down",
+    "down-left",
+    "left",
+    "up-left"
+  ],
+  "authoredFacings": [
+    "up",
+    "up-right"
+  ],
+  "animations": {
+    "idle": {
+      "start": 0,
+      "frames": 4,
+      "fps": 5
+    },
+    "walk": {
+      "start": 4,
+      "frames": 4,
+      "fps": 8
+    }
+  },
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      3,
+      4
+    ],
+    "elevation": "hover"
+  },
+  "team": "team0..team2 (magenta ramp)",
+  "image": "vance.png",
+  "sheetWidth": 200,
+  "sheetHeight": 200
+}

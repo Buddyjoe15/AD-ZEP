@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixel Sprite Test</title>
+<style>
+  :root { --bg: #101418; --fg: #dfe7ea; --muted: #8aa0a8; --panel: #0d1419e6; --accent: #36b8ef; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.4 system-ui, sans-serif; }
+  #bar { position: fixed; top: 0; left: 0; right: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px; background: var(--panel); }
+  #bar .grp { display: flex; gap: 2px; margin-right: 8px; }
+  #bar button { font: inherit; color: var(--fg); background: #22303a; border: 0; border-radius: 4px; padding: 5px 9px; cursor: pointer; }
+  #bar button.on { background: var(--accent); color: #041018; }
+  #scene { display: block; position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; }
+  #sheets { padding: 56px 16px 24px; max-width: 1400px; }
+  #sheets h2 { margin: 24px 0 4px; font-size: 16px; }
+  #sheets p { margin: 0 0 8px; color: var(--muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  .row figure { margin: 0; }
+  .row figcaption { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  canvas.px { image-rendering: pixelated; display: block; max-width: 100%; }
+  .sw { display: inline-flex; align-items: center; gap: 6px; width: 150px; margin: 2px 0; font-size: 12px; }
+  .sw i { width: 18px; height: 18px; border-radius: 3px; display: inline-block; }
+  body.hud-off #bar { display: none; }
+  body.hud-off #sheets { padding-top: 8px; }
+</style>
+</head>
+<body>
+<div id="bar"></div>
+<canvas id="scene"></canvas>
+<div id="sheets" hidden></div>
+<script src="sprites-data.js"></script>
+<script>
+'use strict';
+// Preview for the pixel-art test set. Query: view=scene|sheets, zoom=0.333|0.667|1,
+// tiles=v1|v2, shadows=0|1, t=<seconds> (freeze time), hud=0 (hide controls), only=<sheet>.
+const D = window.PIXEL_TEST, Q = new URLSearchParams(location.search);
+const S = {
+  view: Q.get('view') || 'scene', zoom: +(Q.get('zoom') || 0.667), tiles: Q.get('tiles') || 'v2',
+  shadows: Q.get('shadows') !== '0', t: Q.has('t') ? +Q.get('t') : null, hud: Q.get('hud') !== '0', only: Q.get('only')
+};
+if (!S.hud) document.body.classList.add('hud-off');
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const PAL = D.palette.map(c => hex(c.hex)), TEAM = { blue: D.teams.blue.map(hex), red: D.teams.red.map(hex) };
+const CODE = {}; [...D.alphabet].forEach((ch, i) => CODE[ch] = i);
+
+// ---- Decoding: palette-indexed strings to canvases (team-coloured or silhouette) ----
+const cache = new Map();
+function frameCanvas(str, w, h, team, mode){
+  const key = str + '|' + team + '|' + mode;
+  let c = cache.get(key);
+  if (c) return c;
+  c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'), img = g.createImageData(w, h);
+  for (let i = 0; i < w * h; i++){
+    const k = CODE[str[i]];
+    if (!k) continue;
+    const t = D.teamIndex.indexOf(k);
+    const rgb = mode === 'silhouette' ? [0, 0, 0] : t >= 0 && team ? TEAM[team][t] : PAL[k - 1];
+    img.data.set([rgb[0], rgb[1], rgb[2], 255], i * 4);
+  }
+  g.putImageData(img, 0, 0);
+  cache.set(key, c);
+  return c;
+}
+const spriteFrame = (name, facing, col) => D.sprites[name].frames[facing][col];
+
+// ---- Terrain variant choice (the fix under test: v2) ----
+function fmix32(h){
+  h ^= h >>> 16; h = Math.imul(h, 0x85EBCA6B); h ^= h >>> 13; h = Math.imul(h, 0xC2B2AE35); h ^= h >>> 16;
+  return h >>> 0;
+}
+function tileVariant(v, x, y){
+  const T = D.terrain[v];
+  if (v === 'v1') return (3 * x + 5 * y) & 3;
+  const total = T.weights.reduce((a, b) => a + b, 0);
+  let r = fmix32(Math.imul(x, 0x9E3779B1) ^ Math.imul(y, 0x85EBCA77) ^ 0x2545F491) % total;
+  for (let i = 0; i < T.weights.length; i++){ if (r < T.weights[i]) return i; r -= T.weights[i]; }
+  return 0;
+}
+
+// ---- Scene: ~35 Spiders, Vance, 24 hostile drones, the station in every state ----
+function mulberry(a){ return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const TILE = 48, FACING_STEP = Math.PI / 4;
+const facingTo = (dx, dy) => ((Math.round(Math.atan2(dx, -dy) / FACING_STEP) % 8) + 8) % 8;
+const STATES = [['foundation', 0], ['frame', 1], ['near-complete', 2], ['finished', 3], ['working', 4], ['damaged', 8], ['rubble', 9]];
+const scene = (() => {
+  const r = mulberry(1234), stations = [], units = [];
+  STATES.forEach(([state, col], i) => stations.push({ state, col, x: (11 + (i % 3) * 3) * TILE, y: (21 + Math.floor(i / 3) * 3) * TILE }));
+  const vance = { sprite: 'vance', team: 'blue', x: 15.5 * TILE, y: 31 * TILE, facing: 0, anim: 'idle', phase: 0 };
+  const taken = [[vance.x, vance.y]];
+  const free = (x, y, d) => taken.every(([a, b]) => Math.hypot(a - x, b - y) > d) && !stations.some(s => x > s.x - 16 && x < s.x + 112 && y > s.y - 16 && y < s.y + 112);
+  // Spiders at work beside the frame and near-complete sites face the structure.
+  for (const s of stations.slice(0, 3)) for (const [ox, oy] of [[0.5, 1.45], [1.5, 0.55]]){
+    const x = s.x + ox * TILE, y = s.y + oy * TILE;
+    units.push({ sprite: 'spider', team: 'blue', x, y, facing: facingTo(s.x + TILE - x, s.y + TILE - y), anim: 'work', phase: r() });
+    taken.push([x, y]);
+  }
+  while (units.length < 35){
+    const x = (8.5 + r() * 14) * TILE, y = (29.5 + r() * 9) * TILE;
+    if (!free(x, y, 40)) continue;
+    taken.push([x, y]);
+    const moving = r() < 0.5;
+    units.push({ sprite: 'spider', team: 'blue', x, y, facing: moving ? facingTo(r() - 0.5, -0.8) : Math.floor(r() * 8), anim: moving ? 'walk' : 'idle', phase: r() });
+  }
+  for (let n = 0; n < 24;){
+    const x = (7.5 + r() * 16) * TILE, y = (11 + r() * 8.5) * TILE;
+    if (!free(x, y, 34)) continue;
+    taken.push([x, y]); n++;
+    units.push({ sprite: 'drone', team: 'red', x, y, facing: facingTo(vance.x - x + (r() - 0.5) * 300, vance.y - y), anim: 'fly', phase: r(), air: true });
+  }
+  units.push(vance);
+  return { stations, units, cx: 15 * TILE, cy: 26 * TILE };
+})();
+
+const cv = document.getElementById('scene'), g = cv.getContext('2d');
+let shadowCv = document.createElement('canvas');
+function drawScene(time){
+  const dpr = window.devicePixelRatio || 1, W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
+  if (cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; shadowCv.width = W; shadowCv.height = H; }
+  const k = S.zoom * dpr, ap = D.worldPxPerArtPx * k;         // device px per world px / per art px
+  const ox = W / 2 - scene.cx * k, oy = H / 2 - scene.cy * k;
+  g.imageSmoothingEnabled = false;
+  // Terrain
+  const T = D.terrain[S.tiles], tpx = TILE * k;
+  const tx0 = Math.floor(-ox / tpx), ty0 = Math.floor(-oy / tpx), tx1 = Math.ceil((W - ox) / tpx), ty1 = Math.ceil((H - oy) / tpx);
+  for (let ty = ty0; ty < ty1; ty++) for (let tx = tx0; tx < tx1; tx++){
+    const x0 = Math.round(ox + tx * tpx), y0 = Math.round(oy + ty * tpx), x1 = Math.round(ox + (tx + 1) * tpx), y1 = Math.round(oy + (ty + 1) * tpx);
+    g.drawImage(frameCanvas(T.tiles[tileVariant(S.tiles, tx, ty)], D.tileArt, D.tileArt), x0, y0, x1 - x0, y1 - y0);
+  }
+  // Sprites are placed on whole device pixels and scaled by nearest neighbour.
+  const place = (str, w, h, wx, wy, origin, team, mode, off) => {
+    const x = Math.round(ox + wx * k - origin[0] * ap + (off ? off[0] * ap : 0)), y = Math.round(oy + wy * k - origin[1] * ap + (off ? off[1] * ap : 0));
+    const c = frameCanvas(str, w, h, team, mode);
+    return [c, x, y, Math.round(w * ap), Math.round(h * ap)];
+  };
+  const unitFrame = u => {
+    const sp = D.sprites[u.sprite], a = sp.animations[u.anim], t = time + u.phase * 3;
+    return spriteFrame(u.sprite, u.facing, a.start + Math.floor(t * a.fps) % a.frames);
+  };
+  const stationFrame = s => {
+    const st = D.sprites.repair_station, col = s.state === 'working' ? st.states.working.start + Math.floor(time * st.states.working.fps) % st.states.working.frames : s.col;
+    return st.frames[0][col];
+  };
+  // Engine shadows: silhouettes stamped into one mask, then darken what's underneath by 55%.
+  const shadowPass = draws => {
+    if (!S.shadows) return;
+    const sg = shadowCv.getContext('2d');
+    sg.imageSmoothingEnabled = false; sg.clearRect(0, 0, W, H);
+    for (const [c, x, y, w, h] of draws) sg.drawImage(c, x, y, w, h);
+    g.globalAlpha = 0.55; g.drawImage(shadowCv, 0, 0); g.globalAlpha = 1;
+  };
+  const st = D.sprites.repair_station;
+  shadowPass(scene.stations.map(s => place(stationFrame(s), st.frameWidth, st.frameHeight, s.x, s.y, st.origin, null, 'silhouette', st.shadow.offset)));
+  for (const s of scene.stations){ const [c, x, y, w, h] = place(stationFrame(s), st.frameWidth, st.frameHeight, s.x, s.y, st.origin, 'blue'); g.drawImage(c, x, y, w, h); }
+  shadowPass(scene.units.map(u => { const sp = D.sprites[u.sprite]; return place(unitFrame(u), sp.frameWidth, sp.frameHeight, u.x, u.y, sp.origin, null, 'silhouette', sp.shadow.offset); }));
+  const order = [...scene.units].sort((a, b) => (a.air ? 2 : a.sprite === 'vance' ? 1 : 0) - (b.air ? 2 : b.sprite === 'vance' ? 1 : 0));
+  for (const u of order){ const sp = D.sprites[u.sprite], [c, x, y, w, h] = place(unitFrame(u), sp.frameWidth, sp.frameHeight, u.x, u.y, sp.origin, u.team); g.drawImage(c, x, y, w, h); }
+  // Label, so screenshots say what they show.
+  const label = `zoom ${({ 0.333: '⅓', 0.667: '⅔', 1: '1' })[S.zoom] || S.zoom} · ${innerWidth}×${innerHeight} @${dpr}x · tiles ${S.tiles} · ${ap.toFixed(2)} device px per art px`;
+  g.font = `${12 * dpr}px system-ui, sans-serif`;
+  const tw = g.measureText(label).width;
+  g.fillStyle = '#0d1419d0'; g.fillRect(8 * dpr, H - 30 * dpr, tw + 16 * dpr, 22 * dpr);
+  g.fillStyle = '#dfe7ea'; g.fillText(label, 16 * dpr, H - 14 * dpr);
+}
+
+// ---- Sheets view ----
+function scaled(str, w, h, team, k, bg){
+  const c = document.createElement('canvas'); c.width = w * k; c.height = h * k; c.className = 'px';
+  const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
+  if (bg){ x.fillStyle = bg; x.fillRect(0, 0, c.width, c.height); }
+  x.drawImage(frameCanvas(str, w, h, team), 0, 0, w * k, h * k);
+  return c;
+}
+function sheetCanvas(rows, w, h, team, k, bg){
+  const cols = Math.max(...rows.map(r => r.length)), gap = 2;
+  const c = document.createElement('canvas'); c.width = cols * (w + gap) * k; c.height = rows.length * (h + gap) * k; c.className = 'px';
+  const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
+  x.fillStyle = bg; x.fillRect(0, 0, c.width, c.height);
+  rows.forEach((row, ry) => row.forEach((str, rx) => x.drawImage(frameCanvas(str, w, h, team), rx * (w + gap) * k, ry * (h + gap) * k, w * k, h * k)));
+  return c;
+}
+function fig(el, caption){ const f = document.createElement('figure'); f.append(el); const c = document.createElement('figcaption'); c.textContent = caption; f.append(c); return f; }
+function section(title, note){ const d = document.createElement('section'); d.innerHTML = `<h2>${title}</h2><p>${note}</p>`; const row = document.createElement('div'); row.className = 'row'; d.append(row); return [d, row]; }
+function buildSheets(){
+  const root = document.getElementById('sheets'); root.innerHTML = '';
+  const want = n => !S.only || S.only === n;
+  for (const name of ['spider', 'drone', 'vance']) if (want(name)){
+    const sp = D.sprites[name], anims = Object.entries(sp.animations).map(([a, v]) => `${a} ${v.frames}f @ ${v.fps} fps`).join(' · ');
+    const [d, row] = section(`${name} — ${sp.frameWidth}×${sp.frameHeight}`, `Rows: ${sp.facings.join(', ')} (only up and up-right authored). Columns: ${anims}. Shadow: engine, offset ${sp.shadow.offset.join(',')} art px.`);
+    const k = name === 'drone' ? 6 : 4;
+    row.append(fig(sheetCanvas(sp.frames, sp.frameWidth, sp.frameHeight, null, k, '#3a3129'), 'raw sheet (magenta team ramp)'));
+    row.append(fig(sheetCanvas(sp.frames, sp.frameWidth, sp.frameHeight, 'blue', k, '#3a3129'), 'blue team'));
+    row.append(fig(sheetCanvas(sp.frames, sp.frameWidth, sp.frameHeight, 'red', k, '#3a3129'), 'red team'));
+    root.append(d);
+  }
+  if (want('repair_station')){
+    const st = D.sprites.repair_station, names = [];
+    for (const [s, v] of Object.entries(st.states)) for (let i = 0; i < v.frames; i++) names.push(v.frames > 1 ? `${s} ${i + 1}` : s);
+    const [d, row] = section('repair station — 48×48 (2×2 tiles)', 'Stand-in design. States left to right: ' + names.join(', ') + '.');
+    for (const team of [null, 'blue', 'red']) row.append(fig(sheetCanvas(st.frames, st.frameWidth, st.frameHeight, team, 3, '#3a3129'), team ? team + ' team' : 'raw sheet (magenta)'));
+    root.append(d);
+  }
+  if (want('terrain')){
+    const [d, row] = section('dust plain terrain — 24×24 tiles', 'v1 is the tested set: 4 variants picked by (3x + 5y) & 3, which forms diagonal bands at a distance. v2 is the fix: 8 weighted, edge-matched variants picked by a mixing hash.');
+    for (const v of ['v1', 'v2']){
+      const T = D.terrain[v], strip = document.createElement('div'); strip.className = 'row';
+      T.tiles.forEach((s, i) => strip.append(fig(scaled(s, 24, 24, null, 4), `${v}.${i} w${T.weights[i]}`)));
+      row.append(fig(strip, `${v} variants`));
+    }
+    const row2 = document.createElement('div'); row2.className = 'row';
+    for (const v of ['v1', 'v2']){
+      const n = 24, c = document.createElement('canvas'); c.width = c.height = n * 24; c.className = 'px';
+      const x = c.getContext('2d');
+      for (let ty = 0; ty < n; ty++) for (let tx = 0; tx < n; tx++) x.drawImage(frameCanvas(D.terrain[v].tiles[tileVariant(v, tx, ty)], 24, 24), tx * 24, ty * 24);
+      row2.append(fig(c, `${v}: 24×24 tiles, one screen px per art px`));
+    }
+    d.append(row2);
+    root.append(d);
+    const [dp, rp] = section(`palette — ${D.palette.length} colours`, 'team0–team2 are magenta placeholders, replaced per team at load.');
+    const wrap = document.createElement('div');
+    for (const c of D.palette){ const s = document.createElement('span'); s.className = 'sw'; s.innerHTML = `<i style="background:${c.hex}"></i>${c.name} ${c.hex}`; wrap.append(s); }
+    rp.append(wrap);
+    root.append(dp);
+  }
+}
+
+// ---- Controls ----
+function bar(){
+  const b = document.getElementById('bar'); b.innerHTML = '';
+  const grp = (items, cur, set) => {
+    const gdiv = document.createElement('div'); gdiv.className = 'grp';
+    for (const [label, val] of items){
+      const btn = document.createElement('button'); btn.textContent = label; if (val === cur) btn.className = 'on';
+      btn.onclick = () => { set(val); bar(); show(); };
+      gdiv.append(btn);
+    }
+    b.append(gdiv);
+  };
+  grp([['Scene', 'scene'], ['Sheets', 'sheets']], S.view, v => S.view = v);
+  if (S.view === 'scene'){
+    grp([['⅓', 0.333], ['⅔', 0.667], ['1', 1]], S.zoom, v => S.zoom = v);
+    grp([['Tiles v1', 'v1'], ['Tiles v2', 'v2']], S.tiles, v => S.tiles = v);
+    grp([['Shadows', true], ['None', false]], S.shadows, v => S.shadows = v);
+  }
+}
+let raf = 0;
+function show(){
+  cancelAnimationFrame(raf);
+  const scn = S.view === 'scene';
+  cv.hidden = !scn; document.getElementById('sheets').hidden = scn;
+  if (!scn){ buildSheets(); window.PREVIEW_READY = true; return; }
+  const t0 = performance.now();
+  const loop = () => { drawScene(S.t != null ? S.t : (performance.now() - t0) / 1000); window.PREVIEW_READY = true; if (S.t == null) raf = requestAnimationFrame(loop); };
+  loop();
+}
+addEventListener('resize', () => { if (S.view === 'scene' && S.t != null) drawScene(S.t); });
+bar(); show();
+</script>
+</body>
+</html>
