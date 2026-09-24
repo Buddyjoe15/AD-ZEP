@@ -191,3 +191,17 @@ test('migrate_2_to_3: saves from before the grass test map keep their forest ter
   const bad = readJSON(fixtureFile(G.SAVE_SCHEMA)); bad.map = 'moon';
   assert.throws(() => G.Save.validate(bad), /map type/);
 });
+
+test('migrate_3_to_4: spawners in older saves get the default rally point and keep their settings', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(3));
+  const old = raw.buildings.find(b => b.spawner);
+  assert.ok(old && !old.spawner.rally, 'the schema 3 fixture has a spawner without a rally point');
+  const S = G.Save.restore(raw, 1);
+  const b = S.buildings.find(x => x.id === old.id);
+  assert.deepEqual({ ...b.spawner.rally }, { ...G.Spawner.defaultRally(b) });
+  for (const k of ['rate', 'amount', 'spawned', 'hold', 'running']) assert.equal(b.spawner[k], old.spawner[k], k);
+  const bad = readJSON(fixtureFile(G.SAVE_SCHEMA));
+  bad.buildings.find(x => x.spawner).spawner.rally = { x: 'far' };
+  assert.throws(() => G.Save.validate(bad), /building/);
+});

@@ -109,8 +109,20 @@
     return v;
   }
 
-  // Keyed by the schema each step upgrades from; add { 3: migrate_3_to_4 } and so on.
-  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3 };
+  // Schema 3 → schema 4 (v0.7): spawners have a movable rally point. Held units used to
+  // wait wherever they spawned; the new default rally point is the one a freshly placed
+  // spawner gets (five tiles south of its edge).
+  function migrate_3_to_4(d){
+    const v = G.copy(d), T = 48;
+    v.schema = 4;
+    for (const b of v.buildings || []){
+      if (b.spawner && typeof b.spawner === 'object' && !b.spawner.rally) b.spawner.rally = { x: b.x, y: b.y + ((b.h || 0) / 2 + 5) * T };
+    }
+    return v;
+  }
+
+  // Keyed by the schema each step upgrades from; add { 4: migrate_4_to_5 } and so on.
+  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4 };
 
   // Applies the steps in order until the save reaches G.SAVE_SCHEMA. A current save is
   // returned as is; anything newer or unknown is rejected.
@@ -138,7 +150,7 @@
     const item = i => i && typeof i.id === 'string' && D.items.has(i.key) &&
       (D.items.get(i.key).stackable ? int(i.count) && i.count > 0 && i.count <= D.items.get(i.key).maxStack : num(i.durability) && num(i.maxDurability) && i.durability >= 0);
     const cost = o => o && typeof o === 'object' && Object.entries(o).every(([k, v]) => D.resources.has(k) && num(v) && v >= 0);
-    const spawner = s => typeof s.running === 'boolean' && typeof s.hold === 'boolean' && ['rate', 'amount', 'spawned', 'acc'].every(k => num(s[k]) && s[k] >= 0);
+    const spawner = s => typeof s.running === 'boolean' && typeof s.hold === 'boolean' && ['rate', 'amount', 'spawned', 'acc'].every(k => num(s[k]) && s[k] >= 0) && point(s.rally);
     const queue = q => list(q, 64) && q.every(e => D.recipes.has(e.recipe) && num(e.left) && e.left >= -1);
 
     if (!d || d.project !== G.PROJECT || d.schema !== G.SAVE_SCHEMA) fail('project or schema');

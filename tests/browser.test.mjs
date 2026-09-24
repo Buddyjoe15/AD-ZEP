@@ -387,3 +387,55 @@ test('debug cheats and the Map Editor work from the interface', { skip, timeout:
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });
+
+test('spawner rally point moves with a tap; the inventory closes with × and drags by its title bar', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1365, height: 900 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    // Open the Hostile Fabricator's window.
+    const hf = await page.evaluate(() => { const b = GW.State.buildings.find(b => b.type === 'hostile_fabricator'); GW.centerCamera(b.x, b.y + 150, 0.72); return { id: b.id, x: b.x, y: b.y }; });
+    await page.waitForTimeout(200);
+    let p = await screen(page, hf.x, hf.y);
+    await page.mouse.click(p.x, p.y);
+    await page.waitForSelector('#spawnerPanel:not(.hidden) #spRally');
+    assert.match(await page.textContent('#spawnerPanel'), /Gather at rally point/);
+    assert.doesNotMatch(await page.textContent('#spawnerPanel'), /Hold position/);
+    // Move the rally point with a tap on the map.
+    await page.click('#spRally');
+    const target = await page.evaluate(({ x, y }) => GW.openPoint(x - 300, y + 300), hf);   // clear of the spawner window
+    p = await screen(page, target.x, target.y);
+    await page.mouse.click(p.x, p.y);
+    const rally = await page.evaluate(id => ({ ...GW.State.buildings.find(b => b.id === id).spawner.rally }), hf.id);
+    assert.ok(Math.hypot(rally.x - target.x, rally.y - target.y) < 30, 'rally point set where tapped');
+    // Spawn a small batch: they appear at the spawn point and gather at the flag.
+    await page.click('#spawnerPanel [data-rate="25"]');
+    await page.fill('#spAmount', '20'); await page.press('#spAmount', 'Enter'); await page.click('#spawnerPanel h2');
+    await page.click('#spStart');
+    await page.waitForFunction(id => GW.State.buildings.find(b => b.id === id).spawner.spawned >= 20, hf.id, { timeout: 15000 });
+    await page.waitForFunction(({ id, r }) => GW.Spawner.spawnedBy(GW.State.buildings.find(b => b.id === id)).every(u => Math.hypot(u.x - r.x, u.y - r.y) < 220), { id: hf.id, r: rally }, { timeout: 15000 });
+    await page.screenshot({ path: path.join(OUT, 'spawner-rally.png') });
+    await page.click('#spClose');
+    // Inventory: × closes it; the title bar drags it.
+    await page.keyboard.press('i');
+    await page.waitForSelector('#inventoryPanel:not(.hidden) #invClose');
+    const before = await page.$eval('#inventoryPanel', el => el.getBoundingClientRect().toJSON());
+    const head = await page.$eval('#inventoryPanel [data-drag-handle] h3', el => el.getBoundingClientRect().toJSON());
+    await page.mouse.move(head.x + 60, head.y + head.height / 2); await page.mouse.down();
+    for (let i = 1; i <= 5; i++) await page.mouse.move(head.x + 60 + i * 60, head.y + head.height / 2 + i * 30);
+    await page.mouse.up();
+    const after = await page.$eval('#inventoryPanel', el => el.getBoundingClientRect().toJSON());
+    assert.ok(Math.abs(after.x - before.x - 300) < 3 && Math.abs(after.y - before.y - 150) < 3, `moved by (300,150): ${after.x - before.x}, ${after.y - before.y}`);
+    const close = await page.$eval('#invClose', el => el.getBoundingClientRect().toJSON());
+    assert.ok(close.x - after.x < 40 && close.y - after.y < 40, 'close button in the top-left corner');
+    await page.screenshot({ path: path.join(OUT, 'inventory-moved.png') });
+    await page.click('#invClose');
+    assert.ok(await page.isHidden('#inventoryPanel'));
+    await page.keyboard.press('i');
+    const reopened = await page.$eval('#inventoryPanel', el => el.getBoundingClientRect().toJSON());
+    assert.ok(Math.abs(reopened.x - after.x) < 3, 'reopens where it was left');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});

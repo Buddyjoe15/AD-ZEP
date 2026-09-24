@@ -387,46 +387,71 @@ test('new units, recipes, structures and behaviours work from data alone (docs e
   G.Save.validate(G.Save.serialize());
 });
 
-test('Hostile Fabricator spawns at the chosen speed up to the chosen count', () => {
+test('Hostile Fabricator spawns waves at one point, waits for it to clear, and gathers them at a movable rally point', () => {
   const G = newGame();
-  const S = G.State, b = S.buildings.find(b => b.type === 'hostile_fabricator');
+  const S = G.State, b = S.buildings.find(b => b.type === 'hostile_fabricator'), SP = G.Spawner;
   assert.ok(b, 'testing zone includes the Hostile Fabricator');
   assert.equal(b.team, 'red');
-  assert.equal(G.Spawner.state(b).running, false, 'idle until started');
+  assert.equal(SP.state(b).running, false, 'idle until started');
+  assert.ok(SP.state(b).rally.y > b.y, 'default rally point south of the structure');
   G.Sim.run(2);
   assert.equal(S.units.filter(u => u.team === 'red').length, 0);
-  G.Spawner.configure(b, { rate: 20, amount: 50 });
-  G.Spawner.start(b);
-  G.Sim.run(1);
-  const afterOne = G.Spawner.spawnedBy(b).length;
-  assert.ok(afterOne >= 18 && afterOne <= 22, `~20 spawned in 1 s, got ${afterOne}`);
-  G.Sim.run(3);
-  assert.equal(G.Spawner.spawnedBy(b).length, 50);
-  assert.equal(G.Spawner.state(b).running, false, 'stops at the requested count');
-  // Held units do not hunt; switching to hunt sends them after the crew.
-  assert.ok(G.Spawner.spawnedBy(b).every(u => u.aiHold && !u.path.length));
-  G.Spawner.configure(b, { hold: false });
+  // Keep the crew out of range so they do not shoot the test subjects.
+  for (const u of G.Units.crew()) u.maxHp = u.hp = 1e9;
+  // One fast wave: every unit appears on the spawn point, facing the rally point.
+  SP.configure(b, { rate: 600, amount: 60 });
+  SP.start(b);
+  const p = SP.spawnPoint(b);
+  G.Sim.step();
+  const first = SP.spawnedBy(b);
+  assert.equal(first.length, 20, 'rate 600 → 20 in the first tick');
+  assert.ok(first.every(u => Math.hypot(u.x - p.x, u.y - p.y) < 60), 'all at the spawn point');
+  assert.ok(p.y > b.y + b.h * T / 2, 'spawn point on the rally side');
+  // While a unit still stands on the spawn point, no new wave appears.
+  const blocker = first[0];
+  for (let i = 0; i < 20; i++){ blocker.x = p.x; blocker.y = p.y; blocker.path = []; G.Sim.step(); }
+  assert.equal(SP.spawnedBy(b).length, 20, 'waits for the spawn point to clear');
+  // Once it moves away, the next wave (what accumulated meanwhile) appears.
+  G.Sim.run(8);
+  assert.equal(SP.state(b).spawned, 60);
+  assert.equal(SP.state(b).running, false, 'stops at the requested count');
+  // Held units gather at the rally point and do not hunt.
+  const near = (pt, r) => SP.spawnedBy(b).filter(u => Math.hypot(u.x - pt.x, u.y - pt.y) < r).length;
+  G.Sim.run(6);
+  assert.ok(SP.spawnedBy(b).every(u => u.aiHold));
+  assert.ok(near(SP.state(b).rally, 260) >= 55, 'gathered at the rally point: ' + near(SP.state(b).rally, 260));
+  // Moving the rally point moves them.
+  const moved = G.openPoint(b.x + 700, b.y + 500);
+  SP.configure(b, { rally: moved });
+  assert.deepEqual({ ...SP.state(b).rally }, { x: moved.x, y: moved.y });
+  G.Sim.run(10);
+  assert.ok(near(moved, 260) >= 55, 'followed the rally point: ' + near(moved, 260));
+  // Switching to hunt sends them after the crew.
+  SP.configure(b, { hold: false });
   G.Sim.run(2);
-  assert.ok(G.Spawner.spawnedBy(b).some(u => u.path.length || u.pathPending), 'released units start advancing');
-  // Settings survive a save; removing clears only this spawner's units.
+  assert.ok(SP.spawnedBy(b).every(u => !u.aiHold));
+  assert.ok(SP.spawnedBy(b).some(u => u.path.length || u.pathPending || u.aiMode), 'released units start advancing');
+  // Settings, including the rally point, survive a save; removing clears only this spawner's units.
+  SP.configure(b, { hold: true });
   const d = G.Save.serialize();
   G.Save.validate(d);
   G.Save.restore(d, 1);
   S.paused = false;   // gameplay resumes after a load (the UI does this when it enters the scene)
   const b2 = S.buildings.find(x => x.id === b.id);
-  assert.equal(G.Spawner.state(b2).amount, 50);
-  const alive = G.Spawner.spawnedBy(b2).length;   // nearby crew may have shot a few held units
-  assert.ok(alive >= 45);
-  assert.equal(G.Spawner.clear(b2), alive);
+  assert.equal(SP.state(b2).amount, 60);
+  assert.deepEqual({ ...SP.state(b2).rally }, { x: moved.x, y: moved.y });
+  const alive = SP.spawnedBy(b2).length;
+  assert.ok(alive >= 55);
+  assert.equal(SP.clear(b2), alive);
   assert.equal(S.units.filter(u => u.team === 'red').length, 0);
-  // Very fast rates are spread over ticks, and the whole run still completes.
-  G.Spawner.configure(b2, { rate: 1000, amount: 1200, hold: true });
-  G.Spawner.start(b2);
+  // Very fast rates: waves are capped per tick, and the whole run still completes.
+  SP.configure(b2, { rate: 1000, amount: 1200, hold: true });
+  SP.start(b2);
   G.Sim.step();
-  assert.ok(G.Spawner.spawnedBy(b2).length <= G.Spawner.MAX_PER_TICK);
-  G.Sim.run(3);
-  assert.equal(G.Spawner.state(b2).spawned, 1200, 'counted as spawned (nearby crew may already be shooting some)');
-  assert.equal(G.Spawner.state(b2).running, false);
+  assert.ok(SP.spawnedBy(b2).length <= SP.MAX_PER_TICK);
+  for (let i = 0; i < 60 && SP.state(b2).running; i++) G.Sim.run(1);
+  assert.equal(SP.state(b2).spawned, 1200, 'counted as spawned');
+  assert.equal(SP.state(b2).running, false);
   assert.equal(G.Defs.buildables.get('hostile_fabricator').debugOnly, true, 'not in the Spider build menu');
 });
 

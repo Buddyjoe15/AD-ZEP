@@ -37,9 +37,41 @@
       if (!h || !G.within(h, u, 170)){ G.UI.toast('Move the Utility Spider closer to Commander Vance'); return; }
       this.openContainer(u.storage);
     },
+    // Closes the inventory (and any open container, which needs it open).
+    close(){
+      if (G.State.selectedContainer) this.closeContainer();
+      $('inventoryPanel').classList.add('hidden');
+    },
+    bindHead(){ const b = $('invClose'); if (b) b.onclick = () => this.close(); },
+    // Drag the panel by its title bar. The position is kept (clamped to the screen) until
+    // the page is reloaded.
+    initDrag(){
+      const p = $('inventoryPanel');
+      let drag = null;
+      const place = (x, y) => {
+        const w = p.offsetWidth, h = p.querySelector('[data-drag-handle]')?.offsetHeight || 40;
+        p.style.left = G.clamp(x, 0, Math.max(0, innerWidth - w)) + 'px';
+        p.style.top = G.clamp(y, 0, Math.max(0, innerHeight - h)) + 'px';
+        p.style.right = 'auto';
+      };
+      p.addEventListener('pointerdown', e => {
+        const handle = e.target.closest('[data-drag-handle]');
+        if (!handle || e.target.closest('button')) return;
+        const r = p.getBoundingClientRect();
+        drag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top };
+        handle.setPointerCapture(e.pointerId);
+        p.classList.add('dragging');
+        e.preventDefault();
+      });
+      p.addEventListener('pointermove', e => { if (drag && e.pointerId === drag.id) place(e.clientX - drag.dx, e.clientY - drag.dy); });
+      const end = e => { if (drag && e.pointerId === drag.id){ drag = null; p.classList.remove('dragging'); } };
+      p.addEventListener('pointerup', end); p.addEventListener('pointercancel', end);
+      addEventListener('resize', () => { if (p.style.left) place(parseFloat(p.style.left), parseFloat(p.style.top)); });
+    },
     renderInventory(){
       const p = $('inventoryPanel'), I = G.Inventory;
-      if (!G.Units.hero()){ p.innerHTML = '<h3>Inventory</h3>No commander'; return; }
+      const head = title => `<div class="panel-drag-head" data-drag-handle title="Drag to move"><button type="button" class="panel-close" id="invClose" aria-label="Close inventory">×</button><h3>${title}</h3></div>`;
+      if (!G.Units.hero()){ p.innerHTML = head('Inventory') + 'No commander'; this.bindHead(); return; }
       const equipSlot = k => {
         const it = I.equipment[k];
         return `<div class="body-equip-slot ${SLOT_CLASS[k]} inv-slot ${it ? 'item-live' : ''}" data-drop-zone="equipment" data-equip-target="${k}" ${it ? `data-source="equipped" data-item-id="${esc(it.id)}" data-equip-slot="${k}"` : ''} title="${SLOT_NAMES[k]}">${icon(it)}<span class="body-slot-label">${SLOT_NAMES[k]}</span></div>`;
@@ -51,7 +83,7 @@
         cells += `<div class="inv-slot ${locked ? 'locked' : it ? 'item-live' : 'empty'}" ${!locked && it ? `data-source="backpack" data-item-id="${esc(it.id)}"` : ''} title="${locked ? 'Locked — equip a larger pack' : it ? esc(G.Items.label(it)) : 'Empty slot'}">${locked ? '' : icon(it)}</div>`;
       }
       const pack = I.equipment.backpack;
-      p.innerHTML = `<h3>Commander Vance — Inventory</h3>
+      p.innerHTML = `${head('Commander Vance — Inventory')}
         <div class="inventory-count">${I.items.length} / ${cap} spaces used · Base ${I.baseCapacity}${pack ? ' · Backpack +' + (G.Items.effects(pack).inventoryBonus || 0) : ''}</div>
         <div class="inventory-main">
           <div class="character-pane equipped-character">
@@ -62,6 +94,7 @@
           <div class="transfer-hint">Drag gear onto the matching body slot. Double-click a backpack item to auto-equip. Hold any item for details.</div>
           <div class="inventory-scroll backpack-drop-zone" data-drop-zone="backpack"><div class="inventory-grid">${cells}</div></div>
         </div>`;
+      this.bindHead();
       this.bindItems(p);
     },
     renderChest(){

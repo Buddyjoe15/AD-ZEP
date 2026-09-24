@@ -232,6 +232,23 @@
           g.fillStyle = '#fff2a8'; g.font = (11 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(u.command.toUpperCase(), u.x, u.y - 40);
         }
       }
+      // Spawner rally points: a flag where held units gather, and (for the spawner whose
+      // window is open) a dashed line from its spawn point.
+      for (const b of S.buildings){
+        const s = b.spawner;
+        if (!s || !s.rally || !s.hold || b.hp <= 0) continue;
+        const r = s.rally, open = G.SpawnerUI.buildingId === b.id;
+        if (open){
+          const p = G.Spawner.spawnPoint(b);
+          g.strokeStyle = 'rgba(255,120,100,.8)'; g.lineWidth = 2 / z; g.setLineDash([8 / z, 6 / z]);
+          g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(r.x, r.y); g.stroke(); g.setLineDash([]);
+          g.beginPath(); g.arc(p.x, p.y, 10, 0, TAU); g.stroke();
+        }
+        const k = Math.max(1, 1 / z) * (open ? 1.2 : 1);
+        g.strokeStyle = '#2b1a17'; g.lineWidth = 3 * k; g.beginPath(); g.moveTo(r.x, r.y); g.lineTo(r.x, r.y - 34 * k); g.stroke();
+        g.fillStyle = '#e0685f'; g.beginPath(); g.moveTo(r.x, r.y - 34 * k); g.lineTo(r.x + 22 * k, r.y - 27 * k); g.lineTo(r.x, r.y - 20 * k); g.closePath(); g.fill();
+        g.fillStyle = 'rgba(224,104,95,.35)'; g.beginPath(); g.ellipse(r.x, r.y, 12 * k, 5 * k, 0, 0, TAU); g.fill();
+      }
       G.Visuals.lasers(g, visible, t);
       if (S.shots.length){
         g.lineWidth = 2 / z;

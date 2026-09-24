@@ -9,7 +9,7 @@
 
   G.Input = {
     ptr: new Map(), box: null, dragCam: null, pinch: null, keys: new Set(), lastTap: { t: 0, x: 0, y: 0 },
-    commandMode: null, touchHold: null, formationGesture: null, buildGesture: null, inspect: null,
+    commandMode: null, rallyFor: null, touchHold: null, formationGesture: null, buildGesture: null, inspect: null,
     init(){
       const cv = G.Renderer.cv, C = G.CONFIG;
       cv.style.touchAction = 'none';
@@ -46,7 +46,7 @@
       else if (k === ' '){ e.preventDefault(); G.UI.togglePause(); }
       else if (k === 'escape'){
         if (G.BuildUI.active()) G.BuildUI.cancel();
-        else if (this.commandMode){ this.commandMode = null; G.UI.toast('Order cancelled'); }
+        else if (this.commandMode){ this.commandMode = null; this.rallyFor = null; G.UI.toast('Order cancelled'); if (G.SpawnerUI.isOpen()) G.SpawnerUI.render(); }
         else G.Selection.clear();
       }
     },
@@ -123,6 +123,14 @@
         const us = this.selectedUnits(), target = this.gatherTarget(q.x, q.y), gatherer = this.gatherer();
         if (target && gatherer) G.Gather.command(gatherer, target);
         else if (us.length) G.Orders.move(us, q.x, q.y);
+        return;
+      }
+      if (this.commandMode === 'rally'){
+        consume();
+        const b = G.State.buildings.find(x => x.id === this.rallyFor && x.hp > 0);
+        this.commandMode = null; this.rallyFor = null;
+        if (b){ G.Spawner.configure(b, { rally: { x: q.x, y: q.y } }); G.UI.toast('Rally point moved'); }
+        if (G.SpawnerUI.isOpen()) G.SpawnerUI.render();
         return;
       }
       if (this.commandMode === 'follow'){

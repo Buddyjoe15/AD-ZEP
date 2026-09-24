@@ -22,7 +22,8 @@ Choose **New Game → Save Slot → Launch expedition**. The same seed always ge
 | Follow | Select any friendly unit(s) → **Follow** → click the unit to follow · **Stop** cancels | Same, with taps |
 | Inspect | Long-press anything | Long-press anything |
 | Debug & Map Editor | **DEBUG** (top bar): add metal, godmode, instant build, and place anything. **MAP EDITOR** (shown in debug mode): paint terrain with a 1–9 tile brush, place structures, deposits and signals, erase objects, reset the map to grass | Same; two fingers still pan and zoom while editing |
-| Load test | Click the red **HF** Hostile Fabricator in the testing zone (or place one from DEBUG): set spawn speed and count, choose hold or hunt, press Start | Same |
+| Load test | Click the red **HF** Hostile Fabricator in the testing zone (or place one from DEBUG): set spawn speed and count, choose *Gather at rally point* or *Advance on Vance*, **Move rally point** then tap the map, press Start | Same |
+| Inventory | I or the Inventory button; **×** (top left) closes it; drag its title bar to move it | Same |
 | Other | H: centre on ship · I: inventory · Space: pause · Esc: cancel · F3: diagnostics | — |
 
 Saves go to three browser slots (autosave every 60 s and on each transit). You can also export and import them as JSON from the Expedition log. Saves from v0.5 load and are migrated automatically. Before an older save is upgraded, its original is kept in browser storage as a backup. A save that can't be loaded is reported instead of loaded, and your current game is left as it was.
@@ -56,6 +57,9 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
   *Reset map to grass* clears everything. Edits are saved with the game.
 - **Debug cheats.** Add 100, 1,000 or 10,000 metal. **Godmode** makes friendly units take no damage (structures still do). **Instant build** finishes construction and fabrication on the next tick. Cheats are session settings and are not saved.
 - **Utility Spider** cargo holds 250 metal (was 600). Spiders in older saves are updated when loaded.
+- **Hostile Fabricator waves and rally point.** Units now appear at a single spawn point on the side of the Fabricator facing its rally point, instead of in a ring around it. A new wave appears only once the previous one has moved off the spawn point; whatever accumulates meanwhile comes out in the next wave, up to 250 at once. *Hold position* is replaced by **Gather at rally point**: units walk to a red flag and wait there. **Move rally point**, then tap the map, moves the flag and every waiting unit. *Advance on Vance* works as before.
+- **Inventory** has a **×** in its top-left corner to close it, and can be moved by dragging its title bar (it reopens where you left it).
+- **Save format: schema 4.** Spawners save their rally point (`spawner.rally`); `migrate_3_to_4` gives spawners in older saves the default one, five tiles south of the structure.
 - **Save format: schema 3.** Saves record which map built their terrain (`map`: `grass` or `forest`). Saves from v0.5 and v0.6 are migrated as `forest` and keep their original forest terrain. The original is backed up before the upgrade, as before.
 
 ## What changed in v0.6

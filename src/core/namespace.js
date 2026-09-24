@@ -3,7 +3,7 @@
   'use strict';
   const G = root.GW = root.GW || {};
   G.VERSION = '0.7.0';
-  G.SAVE_SCHEMA = 3;
+  G.SAVE_SCHEMA = 4;
   // Save-file identifier, kept from before the game was renamed Zero Earth Protocol:
   // changing it would make every existing save unreadable.
   G.PROJECT = 'AD-EZP';
