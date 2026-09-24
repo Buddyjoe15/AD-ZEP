@@ -1,23 +1,60 @@
-# Abyssal Dawn: Earth Zero Protocol — v0.5
+# Abyssal Dawn: Earth Zero Protocol — v0.6
 
-Open `output/Abyssal_Dawn_Earth_Zero_Protocol_v0_5.html` in a browser. Choose New Game → Save Slot → Launch expedition. The HTML is self-contained and works offline.
+A browser expedition strategy game. Commander Elias Vance and the UES Aster Vale land on an unfamiliar Earth. You study signals, mine metal with Utility Spiders, fabricate drones, build field structures, and survive hostile machines while the drive stabilises. Then you recall the crew and transit to the next Earth.
 
-## Current changes
+## Play
 
-Ship selection opens a compact Fabrication window immediately. It stays near the ship while the camera moves. On a narrow screen it attaches above or below the ship, and its contents scroll. The opening tap cannot activate a fabrication option by accident.
+Open `index.html` in a browser. It runs straight from disk with no build step and no server.
 
-The procedurally placed Element P discoveries, chests, loose items, and world buildings have been cleared from newly generated Earths. A small testing zone to the left of the ship contains one of each current item (Field Cap and Simple Backpack) and one of each buildable (Chest, Wall, Field Generator, Repair Station, Sensor Station). The testing structures are functional. Archive signals and scrap deposits remain available for exploration and resource collection.
+For a single file you can share or play offline, run `npm run build` and open `dist/ad-ezp.html`.
 
-The Expedition log retains its departure controls. Select a Utility Spider and press Build for field construction. Fabrication stays with the ship. The Objectives system is absent.
+Choose **New Game → Save Slot → Launch expedition**. The same seed always generates the same terrain.
 
-## Play and controls
+| Input | Desktop | Touch |
+|---|---|---|
+| Select | Click a unit, drag a box, shift-click to add | Tap a unit; hold on empty ground, then drag, to box-select |
+| Move | Right-click terrain | Tap terrain |
+| Formation | Formation buttons in the selection panel | Hold on the ground with a group selected, drag to rotate, release |
+| Camera | WASD / arrows, mouse wheel, minimap | Drag empty ground, pinch |
+| Fabricate | Click the ship (or a Fabricator) | Tap the ship |
+| Build | Select a Utility Spider → Build | Same |
+| Inspect | Long-press anything | Long-press anything |
+| Other | H: centre on ship · I: inventory · Space: pause · Esc: cancel · F3: diagnostics | — |
 
-Desktop: click the ship to fabricate; click another unit to select it; right-click terrain to move. Wheel to zoom, WASD/arrows to pan, H to center the ship, Space to pause, I for inventory. Touch: tap the ship or a unit to select; tap terrain to move, drag empty terrain to pan and pinch to zoom.
+Saves go to three browser slots (autosave every 60 s and on each transit). You can also export and import them as JSON from the Expedition log. Saves from v0.5 load and are migrated automatically.
 
-Utility Spiders mine finite metal and unload it at the ship. Repair the drive for 100 metal, wait for stabilization, and recall living crew and carried cargo. Clear the fabrication queue and finish field work or recall to cancel/refund it, then choose Transit in the Expedition log. Existing schema-1 saves remain supported. The map cleanup and testing zone are generated for new worlds; imported earlier expedition saves preserve their recorded world objects.
+## Develop
 
-## Build and test
+```
+npm test               # static checks + 20 headless simulation tests (no dependencies)
+npm run test:browser   # real-browser tests: desktop, touch, bundled build, 2,000-unit stress
+npm run build          # dist/ad-ezp.html, one self-contained file
+```
 
-Run `python3 build.py` to compose the immutable GroundFall source with `extension.js` and `unit-visuals.js`. The produced HTML requires no runtime dependencies. Install Playwright and Chromium for `npm test`; `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` can select existing installations.
+The browser tests need Playwright and Chromium (`npm install --no-save playwright && npx playwright install chromium`). A global install also works. `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` can point at existing installations. When Playwright is missing, the tests are skipped. CI (`.github/workflows/test.yml`) runs everything and uploads the build and screenshots.
 
-Tests cover the full expedition and transit, save and departure guards, procedural route checks, desktop and emulated touch input, fabrication, testing-zone inventory, and the touch opening guard. Browser results and screenshots are in `evidence/`. Physical mobile devices, Safari and Firefox were not tested.
+The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/world`, `src/sim`) and a **presentation** layer (`src/render`, `src/ui`). The simulation runs headless in Node, which is how the tests drive whole expeditions in milliseconds.
+
+**[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** explains the structure and how to add units, items, structures, behaviours, resources and systems. Most new content is a data definition only.
+
+## What changed in v0.6
+
+- **Restructured.** The 245 KB single-file build and its monkey-patching extension scripts are replaced by 41 focused modules. `index.html` is now the real source entry point. The old `build.py` depended on a source folder missing from the repository, and the old test scripts used hard-coded machine paths; both are removed.
+- **Scales to thousands of units.** Measured headless: 2,000 units in active combat take about 11 ms per 33 ms tick (about 20 ms before the final optimisations), and 3,000 idle units about 12 ms. In the browser, 2,000 units render at about 30 fps under headless software rendering.
+  - **Grid:** tile passability is an O(1) lookup, where the old code scanned every building on each check.
+  - **Spatial hashes:** per-team hashes, so target searches only look at opposing teams.
+  - **Pathfinding:** A* reuses preallocated arrays instead of allocating 262,144-element arrays per search. Unreachable goals are rejected using connected regions. Blocked targets fall back to the nearest reachable tile. Group moves share one flow field. AI route requests go through a time-budgeted queue.
+- **Data-driven content.** Units choose behaviour by capability, not by type name. Structures get their function from a behaviour list. Fabrication recipes, resources, climates and expedition balance are all data.
+- **Economy.** Every resource change goes through one API with a rolling income/expense ledger, shown in the Game menu and the Expedition log.
+- **Fixes:**
+  - A construction site whose builder died was never cleared, so departure stayed blocked for the rest of the game. It is now refunded.
+  - A Spider-built chest used to become an invisible solid block. It is now a container.
+  - A construction approach tile diagonal to a 2×2 structure could leave the builder retrying forever.
+  - Terrain edits (landing zone, testing zone) are now saved, so the ground no longer reverts on load.
+  - The testing-zone Sensor Station no longer collects a generated signal for free.
+  - Removing a backpack can no longer strand items beyond your capacity.
+  - Minimap colours now match the terrain.
+- **Now working:** the Repair Station heals nearby units, and the Sensor Station studies signals in range (its description already claimed this).
+- **Removed dead features:** the XP/skill tree and coin currency. The v0.5 expedition layer had disabled both, and they no longer appear in the interface.
+
+Not tested: physical mobile devices, Safari and Firefox.

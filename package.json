@@ -1,10 +1,14 @@
 {
   "name": "abyssal-dawn-earth-zero-protocol",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
-  "description": "Self-contained browser expedition prototype",
+  "description": "Browser expedition strategy game. No runtime dependencies; opens directly from index.html.",
+  "engines": { "node": ">=18" },
   "scripts": {
-    "build": "python3 build.py",
-    "test": "node tests/expedition.cjs && node tests/guards.cjs && node tests/mobile.cjs && node tests/v03.cjs && node tests/v05.cjs"
+    "check": "node tools/check.mjs",
+    "test": "node tools/check.mjs && node --test tests/sim.test.mjs",
+    "test:browser": "node --test tests/browser.test.mjs",
+    "test:all": "npm test && npm run test:browser",
+    "build": "node tools/build.mjs"
   }
 }

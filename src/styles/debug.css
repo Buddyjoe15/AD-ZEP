@@ -1,0 +1,38 @@
+/* Debug catalog and inspection tooltip. */
+#dbgBtn {
+  position: fixed; top: max(5px, env(safe-area-inset-top)); left: calc(50% + 128px); z-index: 32;
+  min-height: 26px; padding: 3px 10px; font: 700 10px system-ui; letter-spacing: .06em;
+  background: #2a1f10ee; color: #f1d38a; border: 1px solid #9b7a3a; border-radius: 5px;
+}
+#dbgBtn.on { background: #6b4f16; color: #fff; }
+#dbgPanel {
+  position: fixed; left: max(6px, env(safe-area-inset-left)); top: 44px; bottom: max(6px, env(safe-area-inset-bottom));
+  width: min(250px, 44vw); z-index: 40; overflow: auto; background: #141a16f2; border: 1px solid #6d6040; border-radius: 7px;
+  color: #e6e2d4; font: 12px system-ui; padding: 8px; -webkit-overflow-scrolling: touch; touch-action: pan-y;
+}
+#dbgPanel.hidden { display: none; }
+.dbgHead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.dbgHead b { color: #f1d38a; letter-spacing: .08em; }
+.dbgHead button { min-height: 26px; min-width: 26px; padding: 0; }
+.dbgHelp { font-size: 10px; color: #b7b3a3; margin-bottom: 6px; }
+.dbgGroup { font-size: 10px; font-weight: 800; letter-spacing: .1em; color: #9fb5a3; margin: 8px 0 4px; text-transform: uppercase; }
+.dbgEntry {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; margin: 0 0 4px; padding: 5px 6px; min-height: 34px;
+  background: #232b25; color: #e6e2d4; border: 1px solid #3b463d; border-radius: 5px; font: 12px system-ui;
+  -webkit-touch-callout: none; user-select: none; -webkit-user-select: none;
+}
+.dbgEntry.active { outline: 2px solid #e2c35c; background: #414634; }
+.dbgIcon { flex: 0 0 26px; height: 26px; display: grid; place-items: center; border-radius: 4px; font: 800 9px system-ui; background: #3a4a3d; }
+.dbg-item { background: #3d4f6a; } .dbg-node { background: #5a4a2c; } .dbg-site { background: #2c5a5a; } .dbg-unit { background: #34506a; }
+#dbgTip {
+  position: fixed; z-index: 60; max-width: 240px; background: #0d1310f7; border: 1px solid #9b7a3a; border-radius: 6px;
+  padding: 8px 10px; color: #e6e2d4; font: 11px system-ui; pointer-events: none; box-shadow: 0 4px 16px #000a;
+}
+#dbgTip b { display: block; color: #f1d38a; font-size: 13px; }
+#dbgTip i { display: block; color: #9fb5a3; font-size: 10px; margin-bottom: 4px; }
+#dbgTip div { display: flex; gap: 6px; }
+#dbgTip span { color: #9a978a; min-width: 68px; }
+#dbgTip p { margin: 5px 0 0; color: #c9c5b6; }
+@media (max-width: 700px) {
+  #dbgBtn { left: 50%; transform: translateX(-50%); font-size: 9px; min-height: 24px; padding: 2px 7px; }
+}

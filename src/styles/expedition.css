@@ -1,0 +1,100 @@
+/* Expedition interface: log panel, fabrication window, arrival report, launch screen. */
+
+/* In-game-only controls appear once gameplay starts. */
+#ezToggle, #status, #dbgBtn { display: none; }
+body.in-game #ezToggle, body.in-game #status, body.in-game #dbgBtn { display: block; }
+
+#gameTitle { font-size: 13px; }
+.main-menu-title { font-size: clamp(22px, 4vw, 60px); }
+.main-menu-title:before { content: 'ABYSSAL DAWN'; display: block; font-size: 15px; letter-spacing: 7px; color: #9ec4d1; margin-bottom: 12px; }
+.resource-pill .resource-icon { color: #aebbc3; }
+#catalogPanel button { min-height: 44px !important; }
+
+#status { position: fixed; left: 12px; top: 104px; color: #c8dbde; font: 10px monospace; pointer-events: none; }
+#toast { top: 112px; z-index: 90; max-width: 80vw; text-align: center; }
+#selectionPanel { background: #0b1c24ef; border-color: #38555f; }
+
+.ezEyebrow { font: 10px/1.5 ui-monospace, monospace; letter-spacing: 2px; color: #81c7c6; margin-bottom: 8px; }
+.ezHint, #ezBody small { color: #8babb9; }
+
+/* Expedition log */
+#ezToggle {
+  position: fixed; left: 50%; right: auto; top: 38px; transform: translateX(-50%); z-index: 22;
+  min-height: 30px; padding: 5px 12px; border-radius: 0 0 7px 7px; font: 11px system-ui; letter-spacing: .5px;
+  background: #102630ef; color: white; border: 1px solid #71b4bc;
+}
+#ezToggle:active { transform: translateX(-50%) translateY(1px); }
+#ezPanel {
+  position: fixed; left: 50%; transform: translateX(-50%); top: 76px; bottom: auto; z-index: 45;
+  width: min(370px, calc(100vw - 20px)); max-height: min(560px, calc(100vh - 88px));
+  background: #101e27f7; border: 1px solid #395e6b; border-radius: 12px; color: #dce9ee;
+  box-shadow: 0 12px 80px #0009; font: 14px/1.5 system-ui;
+}
+#ezBody { max-height: min(560px, calc(100vh - 88px)); overflow: auto; padding: 16px; box-sizing: border-box; font-size: 12px; touch-action: pan-y; }
+#ezBody h2 { font-size: 22px; margin: 8px 0; color: #fff; }
+#ezBody h3 { margin: 22px 0 8px; color: #8ed6d3; font-size: 11px; text-transform: uppercase; letter-spacing: 1.6px; }
+#ezPanel button { min-height: 44px; background: #203743; color: #e6f6ff; border: 1px solid #46616d; border-radius: 6px; padding: 8px; text-align: left; }
+#ezPanel button:disabled { opacity: .5; cursor: default; }
+.ezGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#ezLog { white-space: pre-line; color: #b6cbd5; }
+.ezEarthDetails { padding: 10px 0 14px; line-height: 1.6; color: #afd2d9; }
+.ezEarthDetails b { display: block; font: 11px/1.6 ui-monospace, monospace; }
+.ezEarthDetails span { display: block; font-size: 10px; color: #87a9b4; }
+.ezStats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ezStats > div { background: #142c35; padding: 10px; border: 1px solid #294852; border-radius: 6px; }
+.ezStats small { display: block; font: 9px monospace; letter-spacing: 1.5px; color: #97b9c5; }
+.ezStats b { display: block; font-size: 21px; margin-top: 5px; font-weight: 500; }
+.ezStats em { font-size: 12px; font-style: normal; color: #a0bbc3; }
+.ezChecklist { list-style: none; padding: 0; margin: 10px 0 16px; color: #c2d6d8; font-size: 13px; }
+.ezChecklist li { padding: 7px 0; border-bottom: 1px solid #24404b; }
+.ezTransit { width: 100%; margin-top: 12px; text-align: center !important; background: #8bc9bf !important; color: #0c2024 !important; }
+.ezTransit:disabled { background: #253944 !important; color: #8ca5ae !important; cursor: not-allowed; }
+
+/* Fabrication window */
+#ezFabrication {
+  position: fixed; left: 8px; top: 76px; width: min(264px, calc(100vw - 16px)); z-index: 46;
+  background: #101e27f7; border: 1px solid #51818d; border-radius: 12px; color: #dce9ee;
+  box-shadow: 0 12px 80px #0009; font: 12px/1.5 system-ui;
+}
+#ezFabrication.ezOpening { pointer-events: none; }
+#ezFabBody { box-sizing: border-box; max-height: min(320px, calc(100vh - 94px)); overflow: auto; touch-action: pan-y; padding: 10px; }
+#ezFabBody h3 { margin: 12px 0 4px; color: #8ed6d3; font-size: 11px; text-transform: uppercase; letter-spacing: 1.6px; }
+.ezFabHeader { display: flex; justify-content: space-between; align-items: center; }
+.ezFabHeader h2 { margin: 0; font-size: 22px; }
+.ezFabOptions { display: grid; gap: 5px; }
+#ezFabrication button { min-height: 44px; border: 1px solid #46616d; border-radius: 6px; padding: 6px 8px; background: #203743; color: #e6f6ff; text-align: left; }
+#ezFabrication button:disabled { opacity: .45; cursor: not-allowed; }
+.ezFabOptions b, .ezFabOptions span, .ezFabOptions small { display: block; }
+.ezFabOptions span { color: #9ed6d4; }
+.ezFabOptions small { color: #9bb3be; }
+#ezFabClose { min-width: 44px; font-size: 22px; text-align: center !important; }
+
+/* Arrival report */
+#ezArrival:not(.hidden) { position: fixed; inset: 0; z-index: 120; background: #071016db; display: grid; place-items: center; padding: 18px; backdrop-filter: blur(7px); }
+.ezArrivalCard { width: min(520px, 100%); max-height: 92vh; overflow: auto; padding: 32px; border: 1px solid #51838d; border-radius: 15px; background: #0e2029; color: #d9e9ec; }
+.ezArrivalCard h2 { font-size: 36px; letter-spacing: -1.2px; margin: 12px 0; }
+.ezArrivalCard p { font-size: 14px; line-height: 1.7; }
+.ezArrivalCard button { width: 100%; min-height: 48px; background: #79c9c0; color: #102a30; border: 0; margin-top: 8px; }
+
+/* Launch screen */
+.ezSeed { display: block; font: 11px monospace; letter-spacing: 2px; color: #abd9d6; margin: 22px 0; }
+.ezSeed input { display: block; width: 100%; max-width: 280px; margin-top: 8px; padding: 14px; background: #10222c; color: #e7f1f1; border: 1px solid #4a727b; border-radius: 6px; font: 18px monospace; user-select: text; touch-action: auto; }
+
+/* Stack count badge for stackable items */
+.inv-count { position: absolute; right: 3px; bottom: 2px; font: 700 9px system-ui; color: #f1f5f1; text-shadow: 0 1px 2px #000; }
+
+@media (max-width: 700px) {
+  #gameTitle { display: none; }
+  #status { display: none !important; }
+  #ezToggle { top: 38px; font-size: 10px; min-height: 30px; }
+  #ezBody { padding: 14px; }
+  .ezArrivalCard { padding: 20px; }
+  .ezArrivalCard h2 { font-size: 28px; }
+  #selectionPanel { max-width: calc(100vw - 164px); max-height: 230px; overflow: auto; touch-action: pan-y; }
+  .ezGrid button { font-size: 12px; }
+}
+@media (max-height: 500px) {
+  #ezPanel { top: 109px; }
+  #minimap { width: 110px; height: 110px; }
+  #selectionPanel { max-height: 115px; overflow: auto; bottom: 8px; }
+}
