@@ -1,0 +1,10 @@
+{
+  "name": "abyssal-dawn-earth-zero-protocol",
+  "version": "0.5.0",
+  "private": true,
+  "description": "Self-contained browser expedition prototype",
+  "scripts": {
+    "build": "python3 build.py",
+    "test": "node tests/expedition.cjs && node tests/guards.cjs && node tests/mobile.cjs && node tests/v03.cjs && node tests/v05.cjs"
+  }
+}
