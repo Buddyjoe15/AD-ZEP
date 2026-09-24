@@ -13,6 +13,8 @@
     G.UI.init();
     G.ExpeditionUI.init();
     G.DebugUI.init();
+    G.MapEditorUI.init();
+    G.InventoryUI.initDrag();
     G.MainMenu.init();
     // A world is generated immediately so the map renders behind the menu.
     G.Scenario.newGame({ seed: G.MainMenu.expeditionSeed, slot: 1 });

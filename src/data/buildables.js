@@ -46,7 +46,7 @@ GW.Defs.buildables.defineAll({
   hostile_fabricator: {
     name: 'Hostile Fabricator', w: 2, h: 2, hp: 1500, buildTime: 10, cost: {}, symbol: 'HF', color: '#e0685f',
     team: 'red', debugOnly: true,
-    spawner: { unit: 'hostile_machine', rate: 5, amount: 100, hold: true },   // hold: spawned units stay put until switched to hunt
+    spawner: { unit: 'hostile_machine', rate: 5, amount: 100, hold: true },   // hold: spawned units gather at the rally point until switched to hunt
     behaviors: [{ type: 'spawner' }],
     description: 'Test spawner. Produces Hostile Autonomous Machines at a chosen speed and count. Click it to configure.'
   }

@@ -46,6 +46,22 @@
       for (const q of owner.fabQueue || []) G.Economy.refund(G.Defs.recipes.get(q.recipe)?.cost || {}, 'fabrication cancelled');
       if (owner.fabQueue) owner.fabQueue.length = 0;
     },
+    // Rally point for newly fabricated units (null: they wait beside their fabricator).
+    setRally(owner, point){
+      if (!owner || !owner.fabQueue) return false;
+      const C = G.CONFIG;
+      owner.rally = point && G.isNum(point.x) && G.isNum(point.y) ? { x: G.clamp(point.x, 0, C.WORLD_W), y: G.clamp(point.y, 0, C.WORLD_H) } : null;
+      G.Events.emit('fabrication:rally', owner);
+      return true;
+    },
+    // Sends a new unit to its owner's rally point, spread around it so arrivals do not
+    // stack (the offset comes from the unit id, so it needs no saved state).
+    toRally(owner, u){
+      const r = owner.rally;
+      if (!r) return;
+      const n = u.id % 37, a = n * 2.39996, d = 26 * Math.sqrt(n), p = G.openPoint(r.x + Math.cos(a) * d, r.y + Math.sin(a) * d);
+      G.Orders.move([u], p.x, p.y);
+    },
     deployPoint(owner){
       const T = G.CONFIG.TILE, w = owner.w || 1, h = owner.h || 1;
       const ship = G.Units.ship(), region = ship ? G.State.grid.regionAt(ship.gx + Math.floor(ship.w / 2), ship.gy + ship.h) : 0;
@@ -55,12 +71,13 @@
       for (const owner of this.owners()){
         const q = owner.fabQueue[0];
         if (!q) continue;
-        q.left -= dt;
+        q.left = G.Cheats.instantBuild ? 0 : q.left - dt;
         if (q.left > 0) continue;
         const r = G.Defs.recipes.get(q.recipe);
         owner.fabQueue.shift();
         if (!r) continue;
         const p = this.deployPoint(owner), u = G.Units.spawn(r.unit, p.x, p.y);
+        this.toRally(owner, u);
         G.Events.emit('fabrication:completed', { owner, unit: u, recipe: q.recipe });
       }
     }

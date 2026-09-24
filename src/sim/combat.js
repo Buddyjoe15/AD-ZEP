@@ -31,7 +31,8 @@
 
   function fire(u, t, S){
     let dmg = u.damage;
-    if (t.isHero){
+    if (t.team === 'blue' && G.Cheats.god && typeof t.id === 'number') dmg = 0;   // godmode: friendly units (not structures)
+    else if (t.isHero){
       const dr = G.Inventory.damageReduction();
       dmg *= 1 - dr;
       if (dr > 0) G.Inventory.wearArmor(Math.max(0.5, u.damage * 0.05));

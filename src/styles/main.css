@@ -789,3 +789,9 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
 @media (orientation:landscape) and (max-height:420px){
   #catalogPanel[data-kind="truck-build"]{width:min(240px,40vw);max-height:72vh;bottom:32px}
 }
+
+/* Inventory title bar: close button on the left, drag anywhere else on the bar to move. */
+.panel-drag-head{display:flex;align-items:center;gap:8px;margin:-2px 0 6px;padding:2px 0;cursor:move;touch-action:none;user-select:none;-webkit-user-select:none}
+.panel-drag-head h3{margin:0;flex:1}
+.rpg .panel-drag-head .panel-close{flex:0 0 auto;min-width:30px;min-height:30px;padding:0;font-size:18px;line-height:1;border-radius:6px;cursor:pointer}
+#inventoryPanel.dragging{opacity:.92;box-shadow:0 8px 28px #000b}

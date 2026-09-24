@@ -1,6 +1,6 @@
 {
   "name": "abyssal-dawn-earth-zero-protocol",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Browser expedition strategy game. No runtime dependencies; opens directly from index.html.",
   "engines": { "node": ">=18" },

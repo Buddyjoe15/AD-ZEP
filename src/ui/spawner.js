@@ -1,4 +1,4 @@
-/* Spawner window (Hostile Fabricator): spawn speed, how many to spawn, hunt / hold, and
+/* Spawner window (Hostile Fabricator): spawn speed, how many to spawn, rally point or hunt, and
    live load figures for finding how many units the game handles on screen. The controls
    are rendered once per change; only the live figures refresh while the window is open,
    so typing in the number fields is never interrupted. */
@@ -20,7 +20,10 @@
       this.render();
       clearTimeout(this._t); this._t = setTimeout(() => panel.classList.remove('ezOpening'), 75);
     },
-    close(){ this.buildingId = null; $('spawnerPanel').classList.add('hidden'); },
+    close(){
+      if (G.Input.commandMode === 'rally'){ G.Input.commandMode = null; G.Input.rallyFor = null; }
+      this.buildingId = null; $('spawnerPanel').classList.add('hidden');
+    },
     render(){
       const b = this.building();
       if (!b){ this.close(); return; }
@@ -33,7 +36,9 @@
         <h3>How many to spawn</h3>
         <div class="spChips">${S.AMOUNTS.map(v => chip('amount', v, s.amount, v >= 1000 ? v / 1000 + 'k' : v)).join('')}<input id="spAmount" type="number" min="1" max="${S.MAX_AMOUNT}" step="1" value="${s.amount}" aria-label="Custom amount"></div>
         <h3>Spawned units</h3>
-        <div class="spChips">${chip('hold', 'hold', s.hold ? 'hold' : 'hunt', 'Hold position')}${chip('hold', 'hunt', s.hold ? 'hold' : 'hunt', 'Advance on Vance')}</div>
+        <div class="spChips">${chip('hold', 'hold', s.hold ? 'hold' : 'hunt', 'Gather at rally point')}${chip('hold', 'hunt', s.hold ? 'hold' : 'hunt', 'Advance on Vance')}</div>
+        <h3>Rally point</h3>
+        <div class="spChips"><button id="spRally" class="spChip${G.Input.commandMode === 'rally' ? ' active' : ''}">${G.Input.commandMode === 'rally' ? 'Tap the map… (Esc cancels)' : 'Move rally point'}</button></div>
         <div class="spActions">
           <button id="spStart" class="spPrimary">${s.running ? 'Pause' : s.spawned > 0 && s.spawned < s.amount ? 'Resume' : 'Start spawning'}</button>
           <button id="spReset">Reset count</button><button id="spClear">Remove spawned</button>
@@ -45,6 +50,11 @@
       body.querySelectorAll('[data-rate]').forEach(el => { el.onclick = () => { S.configure(b, { rate: +el.dataset.rate }); this.render(); }; });
       body.querySelectorAll('[data-amount]').forEach(el => { el.onclick = () => { S.configure(b, { amount: +el.dataset.amount }); this.render(); }; });
       body.querySelectorAll('[data-hold]').forEach(el => { el.onclick = () => { S.configure(b, { hold: el.dataset.hold === 'hold' }); this.render(); }; });
+      $('spRally').onclick = () => {
+        if (G.Input.commandMode === 'rally'){ G.Input.commandMode = null; G.Input.rallyFor = null; }
+        else { G.Input.commandMode = 'rally'; G.Input.rallyFor = b.id; G.UI.toast('Tap the map to place the rally point'); }
+        this.render();
+      };
       $('spRate').onchange = e => { S.configure(b, { rate: +e.target.value }); this.render(); };
       $('spAmount').onchange = e => { S.configure(b, { amount: +e.target.value }); this.render(); };
       $('spStart').onclick = () => { if (s.running) S.stop(b); else S.start(b); this.render(); };

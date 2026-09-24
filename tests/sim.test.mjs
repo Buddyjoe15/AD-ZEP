@@ -387,46 +387,71 @@ test('new units, recipes, structures and behaviours work from data alone (docs e
   G.Save.validate(G.Save.serialize());
 });
 
-test('Hostile Fabricator spawns at the chosen speed up to the chosen count', () => {
+test('Hostile Fabricator spawns waves at one point, waits for it to clear, and gathers them at a movable rally point', () => {
   const G = newGame();
-  const S = G.State, b = S.buildings.find(b => b.type === 'hostile_fabricator');
+  const S = G.State, b = S.buildings.find(b => b.type === 'hostile_fabricator'), SP = G.Spawner;
   assert.ok(b, 'testing zone includes the Hostile Fabricator');
   assert.equal(b.team, 'red');
-  assert.equal(G.Spawner.state(b).running, false, 'idle until started');
+  assert.equal(SP.state(b).running, false, 'idle until started');
+  assert.ok(SP.state(b).rally.y > b.y, 'default rally point south of the structure');
   G.Sim.run(2);
   assert.equal(S.units.filter(u => u.team === 'red').length, 0);
-  G.Spawner.configure(b, { rate: 20, amount: 50 });
-  G.Spawner.start(b);
-  G.Sim.run(1);
-  const afterOne = G.Spawner.spawnedBy(b).length;
-  assert.ok(afterOne >= 18 && afterOne <= 22, `~20 spawned in 1 s, got ${afterOne}`);
-  G.Sim.run(3);
-  assert.equal(G.Spawner.spawnedBy(b).length, 50);
-  assert.equal(G.Spawner.state(b).running, false, 'stops at the requested count');
-  // Held units do not hunt; switching to hunt sends them after the crew.
-  assert.ok(G.Spawner.spawnedBy(b).every(u => u.aiHold && !u.path.length));
-  G.Spawner.configure(b, { hold: false });
+  // Keep the crew out of range so they do not shoot the test subjects.
+  for (const u of G.Units.crew()) u.maxHp = u.hp = 1e9;
+  // One fast wave: every unit appears on the spawn point, facing the rally point.
+  SP.configure(b, { rate: 600, amount: 60 });
+  SP.start(b);
+  const p = SP.spawnPoint(b);
+  G.Sim.step();
+  const first = SP.spawnedBy(b);
+  assert.equal(first.length, 20, 'rate 600 → 20 in the first tick');
+  assert.ok(first.every(u => Math.hypot(u.x - p.x, u.y - p.y) < 60), 'all at the spawn point');
+  assert.ok(p.y > b.y + b.h * T / 2, 'spawn point on the rally side');
+  // While a unit still stands on the spawn point, no new wave appears.
+  const blocker = first[0];
+  for (let i = 0; i < 20; i++){ blocker.x = p.x; blocker.y = p.y; blocker.path = []; G.Sim.step(); }
+  assert.equal(SP.spawnedBy(b).length, 20, 'waits for the spawn point to clear');
+  // Once it moves away, the next wave (what accumulated meanwhile) appears.
+  G.Sim.run(8);
+  assert.equal(SP.state(b).spawned, 60);
+  assert.equal(SP.state(b).running, false, 'stops at the requested count');
+  // Held units gather at the rally point and do not hunt.
+  const near = (pt, r) => SP.spawnedBy(b).filter(u => Math.hypot(u.x - pt.x, u.y - pt.y) < r).length;
+  G.Sim.run(6);
+  assert.ok(SP.spawnedBy(b).every(u => u.aiHold));
+  assert.ok(near(SP.state(b).rally, 260) >= 55, 'gathered at the rally point: ' + near(SP.state(b).rally, 260));
+  // Moving the rally point moves them.
+  const moved = G.openPoint(b.x + 700, b.y + 500);
+  SP.configure(b, { rally: moved });
+  assert.deepEqual({ ...SP.state(b).rally }, { x: moved.x, y: moved.y });
+  G.Sim.run(10);
+  assert.ok(near(moved, 260) >= 55, 'followed the rally point: ' + near(moved, 260));
+  // Switching to hunt sends them after the crew.
+  SP.configure(b, { hold: false });
   G.Sim.run(2);
-  assert.ok(G.Spawner.spawnedBy(b).some(u => u.path.length || u.pathPending), 'released units start advancing');
-  // Settings survive a save; removing clears only this spawner's units.
+  assert.ok(SP.spawnedBy(b).every(u => !u.aiHold));
+  assert.ok(SP.spawnedBy(b).some(u => u.path.length || u.pathPending || u.aiMode), 'released units start advancing');
+  // Settings, including the rally point, survive a save; removing clears only this spawner's units.
+  SP.configure(b, { hold: true });
   const d = G.Save.serialize();
   G.Save.validate(d);
   G.Save.restore(d, 1);
   S.paused = false;   // gameplay resumes after a load (the UI does this when it enters the scene)
   const b2 = S.buildings.find(x => x.id === b.id);
-  assert.equal(G.Spawner.state(b2).amount, 50);
-  const alive = G.Spawner.spawnedBy(b2).length;   // nearby crew may have shot a few held units
-  assert.ok(alive >= 45);
-  assert.equal(G.Spawner.clear(b2), alive);
+  assert.equal(SP.state(b2).amount, 60);
+  assert.deepEqual({ ...SP.state(b2).rally }, { x: moved.x, y: moved.y });
+  const alive = SP.spawnedBy(b2).length;
+  assert.ok(alive >= 55);
+  assert.equal(SP.clear(b2), alive);
   assert.equal(S.units.filter(u => u.team === 'red').length, 0);
-  // Very fast rates are spread over ticks, and the whole run still completes.
-  G.Spawner.configure(b2, { rate: 1000, amount: 1200, hold: true });
-  G.Spawner.start(b2);
+  // Very fast rates: waves are capped per tick, and the whole run still completes.
+  SP.configure(b2, { rate: 1000, amount: 1200, hold: true });
+  SP.start(b2);
   G.Sim.step();
-  assert.ok(G.Spawner.spawnedBy(b2).length <= G.Spawner.MAX_PER_TICK);
-  G.Sim.run(3);
-  assert.equal(G.Spawner.state(b2).spawned, 1200, 'counted as spawned (nearby crew may already be shooting some)');
-  assert.equal(G.Spawner.state(b2).running, false);
+  assert.ok(SP.spawnedBy(b2).length <= SP.MAX_PER_TICK);
+  for (let i = 0; i < 60 && SP.state(b2).running; i++) G.Sim.run(1);
+  assert.equal(SP.state(b2).spawned, 1200, 'counted as spawned');
+  assert.equal(SP.state(b2).running, false);
   assert.equal(G.Defs.buildables.get('hostile_fabricator').debugOnly, true, 'not in the Spider build menu');
 });
 
@@ -581,4 +606,130 @@ test('simulation is deterministic: the same swarm battle plays out identically t
   };
   const a = play(), b = play();
   assert.deepEqual({ ...b }, { ...a });
+});
+
+test('new games use the all-grass test map; transit keeps the map type', () => {
+  const G = newGame();
+  const S = G.State;
+  assert.equal(S.map, 'grass');
+  assert.ok(S.grid.tiles.every(t => t === G.TT.GRASS), '100% grass');
+  assert.deepEqual(Array.from(S.terrainEdits), [], 'nothing to clear on open ground');
+  assert.ok(S.buildings.some(b => b.type === 'hostile_fabricator') && S.resourceNodes.length >= 4, 'testing zone and deposits still placed');
+  const forest = loadSim();
+  forest.Scenario.newGame({ seed: 72491, map: 'forest' });
+  assert.equal(fnv(forest.MapGen.forest(72491).tiles), 1434927080, 'forest generator unchanged');
+  assert.ok(forest.State.grid.tiles.some(t => t === forest.TT.TREE));
+});
+
+test('Utility Spider cargo holds 250 metal; loaded spiders follow the definition', () => {
+  const G = newGame();
+  const spider = find(G, 'utility_spider');
+  assert.equal(G.Defs.units.get('utility_spider').cargoCapacity, 250);
+  assert.equal(spider.cargoCapacity, 250);
+  const d = G.Save.serialize();
+  d.units.find(u => u.type === 'utility_spider').cargoCapacity = 600;
+  G.Save.restore(d, 1);
+  assert.equal(find(G, 'utility_spider').cargoCapacity, 250);
+  G.State.paused = false;
+  G.Gather.command(find(G, 'utility_spider'), G.State.resourceNodes.find(n => n.type === 'scrap_mine'));
+  let most = 0;
+  for (let i = 0; i < 40; i++){ G.Sim.run(1); most = Math.max(most, G.Units.cargoTotal(find(G, 'utility_spider'))); }
+  assert.ok(most > 200 && most <= 250, 'a load fills to 250, got ' + most);
+});
+
+test('debug cheats: godmode protects friendly units, instant build finishes at once, metal can be added', () => {
+  const G = newGame();
+  const S = G.State, hero = G.Units.hero(), guard = find(G, 'security_drone'), spider = find(G, 'utility_spider');
+  assert.equal(G.Cheats.addResource('metal', 5000), true);
+  assert.equal(G.Economy.get('metal'), G.EXPEDITION_RULES.startMetal + 5000);
+  assert.equal(G.Cheats.addResource('nope', 5), false);
+  G.Cheats.set('god', true);
+  for (let i = 0; i < 12; i++) G.Units.spawn('hostile_machine', hero.x + 150 + (i % 4) * 30, hero.y + Math.floor(i / 4) * 30);
+  G.Sim.run(6);
+  assert.equal(hero.hp, hero.maxHp, 'Vance untouched');
+  assert.equal(guard.hp, guard.maxHp);
+  G.Cheats.set('god', false);
+  // Instant build: the structure appears on the next tick, fabrication too.
+  G.Cheats.set('instantBuild', true);
+  const p = openTileNear(G, 2, 4);
+  assert.ok(G.Construction.order(spider, 'generator', p.x, p.y));
+  G.Sim.step();
+  assert.ok(S.buildings.some(b => b.type === 'generator' && b.gx === p.x && b.gy === p.y));
+  assert.equal(spider.buildSiteId, null);
+  const before = G.Units.countTeam('blue');
+  assert.ok(G.Fabrication.enqueue(G.Units.ship(), 'survey_drone'));
+  G.Sim.step();
+  assert.equal(G.Units.countTeam('blue'), before + 1);
+  G.Cheats.set('instantBuild', false);
+  assert.throws(() => G.Cheats.set('fly', true));
+});
+
+test('map editor: paint terrain around structures, erase objects, and keep it all in saves', () => {
+  const G = newGame();
+  const S = G.State, sh = G.Units.ship(), grid = S.grid, TT = G.TT;
+  // Water brush over the ship's edge: the ship's tiles are skipped, others painted.
+  const n = G.MapEdit.paint(sh.gx, sh.gy + 2, 5, TT.WATER);
+  assert.ok(n > 0 && n < 25, 'painted ' + n);
+  assert.equal(grid.get(sh.gx - 2, sh.gy + 2), TT.WATER);
+  assert.equal(grid.get(sh.gx + 1, sh.gy + 2), TT.GRASS, 'under the ship stays as it was');
+  // A unit standing where water is painted is moved to dry ground.
+  const u = find(G, 'survey_drone'), ux = Math.floor(u.x / T), uy = Math.floor(u.y / T);
+  G.MapEdit.paint(ux, uy, 3, TT.ROCK);
+  assert.ok(grid.passable(Math.floor(u.x / T), Math.floor(u.y / T)), 'unit evacuated');
+  // Passable brushes cover the whole square and replace older edits they cover.
+  G.MapEdit.paint(ux, uy, 9, TT.PATH);
+  assert.equal(grid.get(ux, uy), TT.PATH);
+  const edits = S.terrainEdits.length;
+  G.MapEdit.paint(ux, uy, 9, TT.FOREST);
+  assert.equal(S.terrainEdits.length, edits, 'the covered stroke was dropped');
+  // Erase: a structure, a resource node, a signal.
+  const wall = G.Buildings.add('wall', ux + 8, uy);
+  assert.equal(G.MapEdit.removeAt(wall.x, wall.y), 'Wall');
+  assert.ok(!S.buildings.includes(wall));
+  assert.equal(grid.passable(ux + 8, uy), true);
+  const node = S.resourceNodes.find(n => n.type === 'scrap_mine');
+  assert.ok(G.MapEdit.removeAt(node.x, node.y));
+  assert.ok(!S.resourceNodes.includes(node));
+  assert.equal(G.MapEdit.removeAt(sh.x, sh.y), null, 'the ship cannot be erased');
+  // Edits survive a save and load.
+  const tiles = Array.from(grid.tiles);
+  G.Save.restore(G.Save.serialize(), 1);
+  assert.deepEqual(Array.from(G.State.grid.tiles), tiles);
+  // Reset to grass clears every edit.
+  assert.ok(G.MapEdit.reset());
+  assert.ok(G.State.grid.tiles.every(t => t === TT.GRASS));
+  assert.deepEqual(Array.from(G.State.terrainEdits), []);
+  assert.equal(G.MapEdit.reset(TT.WATER), false, 'only passable terrain can fill the map');
+});
+
+test('rally points: units from the ship and Fabricators walk to their rally point', () => {
+  const G = newGame();
+  const S = G.State, ship = G.Units.ship(), fab = S.buildings.find(b => b.type === 'fabricator');
+  assert.equal(ship.rally, null, 'none by default');
+  assert.equal(fab.rally, null);
+  S.resources.metal = 5000;
+  G.Cheats.set('instantBuild', true);
+  // Without a rally point the unit stays beside the ship.
+  G.Fabrication.enqueue(ship, 'survey_drone'); G.Sim.step();
+  const idle = S.units[S.units.length - 1];
+  G.Sim.run(3);
+  assert.ok(!idle.path.length && Math.hypot(idle.x - ship.x, idle.y - ship.y) < 500);
+  // With one, new units walk there (spread around it).
+  const r1 = G.openPoint(ship.x + 900, ship.y + 700), r2 = G.openPoint(fab.x - 600, fab.y + 500);
+  assert.ok(G.Fabrication.setRally(ship, r1));
+  assert.ok(G.Fabrication.setRally(fab, r2));
+  for (let i = 0; i < 3; i++){ G.Fabrication.enqueue(ship, 'security_drone'); G.Sim.step(); }
+  G.Fabrication.enqueue(fab, 'survey_drone'); G.Sim.step();
+  const fromShip = S.units.slice(-4, -1), fromFab = S.units[S.units.length - 1];
+  G.Cheats.set('instantBuild', false);
+  G.Sim.run(15);
+  for (const u of fromShip) assert.ok(Math.hypot(u.x - r1.x, u.y - r1.y) < 200, 'at the ship rally point: ' + Math.round(Math.hypot(u.x - r1.x, u.y - r1.y)));
+  assert.ok(Math.hypot(fromFab.x - r2.x, fromFab.y - r2.y) < 200, 'at the Fabricator rally point');
+  // Saved and restored; cleared with null.
+  G.Save.restore(G.Save.serialize(), 1);
+  assert.deepEqual({ ...G.Units.ship().rally }, { x: r1.x, y: r1.y });
+  assert.deepEqual({ ...G.State.buildings.find(b => b.id === fab.id).rally }, { x: r2.x, y: r2.y });
+  G.Fabrication.setRally(G.Units.ship(), null);
+  assert.equal(G.Units.ship().rally, null);
+  assert.equal(G.Fabrication.setRally(find(G, 'survey_drone'), r1), false, 'only fabricators have rally points');
 });

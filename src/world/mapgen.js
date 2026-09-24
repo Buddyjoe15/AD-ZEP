@@ -1,4 +1,5 @@
-/* Seeded forest Earth generator. Output depends only on the seed and world size, so saves
+/* Map generators: the seeded forest Earth (older saves) and the all-grass test map (new
+   games). Seeded forest Earth generator. Output depends only on the seed and world size, so saves
    store the seed instead of the terrain. Keep the RNG call order stable: reordering any
    step changes every existing Earth. */
 (function(){
@@ -126,5 +127,20 @@
     return grid;
   }
 
-  G.MapGen = { forest };
+  // The test map: open grass everywhere. Terrain features are added with the Map Editor
+  // (debug mode) and saved as terrain edits.
+  function grass(){
+    const grid = new G.Grid(G.CONFIG.COLS, G.CONFIG.ROWS);
+    grid.tiles.fill(TT.GRASS);
+    grid.touch();
+    return grid;
+  }
+
+  // Map types, by the name saves record in `map`. `clearLanding` paints clearings for the
+  // landing zone and testing zone (not needed where everything is already open ground).
+  G.MapGen = {
+    forest, grass,
+    types: { forest: { generate: forest, clearLanding: true }, grass: { generate: grass, clearLanding: false } },
+    DEFAULT: 'grass'
+  };
 })();

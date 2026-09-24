@@ -37,9 +37,17 @@
       if (!h || !G.within(h, u, 170)){ G.UI.toast('Move the Utility Spider closer to Commander Vance'); return; }
       this.openContainer(u.storage);
     },
+    // Closes the inventory (and any open container, which needs it open).
+    close(){
+      if (G.State.selectedContainer) this.closeContainer();
+      $('inventoryPanel').classList.add('hidden');
+    },
+    bindHead(){ const b = $('invClose'); if (b) b.onclick = () => this.close(); },
+    initDrag(){ G.UI.draggable($('inventoryPanel')); },
     renderInventory(){
       const p = $('inventoryPanel'), I = G.Inventory;
-      if (!G.Units.hero()){ p.innerHTML = '<h3>Inventory</h3>No commander'; return; }
+      const head = title => `<div class="panel-drag-head" data-drag-handle title="Drag to move"><button type="button" class="panel-close" id="invClose" aria-label="Close inventory">×</button><h3>${title}</h3></div>`;
+      if (!G.Units.hero()){ p.innerHTML = head('Inventory') + 'No commander'; this.bindHead(); return; }
       const equipSlot = k => {
         const it = I.equipment[k];
         return `<div class="body-equip-slot ${SLOT_CLASS[k]} inv-slot ${it ? 'item-live' : ''}" data-drop-zone="equipment" data-equip-target="${k}" ${it ? `data-source="equipped" data-item-id="${esc(it.id)}" data-equip-slot="${k}"` : ''} title="${SLOT_NAMES[k]}">${icon(it)}<span class="body-slot-label">${SLOT_NAMES[k]}</span></div>`;
@@ -51,7 +59,7 @@
         cells += `<div class="inv-slot ${locked ? 'locked' : it ? 'item-live' : 'empty'}" ${!locked && it ? `data-source="backpack" data-item-id="${esc(it.id)}"` : ''} title="${locked ? 'Locked — equip a larger pack' : it ? esc(G.Items.label(it)) : 'Empty slot'}">${locked ? '' : icon(it)}</div>`;
       }
       const pack = I.equipment.backpack;
-      p.innerHTML = `<h3>Commander Vance — Inventory</h3>
+      p.innerHTML = `${head('Commander Vance — Inventory')}
         <div class="inventory-count">${I.items.length} / ${cap} spaces used · Base ${I.baseCapacity}${pack ? ' · Backpack +' + (G.Items.effects(pack).inventoryBonus || 0) : ''}</div>
         <div class="inventory-main">
           <div class="character-pane equipped-character">
@@ -62,6 +70,7 @@
           <div class="transfer-hint">Drag gear onto the matching body slot. Double-click a backpack item to auto-equip. Hold any item for details.</div>
           <div class="inventory-scroll backpack-drop-zone" data-drop-zone="backpack"><div class="inventory-grid">${cells}</div></div>
         </div>`;
+      this.bindHead();
       this.bindItems(p);
     },
     renderChest(){

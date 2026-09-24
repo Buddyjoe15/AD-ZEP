@@ -127,15 +127,26 @@
       open = open ?? p.classList.contains('hidden');
       p.classList.toggle('hidden', !open); $('dbgBtn').classList.toggle('on', open);
       if (!open) this.armed = null; else this.render();
+      G.MapEditorUI.syncButton();
     },
     render(){
       const p = $('dbgPanel'), list = this.catalog(), groups = {};
       list.forEach((e, i) => { (groups[e.group] = groups[e.group] || []).push([e, i]); });
       const a = this.armed;
       p.innerHTML = `<div class="dbgHead"><b>Debug</b><button id="dbgClose" type="button">×</button></div>
+        <div class="dbgGroup">Cheats</div>
+        <div class="medRow">${[100, 1000, 10000].map(n => `<button type="button" class="medSize" data-metal="${n}">+${n.toLocaleString()} metal</button>`).join('')}</div>
+        <button type="button" class="dbgEntry dbgToggle${G.Cheats.god ? ' active' : ''}" data-cheat="god"><span class="dbgIcon">${G.Cheats.god ? 'ON' : 'OFF'}</span>Godmode: friendly units invincible</button>
+        <button type="button" class="dbgEntry dbgToggle${G.Cheats.instantBuild ? ' active' : ''}" data-cheat="instantBuild"><span class="dbgIcon">${G.Cheats.instantBuild ? 'ON' : 'OFF'}</span>Instant build: structures and units</button>
+        <div class="dbgGroup">Place</div>
         <div class="dbgHelp">${a ? `Tap the map to place <b>${esc(a.name)}</b>. Tap it again here to stop.` : 'Select an entry, then tap the map to place it. Hold an entry for details.'}</div>
         ${Object.entries(groups).map(([g, items]) => `<div class="dbgGroup">${esc(g)}</div>${items.map(([e, i]) => `<button type="button" class="dbgEntry${a && a.kind === e.kind && a.key === e.key ? ' active' : ''}" data-i="${i}"><span class="dbgIcon dbg-${e.kind}">${esc(this.symbol(e))}</span>${esc(e.name)}</button>`).join('')}`).join('')}`;
       $('dbgClose').onclick = () => this.toggle(false);
+      p.querySelectorAll('[data-metal]').forEach(b => b.onclick = () => { G.Cheats.addResource('metal', +b.dataset.metal); G.UI.toast('+' + (+b.dataset.metal).toLocaleString() + ' metal'); });
+      p.querySelectorAll('[data-cheat]').forEach(b => b.onclick = () => {
+        const k = b.dataset.cheat; G.Cheats.set(k, !G.Cheats[k]);
+        G.UI.toast((k === 'god' ? 'Godmode ' : 'Instant build ') + (G.Cheats[k] ? 'on' : 'off')); this.render();
+      });
       p.querySelectorAll('.dbgEntry').forEach(el => {
         const e = list[+el.dataset.i];
         let t = null, held = false, start = null;

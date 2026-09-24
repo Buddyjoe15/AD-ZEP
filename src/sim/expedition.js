@@ -6,7 +6,7 @@
   const G = GW;
   const R = () => G.EXPEDITION_RULES;
   const INTRO_LOG = [
-    'ARIA: Dimensional displacement confirmed. EARTH ZERO PROTOCOL ACTIVATED.',
+    'ARIA: Dimensional displacement confirmed. ZERO EARTH PROTOCOL ACTIVATED.',
     'Vance: You knew this could happen?',
     'ARIA: The contingency was classified. My disclosure restrictions remain in force.'
   ];
@@ -41,7 +41,7 @@
     populate(){
       const S = G.State, E = this.state, sh = G.Units.ship(), rules = R(), T = G.CONFIG.TILE;
       S.resourceNodes = [];
-      this.editTerrain(sh.gx - 13, sh.gy - 5, 32, 28);
+      if (G.MapGen.types[S.map].clearLanding) this.editTerrain(sh.gx - 13, sh.gy - 5, 32, 28);
       this.testingZone();
       const region = S.grid.regionAt(sh.gx + 3, sh.gy + sh.h);
       // Signals are pushed outward until no structure already covers them, so nothing
@@ -92,7 +92,7 @@
         ...G.Defs.items.keys().map(key => ({ kind: 'item', key }))
       ];
       const cols = 4, x0 = sh.gx - 16, y0 = sh.gy + 1, rows = Math.ceil(entries.length / cols);
-      this.editTerrain(x0 - 1, y0 - 2, cols * 3 + 1, rows * 3 + 6);
+      if (G.MapGen.types[S.map].clearLanding) this.editTerrain(x0 - 1, y0 - 2, cols * 3 + 1, rows * 3 + 6);
       entries.forEach((e, i) => {
         const gx = x0 + (i % cols) * 3, gy = y0 + Math.floor(i / cols) * 3, x = (gx + 0.5) * T, y = (gy + 0.5) * T;
         if (e.kind === 'item'){ G.Containers.groundItem(x, y, G.Items.create(e.key), { gx, gy, testZone: true }); return; }
@@ -183,7 +183,7 @@
       if (!sh || !h) return;
       this.studySignals(dt);
       const climate = this.climate();
-      if (climate.hazard && Math.hypot(h.x - sh.x, h.y - sh.y) > rules.hazardSafeRadius) h.hp -= climate.hazard * dt;
+      if (climate.hazard && !G.Cheats.god && Math.hypot(h.x - sh.x, h.y - sh.y) > rules.hazardSafeRadius) h.hp -= climate.hazard * dt;
       if (climate.hostiles && E.elapsed >= E.waveAt){
         E.waveAt += rules.waveInterval;
         const n = Math.min(rules.waveMax, rules.waveBase + E.world);

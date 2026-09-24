@@ -2,8 +2,10 @@
 (function(root){
   'use strict';
   const G = root.GW = root.GW || {};
-  G.VERSION = '0.6.0';
-  G.SAVE_SCHEMA = 2;
+  G.VERSION = '0.7.0';
+  G.SAVE_SCHEMA = 5;
+  // Save-file identifier, kept from before the game was renamed Zero Earth Protocol:
+  // changing it would make every existing save unreadable.
   G.PROJECT = 'AD-EZP';
   // True when running inside a browser page. Simulation modules never touch the DOM,
   // so they also run headless (Node tests, future web workers or a dedicated server).

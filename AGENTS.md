@@ -12,7 +12,7 @@ Instructions for AI agents working on this repository. `CLAUDE.md` has the same 
 
 ## Save format rules
 
-The save system is `GW.Save` in `src/sim/save.js`. The current schema is `GW.SAVE_SCHEMA` in `src/core/namespace.js` (now 2). Its tests are in `tests/save.test.mjs`, with helpers in `tests/save-support.mjs`. Full background: "Saves" in `docs/ARCHITECTURE.md`.
+The save system is `GW.Save` in `src/sim/save.js`. The current schema is `GW.SAVE_SCHEMA` in `src/core/namespace.js` (now 5). Its tests are in `tests/save.test.mjs`, with helpers in `tests/save-support.mjs`. Full background: "Saves" in `docs/ARCHITECTURE.md`.
 
 ### When a change affects saves
 
@@ -37,7 +37,7 @@ N is the current `GW.SAVE_SCHEMA`.
 
 ### What not to save
 
-Do not save data that can be rebuilt. Terrain is regenerated from the seed, and only `terrainEdits` are saved. Never save:
+Do not save data that can be rebuilt. Terrain is regenerated from the seed and the map type (`map`), and only `terrainEdits` are saved (Map Editor strokes included). Never save:
 - the grid, occupancy, region labels or the spatial and team grids;
 - `PathService` queues, flow fields, the swarm `TargetField` or other per-system caches;
 - shots, selection, metrics, the sprite atlas, or anything in `src/render` and `src/ui`.
@@ -51,7 +51,7 @@ Simulation code (`src/core`, `src/data`, `src/world`, `src/sim`) must never use 
 - Wall-clock time is allowed only through `GW.Clock`, and only for diagnostics timings and the `savedAt` stamp, never for game logic.
 - Budget background work by amount of work, never by milliseconds.
 
-Never change the order of RNG calls in the map generator (`src/world/mapgen.js`). The terrain fingerprint test in `tests/sim.test.mjs` depends on it, and existing saves regenerate their terrain from it.
+Never change the order of RNG calls in the forest generator (`src/world/mapgen.js`), and never change what an existing map type in `GW.MapGen.types` generates; add a new type instead. The terrain fingerprint test in `tests/sim.test.mjs` depends on it, and existing saves regenerate their terrain from it.
 
 ### Never
 

@@ -36,3 +36,31 @@
 @media (max-width: 700px) {
   #dbgBtn { left: 50%; transform: translateX(-50%); font-size: 9px; min-height: 24px; padding: 2px 7px; }
 }
+
+/* Map Editor (debug mode). */
+#mapEdBtn {
+  position: fixed; top: max(5px, env(safe-area-inset-top)); left: calc(50% + 222px); z-index: 32;
+  min-height: 26px; padding: 3px 10px; font: 700 10px system-ui; letter-spacing: .06em;
+  background: #10242aee; color: #9fd8e6; border: 1px solid #3a8a9b; border-radius: 5px;
+}
+#mapEdBtn.on { background: #1d5866; color: #fff; }
+#mapEdBtn.hidden, #mapEdPanel.hidden { display: none; }
+#mapEdPanel {
+  position: fixed; right: max(6px, env(safe-area-inset-right)); top: 44px; bottom: 250px;
+  width: min(250px, 44vw); z-index: 40; overflow: auto; background: #111a1cf2; border: 1px solid #3a6f7a; border-radius: 7px;
+  color: #e6e2d4; font: 12px system-ui; padding: 8px; -webkit-overflow-scrolling: touch; touch-action: pan-y;
+}
+#mapEdPanel .dbgHead b { color: #9fd8e6; }
+.medTabs { display: flex; gap: 4px; margin: 2px 0 6px; }
+.medTab { flex: 1; min-height: 30px; padding: 2px; background: #1f2c2f; color: #cfe3e6; border: 1px solid #36555b; border-radius: 5px; font: 700 11px system-ui; }
+.medTab.on { background: #1d5866; color: #fff; border-color: #6cc3d4; }
+.medRow { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.medSize { flex: 1 1 auto; min-height: 30px; padding: 2px 6px; background: #232b25; color: #e6e2d4; border: 1px solid #3b463d; border-radius: 5px; font: 11px system-ui; }
+.medSize.on { outline: 2px solid #6cc3d4; background: #2b4448; }
+.dbgEntry small { color: #c9a36a; font-size: 9px; margin-left: auto; }
+.dbgToggle .dbgIcon { font-size: 8px; background: #4a2f2f; }
+.dbgToggle.active .dbgIcon { background: #2f6a3a; }
+@media (max-width: 700px) {
+  #mapEdBtn { left: 50%; top: calc(max(5px, env(safe-area-inset-top)) + 68px); transform: translateX(-50%); font-size: 9px; min-height: 24px; padding: 2px 7px; }
+  #mapEdPanel { top: calc(max(5px, env(safe-area-inset-top)) + 100px); bottom: 200px; }
+}

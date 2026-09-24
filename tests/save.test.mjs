@@ -64,7 +64,7 @@ test('migrate() applies steps in order and rejects unknown schemas', () => {
   assert.throws(() => G.Save.migrate({ ...current, schema: G.SAVE_SCHEMA + 1 }), /newer than this version/);
   assert.throws(() => G.Save.migrate({ ...current, schema: 0 }), /Unsupported save schema/);
   assert.throws(() => G.Save.migrate({ ...current, schema: '2' }), /Unsupported save schema/);
-  assert.throws(() => G.Save.migrate({ ...current, project: 'other' }), /Not an Earth Zero Protocol/);
+  assert.throws(() => G.Save.migrate({ ...current, project: 'other' }), /Not a Zero Earth Protocol/);
 });
 
 for (const { name, file } of fixtures()){
@@ -172,4 +172,48 @@ test('a failure part way through rebuilding the world rolls back to the previous
   G.Buildings.adopt = adopt;
   assert.equal(JSON.stringify(G.Save.serialize()), before, 'previous game restored');
   G.Sim.run(1);
+});
+
+test('migrate_2_to_3: saves from before the grass test map keep their forest terrain', () => {
+  const G = loadSim();
+  for (const file of [fixtureFile(1), fixtureFile(2), path.join(FIXTURES_DIR, 'save-schema-2-early-v0.6.json')]){
+    const raw = readJSON(file);
+    assert.equal(G.Save.migrate(raw).map, 'forest', path.basename(file));
+    const S = G.Save.restore(raw, 1);
+    assert.equal(S.map, 'forest');
+    const forest = G.MapGen.forest(S.seed).tiles;
+    // Same terrain as the forest generator everywhere the save did not edit.
+    let same = 0;
+    for (let i = 0; i < forest.length; i++) if (S.grid.tiles[i] === forest[i]) same++;
+    assert.ok(same / forest.length > 0.97, path.basename(file) + ': ' + same);
+    assert.ok(S.grid.tiles.some(t => t === G.TT.TREE), 'still has trees');
+  }
+  const bad = readJSON(fixtureFile(G.SAVE_SCHEMA)); bad.map = 'moon';
+  assert.throws(() => G.Save.validate(bad), /map type/);
+});
+
+test('migrate_3_to_4: spawners in older saves get the default rally point and keep their settings', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(3));
+  const old = raw.buildings.find(b => b.spawner);
+  assert.ok(old && !old.spawner.rally, 'the schema 3 fixture has a spawner without a rally point');
+  const S = G.Save.restore(raw, 1);
+  const b = S.buildings.find(x => x.id === old.id);
+  assert.deepEqual({ ...b.spawner.rally }, { ...G.Spawner.defaultRally(b) });
+  for (const k of ['rate', 'amount', 'spawned', 'hold', 'running']) assert.equal(b.spawner[k], old.spawner[k], k);
+  const bad = readJSON(fixtureFile(G.SAVE_SCHEMA));
+  bad.buildings.find(x => x.spawner).spawner.rally = { x: 'far' };
+  assert.throws(() => G.Save.validate(bad), /building/);
+});
+
+test('migrate_4_to_5: fabricators in older saves get no rally point, so units still wait beside them', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(4));
+  assert.ok(!('rally' in raw.units.find(u => u.isShip)), 'the schema 4 fixture predates fabrication rally points');
+  const S = G.Save.restore(raw, 1);
+  assert.equal(G.Units.ship().rally, null);
+  for (const b of S.buildings.filter(b => b.fabQueue)) assert.equal(b.rally, null);
+  const bad = readJSON(fixtureFile(G.SAVE_SCHEMA));
+  bad.units.find(u => u.isShip).rally = { x: -5, y: 3 };
+  assert.throws(() => G.Save.validate(bad), /rally point/);
 });

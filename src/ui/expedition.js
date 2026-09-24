@@ -30,6 +30,8 @@
       });
       document.addEventListener('pointerdown', e => { if (e.target.closest('#ezPanel,#ezFabrication,#spawnerPanel')) pointerDown = true; });
       document.addEventListener('pointerup', () => { pointerDown = false; });
+      $('ezClose').onclick = () => { $('ezPanel').classList.add('hidden'); $('ezToggle').setAttribute('aria-expanded', 'false'); };
+      G.UI.draggable($('ezPanel'));
       document.addEventListener('pointercancel', () => { pointerDown = false; });
       G.Events.on('expedition:transit', () => { G.Save.save(G.State.activeSaveSlot); this.showReport(); });
       G.Events.on('expedition:autosave', () => G.Save.save(G.State.activeSaveSlot));
@@ -54,7 +56,9 @@
       this.renderFabrication();
       clearTimeout(openTimer); openTimer = setTimeout(() => panel.classList.remove('ezOpening'), 75);
     },
-    closeFabrication(){ this.fabOwnerId = null; $('ezFabrication').classList.add('hidden'); $('ezFabrication').classList.remove('ezOpening'); },
+    closeFabrication(){
+      if (G.Input.commandMode === 'rally' && G.Input.rallyFor === this.fabOwnerId){ G.Input.commandMode = null; G.Input.rallyFor = null; }
+      this.fabOwnerId = null; $('ezFabrication').classList.add('hidden'); $('ezFabrication').classList.remove('ezOpening'); },
     act(action, arg){
       if (action === 'fabricate') G.Expedition.action('fabricate', { ownerId: this.fabOwnerId, recipe: arg });
       else if (action === 'build'){ const u = G.State.units.find(v => v.team === 'blue' && v.hp > 0 && G.Units.can(v, 'build')); if (!u) G.UI.toast('Fabricate a Utility Spider'); else { G.Selection.set([u.id]); G.BuildUI.enter(u); G.BuildUI.choose(arg); $('ezPanel').classList.add('hidden'); } }
@@ -65,7 +69,7 @@
     },
     exportFile(){
       const blob = new Blob([G.Save.exportJSON()], { type: 'application/json' }), url = URL.createObjectURL(blob), a = document.createElement('a');
-      a.href = url; a.download = 'AD-EZP-expedition.json'; a.click();
+      a.href = url; a.download = 'AD-ZEP-expedition.json'; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     },
     renderPanel(){
@@ -73,7 +77,7 @@
       if (!E || pointerDown || $('ezPanel').classList.contains('hidden')) return;
       const S = G.State, d = G.Expedition.departure(), R = G.EXPEDITION_RULES, climate = G.Expedition.climate(), h = G.Units.hero(), sh = G.Units.ship();
       const metal = Math.floor(G.Economy.get('metal')), rate = G.Economy.rate('metal'), scroll = el.scrollTop, cap = G.Defs.resources.get('metal').transitCap;
-      el.innerHTML = `<div class="ezEyebrow">${esc(sh ? sh.name.toUpperCase() : 'SHIP LOST')} / EXPEDITION ${String(E.world).padStart(4, '0')}</div><h2>Expedition log</h2>
+      el.innerHTML = `<div class="ezEyebrow">${esc(sh ? sh.name.toUpperCase() : 'SHIP LOST')} / EXPEDITION ${String(E.world).padStart(4, '0')}</div>
         <div class="ezEarthDetails"><b>EARTH ${String(E.world).padStart(3, '0')} · ${esc(climate.name)}</b><span>${esc(climate.air)} · ${d.ready ? 'DEPARTURE READY' : E.repairs < 100 ? 'DRIVE OFFLINE' : E.readiness > 0 ? 'STABILIZING ' + Math.ceil(E.readiness) + 's' : 'CREW CHECK'}</span></div>
         <div class="ezStats"><div><small>SHIP CARGO</small><b>${metal} <em>metal</em></b><small>+${Math.round(rate.income)} / −${Math.round(rate.expense)} per min</small></div><div><small>CONTAINMENT</small><b>${E.elementP}<em> / ${R.elementPMax} P</em></b></div>
         <div><small>VANCE</small><b>${Math.ceil(h ? h.hp : 0)}<em> / ${h ? h.maxHp : 0} HP</em></b></div><div><small>SHIP HULL</small><b>${Math.ceil(sh ? sh.hp : 0)}<em> HP</em></b></div></div>
@@ -108,10 +112,19 @@
       const queue = Q.map((q, i) => (i ? 'Waiting: ' : 'Building: ') + esc(G.Defs.recipes.get(q.recipe)?.name || q.recipe) + ' · ' + Math.ceil(q.left) + 's').join('<br>') || 'Fabricator idle';
       el.innerHTML = `<div class="ezFabHeader"><div><div class="ezEyebrow">${owner.isShip ? esc(owner.name.toUpperCase()) : 'FABRICATOR · LEVEL ' + (owner.level || 1)}</div><h2>Fabrication</h2></div><button id="ezFabClose" aria-label="Close fabrication">×</button></div>
         <p class="ezHint">${Math.floor(G.Economy.get('metal'))} metal available · ${Q.length}/${max} queued · crew ${G.Fabrication.population()}/${G.CONFIG.POPULATION_CAP}</p>
-        <div class="ezFabOptions">${recipes}${upgrade}</div><h3>Production queue</h3><p class="ezHint">${queue}</p>${S.paused ? '<p class="ezHint">Resume to fabricate.</p>' : ''}`;
+        <div class="ezFabOptions">${recipes}${upgrade}</div>
+        <h3>Rally point</h3><p class="ezHint">${owner.rally ? 'New units walk to the flag.' : 'None: new units wait beside the fabricator.'}</p>
+        <div class="ezGrid"><button id="ezRally" class="${G.Input.commandMode === 'rally' && G.Input.rallyFor === owner.id ? 'active' : ''}">${G.Input.commandMode === 'rally' && G.Input.rallyFor === owner.id ? 'Tap the map… (Esc cancels)' : owner.rally ? 'Move rally point' : 'Set rally point'}</button>${owner.rally ? '<button id="ezRallyClear">Clear rally point</button>' : ''}</div>
+        <h3>Production queue</h3><p class="ezHint">${queue}</p>${S.paused ? '<p class="ezHint">Resume to fabricate.</p>' : ''}`;
       el.scrollTop = scroll;
       el.querySelectorAll('[data-ez]').forEach(b => { b.onclick = () => this.act(b.dataset.ez, b.dataset.arg); });
       $('ezFabClose').onclick = () => this.closeFabrication();
+      $('ezRally').onclick = () => {
+        if (G.Input.commandMode === 'rally' && G.Input.rallyFor === owner.id){ G.Input.commandMode = null; G.Input.rallyFor = null; }
+        else { G.Input.commandMode = 'rally'; G.Input.rallyFor = owner.id; G.UI.toast('Tap the map to place the rally point'); }
+        this.renderFabrication();
+      };
+      if ($('ezRallyClear')) $('ezRallyClear').onclick = () => { G.Fabrication.setRally(owner, null); this.renderFabrication(); };
       this.positionFabrication();
     },
     positionFabrication(){ G.ExpeditionUI.placeNear($('ezFabrication'), this.owner()); },

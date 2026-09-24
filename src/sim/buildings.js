@@ -28,7 +28,7 @@
         hp: opts.hp != null ? opts.hp : d.hp, maxHp: d.hp, ...(opts.extra || {})
       };
       if (d.level) b.level = d.level;
-      if (d.fabricator) b.fabQueue = b.fabQueue || [];
+      if (d.fabricator){ b.fabQueue = b.fabQueue || []; if (b.rally === undefined) b.rally = null; }
       return this.adopt(b);
     },
     adopt(b){

@@ -28,7 +28,7 @@ GW.Defs.units.defineAll({
     capabilities: ['fight'], visual: 'rifle'
   },
   utility_spider: {
-    name: 'Utility Spider', hp: 520, speed: 132, radius: 17, sight: 720, cargoCapacity: 600, storageSlots: 25,
+    name: 'Utility Spider', hp: 520, speed: 132, radius: 17, sight: 720, cargoCapacity: 250, storageSlots: 25,
     capabilities: ['build', 'gather', 'carry', 'storage'], visual: 'utility'
   },
   hostile_machine: {
