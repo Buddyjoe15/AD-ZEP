@@ -294,3 +294,39 @@ test('GPU renderer draws every visible unit in one instanced pass', { skip, time
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });
+
+test('old browser saves are backed up before upgrading; unloadable saves are reported, not loaded', { skip, timeout: 60000 }, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+    const errors = track(page);
+    const url = pathToFileURL(path.join(ROOT, 'index.html')).href;
+    const v1 = fs.readFileSync(path.join(ROOT, 'tests/fixtures/save-schema-1.json'), 'utf8');
+    await page.goto(url);
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'mainMenu');
+    await page.evaluate(v1 => {
+      localStorage.clear();
+      localStorage.setItem(GW.Save.keyFor(3), v1);
+      const broken = JSON.parse(v1); broken.units[0].hp = -5;
+      localStorage.setItem(GW.Save.keyFor(2), JSON.stringify(broken));
+    }, v1);
+    await page.reload();
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'mainMenu');
+    await page.click('[data-home="load"]');
+    assert.match(await page.textContent('[data-load-slot="2"]'), /Unreadable save/);
+    // The broken slot is reported and nothing loads.
+    await page.click('[data-load-slot="2"]');
+    assert.match(await page.textContent('#toast'), /Save Slot 2 could not be loaded: Invalid expedition save: unit stats\..*backup/);
+    assert.equal(await page.evaluate(() => GW.SceneManager.currentName), 'mainMenu');
+    // The v0.5 save is backed up untouched, then upgraded and loaded.
+    await page.click('[data-load-slot="3"]');
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay');
+    assert.equal(await page.evaluate(() => localStorage.getItem(GW.Save.backupKey(3, 1))), v1);
+    assert.equal(await page.evaluate(() => GW.Units.crew().length), 5, 'Vance and four drones');
+    await page.evaluate(() => GW.Save.save(3));
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem(GW.Save.keyFor(3))).schema), 2);
+    assert.equal(await page.evaluate(() => localStorage.getItem(GW.Save.backupKey(3, 1))), v1, 'backup survives the autosave');
+    await page.evaluate(() => localStorage.clear());
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});

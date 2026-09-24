@@ -2,6 +2,9 @@
 (function(){
   'use strict';
   const G = GW, C = G.CONFIG;
+  // The simulation reads wall-clock time only through this injected clock.
+  G.Clock.now = () => performance.now();
+  G.Clock.stamp = () => new Date().toISOString();
 
   function boot(){
     G.Defs.verify();

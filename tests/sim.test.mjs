@@ -290,7 +290,7 @@ test('saves round-trip and invalid data is rejected without side effects', () =>
 
 test('v0.5 (schema 1) saves migrate and keep playing', () => {
   const G = loadSim();
-  const v1 = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/fixtures/save-v1.json'), 'utf8'));
+  const v1 = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/fixtures/save-schema-1.json'), 'utf8'));
   const S = G.Save.restore(v1, 1);
   S.paused = false;
   const types = Array.from(S.units, u => u.type).sort();

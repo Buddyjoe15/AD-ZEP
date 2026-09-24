@@ -10,7 +10,7 @@
 (function(){
   'use strict';
   const G = GW;
-  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const now = () => G.Clock.now();   // diagnostics only
   const SQRT2 = Math.SQRT2;
   const DX = [1, -1, 0, 0, 1, 1, -1, -1], DY = [0, 0, 1, -1, 1, -1, 1, -1];
 

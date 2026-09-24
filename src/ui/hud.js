@@ -32,7 +32,7 @@
       const n = $('toast');
       n.textContent = msg; n.style.opacity = '1';
       clearTimeout(this._toastTimer);
-      this._toastTimer = setTimeout(() => { n.style.opacity = '0'; }, 1600);
+      this._toastTimer = setTimeout(() => { n.style.opacity = '0'; }, Math.max(1600, msg.length * 55));   // long messages stay readable
     },
 
     // ---- Game menu ----
@@ -82,8 +82,8 @@
           <p>Signals studied <b>${E ? E.scans : 0}</b></p><p>Current Zoom <b>${S.camera.z.toFixed(2)}</b></p><p>Play Time <b>${fmt(S.time)}</b></p></div></div>`;
       } else if (this.menuTab === 'saves'){
         c.innerHTML = `<div class="save-slots">${[1, 2, 3].map(n => {
-          const i = G.Save.info(n), when = i && i.savedAt ? new Date(i.savedAt).toLocaleString() : 'Empty';
-          return `<div class="save-slot"><div><b>Save Slot ${n}</b><small>${i ? `Earth ${i.world} · ${fmt(i.time)} · ${i.units} units` : 'No save data'}</small><small>${esc(when)}</small></div>
+          const i = G.Save.info(n), when = i && i.error ? 'Load for details' : i && i.savedAt ? new Date(i.savedAt).toLocaleString() : 'Empty';
+          return `<div class="save-slot"><div><b>Save Slot ${n}</b><small>${!i ? 'No save data' : i.error ? 'Cannot be loaded' : `Earth ${i.world} · ${fmt(i.time)} · ${i.units} units`}</small><small>${esc(when)}</small></div>
             <div class="save-actions"><button data-save-slot="${n}">Save</button><button data-load-slot="${n}" ${i ? '' : 'disabled'}>Load</button></div></div>`;
         }).join('')}</div>${G.Storage.persistent ? '' : '<p class="muted">Browser storage is unavailable; saves last until the page closes. Use Export JSON in the expedition log.</p>'}`;
         c.querySelectorAll('[data-save-slot]').forEach(b => b.addEventListener('click', () => G.Save.save(Number(b.dataset.saveSlot))));

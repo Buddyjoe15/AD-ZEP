@@ -10,6 +10,18 @@
     return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
   };
   G.nextSeed = seed => (Math.imul(seed >>> 0, 1664525) + 1013904223) >>> 0;
+  // Stateless deterministic random number in [0, 1) from integer inputs (e.g. seed, tick).
+  // Simulation code uses this or G.RNG, never Math.random (tools/check.mjs enforces it).
+  G.hashRandom = (...ints) => {
+    let h = 2166136261;
+    for (const n of ints){ h = Math.imul(h ^ (n | 0), 16777619); h ^= h >>> 13; }
+    h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  // Wall clock, injected by the presentation layer (src/main.js). The simulation may only
+  // use it for diagnostics timings and save timestamps, never for game logic, and it reads
+  // as zero headless so tests stay deterministic.
+  G.Clock = { now: () => 0, stamp: () => '1970-01-01T00:00:00.000Z' };
 
   G.clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   G.dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);

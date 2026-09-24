@@ -62,9 +62,10 @@
     },
     slotCards(mode){
       return [1, 2, 3].map(n => {
-        const i = G.Save.info(n), when = i && i.savedAt ? new Date(i.savedAt).toLocaleString() : 'Empty Slot';
+        const i = G.Save.info(n), when = i && i.error ? 'Cannot be loaded (select for details)' : i && i.savedAt ? new Date(i.savedAt).toLocaleString() : 'Empty Slot';
+        const what = !i ? 'Create New Save' : i.error ? 'Unreadable save' : `Earth ${i.world} · ${Math.floor(i.time / 60)}m ${Math.floor(i.time % 60)}s`;
         return `<button class="main-slot ${i ? 'occupied' : 'empty'}" data-${mode}-slot="${n}" ${mode === 'load' && !i ? 'disabled' : ''}>
-          <b>Save Slot ${n}</b><span>${i ? `Earth ${i.world} · ${Math.floor(i.time / 60)}m ${Math.floor(i.time % 60)}s` : 'Create New Save'}</span><small>${esc(when)}</small></button>`;
+          <b>Save Slot ${n}</b><span>${esc(what)}</span><small>${esc(when)}</small></button>`;
       }).join('');
     },
     showNewSlots(){

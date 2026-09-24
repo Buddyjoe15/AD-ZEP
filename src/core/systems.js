@@ -3,7 +3,7 @@
 (function(){
   'use strict';
   const G = GW;
-  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const now = () => G.Clock.now();   // diagnostics only
 
   G.SystemManager = {
     registry: new Map(),
