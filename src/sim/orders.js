@@ -65,9 +65,13 @@
       for (const s of slots) G.Units.clearOrders(s.unit);
       G.State.paths.groupMove(slots, x, y);
     },
-    // follow | guard | patrol | idle for non-commander crew.
-    setCommand(units, cmd, point = null){
-      const crew = units.filter(u => u.team === 'blue' && !u.isHero && !u.isShip && u.speed > 0);
+    // Standing orders. follow (any friendly unit, including Vance, may follow any other
+    // friendly unit given by `targetId`) | guard | patrol (crew only) | idle.
+    setCommand(units, cmd, point = null, targetId = null){
+      const target = cmd === 'follow' ? G.Units.alive(targetId) : null;
+      if (cmd === 'follow' && (!target || target.team !== 'blue')) return [];
+      const crew = units.filter(u => u.team === 'blue' && !u.isShip && u.speed > 0 &&
+        (cmd === 'follow' ? u.id !== target.id : cmd === 'idle' || !u.isHero));
       for (const u of crew){
         const hadSite = !!u.buildSiteId;
         G.Units.clearOrders(u);
@@ -75,8 +79,10 @@
         u.command = cmd;
         if (cmd === 'guard') u.guardPoint = point ? { x: point.x, y: point.y } : { x: u.x, y: u.y };
         else if (cmd === 'patrol'){ u.patrolA = { x: u.x, y: u.y }; u.patrolB = point ? { x: point.x, y: point.y } : { x: u.x + 180, y: u.y }; u.patrolTarget = 1; }
+        else if (cmd === 'follow') u.followId = target.id;
       }
       G.Events.emit('orders:issued', { kind: cmd, units: crew });
+      return crew;
     }
   };
 
@@ -89,11 +95,13 @@
   function crewBrain(u){
     const S = G.State;
     if (u.command === 'follow'){
-      const h = G.Units.hero();
-      if (!h || S.time < u.commandNextPath) return;
-      const d = Math.hypot(u.x - h.x, u.y - h.y);
-      if (d > 125) replan(u, h.x, h.y, 0.8);
-      else if (d < 75 && u.path.length){ u.path = []; u.pathIndex = 0; }
+      // Saves from before per-unit following have no followId: they followed Vance.
+      const t = G.Units.alive(u.followId != null ? u.followId : S.heroId);
+      if (!t || t.team !== u.team || t.id === u.id){ u.command = 'idle'; u.followId = null; u.path = []; u.pathIndex = 0; return; }
+      if (S.time < u.commandNextPath) return;
+      const near = t.radius + u.radius + 40, d = Math.hypot(u.x - t.x, u.y - t.y);
+      if (d > near + 60) replan(u, t.x, t.y, 0.8);
+      else if (d < near && u.path.length){ u.path = []; u.pathIndex = 0; }
     } else if (u.command === 'guard' && u.guardPoint){
       if (S.time < u.commandNextPath) return;
       if (Math.hypot(u.x - u.guardPoint.x, u.y - u.guardPoint.y) > 55) replan(u, u.guardPoint.x, u.guardPoint.y, 1.2);
@@ -104,27 +112,8 @@
     }
   }
 
-  // Hostile hunters head for the nearest friendly unit, re-planning every ~1.4 s.
-  const AI = {
-    hunter(u){
-      const S = G.State;
-      if (u.aiHold || !G.Units.navIdle(u) || S.time < u.aiNextPath) return;
-      u.aiNextPath = S.time + 1.35 + (u.id % 8) * 0.11;
-      let best = null, bd = Infinity;
-      // Local search first; the full scan only runs when nothing is within 2000 px.
-      for (const [team, hash] of Object.entries(S.teamSpatial)){
-        if (team === u.team) continue;
-        const v = hash.nearest(u.x, u.y, 2000);
-        if (v && G.dist2(u, v) < bd){ bd = G.dist2(u, v); best = v; }
-      }
-      if (!best) for (const v of S.units){
-        if (v.team === u.team || v.hp <= 0) continue;
-        const d = G.dist2(u, v);
-        if (d < bd){ bd = d; best = v; }
-      }
-      if (best) S.paths.request(u, best.x, best.y, { maxNodes: 4000 });
-    }
-  };
+  // Autonomous behaviours by definition `ai` key (e.g. 'swarm', src/sim/swarm.js).
+  const AI = {};
   G.AI = AI;
 
   G.SystemManager.register('commands', {
@@ -133,7 +122,7 @@
         if (u.hp <= 0 || u.isShip) continue;
         const ai = G.Defs.units.get(u.type)?.ai;
         if (ai && AI[ai]) AI[ai](u);
-        else if (u.team === 'blue' && !u.isHero) crewBrain(u);
+        else if (u.team === 'blue' && (!u.isHero || u.command === 'follow')) crewBrain(u);
       }
     }
   });

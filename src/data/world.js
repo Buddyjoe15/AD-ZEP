@@ -1,8 +1,19 @@
 /* Resource nodes, fabrication recipes, climates and control reference. */
+
+/* Resource nodes come in two kinds:
+     scavenge – loose salvage. A Spider collects it directly and quickly (`rate` per second)
+                until the pile (`capacity`) is gone.
+     deposit  – a 1×1 mine. Nothing happens until its `building` (a Mine Building) is built
+                centred over it; that structure then extracts `rate` per second into its own
+                stockpile, which Spiders haul to the ship. `capacity` is effectively endless. */
 GW.Defs.nodes.defineAll({
   scrap_mine: {
-    name: 'Scavenging Mine', resource: 'metal', capacity: 1200, rate: 20, range: 62,
-    description: 'A salvage-rich deposit for Utility Spiders.'
+    name: 'Scavenging Mine', kind: 'scavenge', resource: 'metal', capacity: 1200, rate: 20, range: 62,
+    description: 'Loose salvage. A Utility Spider collects it quickly until it runs out.'
+  },
+  metal_mine: {
+    name: 'Metal Mine', kind: 'deposit', resource: 'metal', capacity: 1000000, rate: 2, range: 0, building: 'mine_building',
+    description: 'A near-endless metal seam. Build a Mine Building over it; extraction is slow but never runs dry.'
   }
 });
 
@@ -26,10 +37,25 @@ GW.EXPEDITION_RULES = {
   readiness: 180, readinessMin: 90, readinessPerUpgrade: 15,
   repairCost: 100, upgradeCost: 180, upgradeHp: 40, upgradeMax: 5,
   boostSeconds: 90, elementPMax: 10,
+  metalMines: [[620, -260], [-240, 780]],   // metal deposits placed near the ship on each Earth
   signalCount: 6, signalStudySeconds: 4, archiveReward: { metal: 70 }, signalRange: 100,
   firstWave: 110, waveInterval: 100, waveBase: 2, waveMax: 5,
   hazardSafeRadius: 700, crewRadius: 620,
   startingCrew: ['survey_drone', 'security_drone', 'utility_spider']
+};
+
+// Swarm AI (src/sim/swarm.js).
+GW.SWARM_RULES = {
+  rebuildSeconds: 0.75,   // how often the flow field toward Vance may be rebuilt as he moves
+  buildTiles: 6000,       // flow-field tiles settled per tick (the build spans ticks; ~1-2 ms)
+  refreshSeconds: 1.5,    // periodic rebuild while a swarm exists, to update crowd costs
+  crowdCost: 0.35,        // extra field cost per unit already standing on a tile (spreads swarms over gaps)
+  firstBuildTiles: 24000, // larger step while no field exists yet, so a new swarm starts moving promptly
+  margin: 24,             // tiles of slack around the swarm and Vance covered by the field (detours)
+  lookahead: 6,           // tiles walked down the field when a unit picks its next straight leg
+  steerSeconds: 0.4,      // how often a marching unit re-picks its leg
+  spread: 14,             // per-unit offset (px) so a swarm fans out instead of queueing single file
+  crowdHold: 3            // overlapping neighbours at which a unit stops pushing forward and waits
 };
 
 GW.KEY_BINDINGS = [

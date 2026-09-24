@@ -25,14 +25,18 @@ const skip = pw ? false : 'Playwright is not installed';
 async function launch(){
   return pw.chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || undefined });
 }
+// Messages from Chromium's software GPU emulator (only used when forced in tests) are
+// driver notices, not game errors.
+const EMULATOR_NOISE = /GL Driver Message|swiftshader|GroupMarkerNotSet/i;
 function track(page){
   const errors = [];
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
-  page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.type() + ': ' + m.text()); });
+  page.on('console', m => { if ((m.type() === 'error' || m.type() === 'warning') && !EMULATOR_NOISE.test(m.text())) errors.push(m.type() + ': ' + m.text()); });
   return errors;
 }
 const screen = (page, x, y) => page.evaluate(([x, y]) => GW.screenFromWorld(x, y), [x, y]);
 async function startGame(page, url){
+  if (process.env.RENDERER && !url.includes('?')) url += '?renderer=' + process.env.RENDERER;
   await page.goto(url);
   await page.waitForFunction(() => GW.SceneManager.currentName === 'mainMenu');
   await page.click('[data-home="new"]');
@@ -89,14 +93,45 @@ for (const target of ['index.html', 'dist/ad-ezp.html']){
       await page.mouse.click(p.x, p.y);
       assert.equal(await page.evaluate(() => GW.State.constructionSites.length), 1);
 
+      // The Spider panel shows storage out of 25.
+      assert.match(await page.textContent('#selectionPanel'), /Storage\s*0 \/ 25/);
+      // Place a Mine Building from the build menu: clicking beside a deposit snaps it on.
+      const dep = await page.evaluate(() => { const n = GW.State.resourceNodes.filter(n => n.type === 'metal_mine' && !GW.Gather.mineOn(n))
+        .sort((a, b) => GW.dist2(a, GW.Units.ship()) - GW.dist2(b, GW.Units.ship()))[0]; GW.centerCamera(n.x, n.y); GW.State.resources.metal = 1000; return { x: n.x, y: n.y, gx: n.gx, gy: n.gy }; });
+      await page.evaluate(() => { const u = GW.State.units.find(u => u.type === 'utility_spider'); GW.Orders.setCommand([u], 'idle'); GW.Selection.set([u.id]); });
+      await page.click('#truckBuildBtn');
+      await page.click('[data-build-pick="mine_building"]');
+      p = await screen(page, dep.x + 30, dep.y + 20);
+      await page.mouse.click(p.x, p.y);
+      const site = await page.evaluate(() => GW.State.constructionSites.find(s => s.type === 'mine_building'));
+      assert.ok(site, 'mine site queued');
+      assert.deepEqual([site.gx, site.gy, site.w, site.h], [dep.gx - 1, dep.gy - 1, 3, 3], '3×3 centred on the 1×1 deposit');
+      await page.screenshot({ path: path.join(OUT, `${tag}-mine-site.png`) });
+
+      // Follow: select the Security Drone, press Follow, tap the Survey Drone.
+      const units = await page.evaluate(() => { const g = GW.State.units.find(u => u.type === 'security_drone'), s = GW.State.units.find(u => u.type === 'survey_drone');
+        GW.centerCamera((g.x + s.x) / 2, (g.y + s.y) / 2); GW.Selection.set([g.id]); return { sx: s.x, sy: s.y, sid: s.id, gid: g.id }; });
+      await page.waitForSelector('#selectionPanel [data-unit-command="follow"]');
+      assert.equal(await page.$('#selectionPanel [data-unit-command="follow"]:has-text("Follow Vance")'), null, 'no Follow Vance button');
+      await page.click('#selectionPanel [data-unit-command="follow"]');
+      p = await screen(page, units.sx, units.sy);
+      await page.mouse.click(p.x, p.y);
+      const f = await page.evaluate(id => { const u = GW.Units.get(id); return { command: u.command, followId: u.followId, sel: [...GW.State.selected] }; }, units.gid);
+      assert.equal(f.command, 'follow'); assert.equal(f.followId, units.sid);
+      assert.deepEqual(f.sel, [units.gid], 'choosing the target does not change the selection');
+      assert.match(await page.textContent('#selectionPanel'), /Following Survey Drone/);
+      await page.screenshot({ path: path.join(OUT, `${tag}-follow.png`) });
+
       // Box-select everyone with a drag.
+      await page.evaluate(() => { const h = GW.Units.hero(); GW.centerCamera(h.x, h.y); });
       await page.mouse.move(20, 200); await page.mouse.down(); await page.mouse.move(1340, 880, { steps: 5 }); await page.mouse.up();
       assert.ok(await page.evaluate(() => GW.State.selected.size >= 4));
 
       // Expedition log renders and its actions work.
       await page.click('#ezToggle');
       await page.waitForSelector('#ezPanel:not(.hidden) .ezChecklist');
-      await page.click('#ezPanel [data-ez="survey"]');
+      assert.equal(await page.$('#ezPanel [data-ez="explore"], #ezPanel [data-ez="mine"], #ezPanel [data-ez="survey"]'), null, 'removed buttons stay gone');
+      await page.click('#ezPanel [data-ez="recall"]');
       await page.screenshot({ path: path.join(OUT, `${tag}-expedition-log.png`) });
       await page.click('#ezToggle');
 
@@ -197,30 +232,65 @@ test('touch controls on a phone-sized screen', { skip, timeout: 60000 }, async (
   } finally { await browser.close(); }
 });
 
-test('renders 2,000 units at an interactive frame rate', { skip, timeout: 60000 }, async () => {
+test('5,000 enemies swarm Vance at an interactive frame rate', { skip, timeout: 90000 }, async () => {
   const browser = await launch();
   try {
     const page = await browser.newPage({ viewport: { width: 1365, height: 900 } });
     const errors = track(page);
     await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
-    const fps = await page.evaluate(async () => {
-      const S = GW.State, sh = GW.Units.ship();
-      GW.CONFIG.POPULATION_CAP = 1e9;
-      for (let i = 0; i < 1000; i++){
-        const a = GW.openPoint(sh.x - 1500 + (i % 50) * 60, sh.y + 500 + Math.floor(i / 50) * 60);
-        const b = GW.openPoint(sh.x - 1500 + (i % 50) * 60, sh.y + 1800 + Math.floor(i / 50) * 60);
-        GW.Units.spawn('security_drone', a.x, a.y); GW.Units.spawn('hostile_machine', b.x, b.y);
+    const r = await page.evaluate(async () => {
+      const S = GW.State, h = GW.Units.hero(), N = 5000;
+      for (const u of S.units) if (u.team === 'blue') u.maxHp = u.hp = 1e9;   // measure the swarm, not a defeat
+      for (let i = 0; i < N; i++){
+        const a = (i / N) * Math.PI * 2, rad = 1500 + (i % 25) * 40;
+        const q = GW.openPoint(h.x + Math.cos(a) * rad, h.y + Math.sin(a) * rad, 0, 30);
+        GW.Units.spawn('hostile_machine', q.x, q.y);
       }
       GW.rebuildSpatial();
-      GW.centerCamera(sh.x, sh.y + 1500, 0.35);
-      await new Promise(r => setTimeout(r, 1000));
-      let frames = 0; const t0 = performance.now();
-      await new Promise(r => { const f = () => { frames++; if (performance.now() - t0 < 3000) requestAnimationFrame(f); else r(); }; requestAnimationFrame(f); });
-      return { fps: frames / ((performance.now() - t0) / 1000), units: S.units.length, update: S.metrics.updateMs, draw: S.metrics.drawMs };
+      GW.centerCamera(h.x, h.y, 0.3);
+      const t0 = performance.now();
+      await new Promise(res => { const k = () => GW.Swarm.field && GW.Swarm.field.ready ? res() : setTimeout(k, 20); k(); });
+      const fieldMs = performance.now() - t0;
+      const d0 = S.units.filter(u => u.team === 'red').reduce((a, u) => a + Math.hypot(u.x - h.x, u.y - h.y), 0) / N;
+      let frames = 0, worst = 0, last = performance.now(); const start = last;
+      await new Promise(res => { const f = () => { const n = performance.now(); worst = Math.max(worst, n - last); last = n; frames++; if (n - start < 6000) requestAnimationFrame(f); else res(); }; requestAnimationFrame(f); });
+      const red = S.units.filter(u => u.team === 'red');
+      const d1 = red.reduce((a, u) => a + Math.hypot(u.x - h.x, u.y - h.y), 0) / red.length;
+      return { fps: frames / 6, worst, fieldMs, d0, d1, update: S.metrics.updateMs, draw: S.metrics.drawMs, queue: S.paths.length, units: S.units.length };
     });
-    console.log(`    stress: ${fps.fps.toFixed(1)} fps, ${fps.units} units alive, update ${fps.update.toFixed(1)} ms, draw ${fps.draw.toFixed(1)} ms`);
-    await page.screenshot({ path: path.join(OUT, 'stress.png') });
-    assert.ok(fps.fps > 10, 'frame rate ' + fps.fps.toFixed(1));
+    console.log(`    swarm: ${r.fps.toFixed(1)} fps (worst frame ${r.worst.toFixed(0)} ms), update ${r.update.toFixed(1)} ms, draw ${r.draw.toFixed(1)} ms, field built in ${r.fieldMs.toFixed(0)} ms, closed ${r.d0.toFixed(0)} → ${r.d1.toFixed(0)} px, path queue ${r.queue}`);
+    await page.screenshot({ path: path.join(OUT, 'swarm.png') });
+    // A frame-rate floor is only meaningful on the renderer the game picks by itself; a
+    // forced WebGL run in CI uses a CPU-emulated GPU that fills every pixel in software.
+    if (process.env.RENDERER !== 'gpu') assert.ok(r.fps > 20, 'frame rate ' + r.fps.toFixed(1));
+    assert.ok(r.d1 < r.d0 - 250, 'the swarm advanced on Vance');
+    assert.ok(r.queue < 200, 'no route-search backlog');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('GPU renderer draws every visible unit in one instanced pass', { skip, timeout: 60000 }, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    // Headless Chromium only has a software GPU, which the game normally refuses; force it.
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href + '?renderer=gpu');
+    const r = await page.evaluate(() => {
+      const G = GW, S = G.State, h = G.Units.hero();
+      S.paused = true;
+      for (let i = 0; i < 400; i++){ const u = G.Units.spawn('hostile_machine', h.x - 300 + (i % 20) * 30, h.y - 400 + Math.floor(i / 20) * 30); u.heading = i; u.hp = 40; }
+      G.rebuildSpatial(); G.centerCamera(h.x, h.y - 200, 0.6);
+      G.Renderer.draw();
+      const gl = G.GPU.gl, w = gl.drawingBufferWidth, hgt = gl.drawingBufferHeight, px = new Uint8Array(w * hgt * 4);
+      gl.readPixels(0, 0, w, hgt, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      let opaque = 0; for (let i = 3; i < px.length; i += 4) if (px[i] > 200) opaque++;
+      return { ok: G.GPU.ok, sprites: S.metrics.gpuSprites, visible: S.metrics.visible, opaque, area: w * hgt };
+    });
+    assert.ok(r.ok, 'WebGL2 renderer active');
+    assert.equal(r.sprites, r.visible - 1, 'every visible unit except the ship (drawn on the map layer) is a GPU sprite');
+    assert.ok(r.opaque > r.sprites * 40, `units are visible on the GPU layer (${r.opaque} opaque px)`);
+    await page.screenshot({ path: path.join(OUT, 'gpu.png') });
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

@@ -28,11 +28,12 @@ GW.Defs.units.defineAll({
     capabilities: ['fight'], visual: 'rifle'
   },
   utility_spider: {
-    name: 'Utility Spider', hp: 520, speed: 132, radius: 17, sight: 720, cargoCapacity: 600, storageSlots: 10,
+    name: 'Utility Spider', hp: 520, speed: 132, radius: 17, sight: 720, cargoCapacity: 600, storageSlots: 25,
     capabilities: ['build', 'gather', 'carry', 'storage'], visual: 'utility'
   },
   hostile_machine: {
-    name: 'Hostile Autonomous Machine', team: 'red', hp: 65, speed: 118, radius: 10, range: 140, damage: 6, reload: 0.72, sight: 650,
-    capabilities: ['fight'], visual: 'rifle', ai: 'hunter', selectable: false
+    name: 'Hostile Autonomous Machine', team: 'red', hp: 65, speed: 118, radius: 10, range: 140, damage: 6, reload: 0.72, sight: 480,
+    capabilities: ['fight'], visual: 'rifle', selectable: false,
+    ai: 'swarm', aggroTiles: 10, attackStructures: true   // marches on Vance; engages anything within 10 tiles
   }
 });

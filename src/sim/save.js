@@ -137,6 +137,8 @@
       if (u.fabQueue && !queue(u.fabQueue)) fail('unit fabrication queue');
       if (u.isShip && (![u.gx, u.gy, u.w, u.h].every(int))) fail('ship footprint');
       if (u.team === 'red' && (u.isHero || u.isShip)) fail('hostile flags');
+      for (const k of ['followId']) if (u[k] != null && !int(u[k])) fail('unit ' + k);
+      for (const k of ['mineId', 'nodeId', 'spawnerId']) if (u[k] != null && typeof u[k] !== 'string') fail('unit ' + k);
     }
     if (d.units.filter(u => u.isHero).length !== 1 || !d.units.some(u => u.isHero && u.id === d.heroId)) fail('commander');
     if (d.units.filter(u => u.isShip).length !== 1 || !d.units.some(u => u.isShip && u.id === d.shipId)) fail('ship');
@@ -149,7 +151,9 @@
     if (!d.containers.every(c => point(c) && typeof c.id === 'string' && list(c.items, 1000) && c.items.every(item) && num(c.capacity))) fail('container');
     if (!d.buildings.every(b => point(b) && D.buildables.has(b.type) && num(b.hp) && num(b.maxHp) && [b.gx, b.gy, b.w, b.h].every(int) && (!b.fabQueue || queue(b.fabQueue)) && (!b.spawner || spawner(b.spawner)))) fail('building');
     if (!d.constructionSites.every(s => point(s) && D.buildables.has(s.type) && num(s.remaining) && num(s.buildTime) && [s.gx, s.gy, s.w, s.h].every(int))) fail('construction site');
-    if (!d.resourceNodes.every(n => point(n) && D.nodes.has(n.type) && num(n.remaining) && n.remaining >= 0)) fail('resource node');
+    if (!d.resourceNodes.every(n => point(n) && D.nodes.has(n.type) && num(n.remaining) && n.remaining >= 0 &&
+      (D.nodes.get(n.type).kind !== 'deposit' || (int(n.gx) && int(n.gy))))) fail('resource node');
+    if (!d.buildings.every(b => (!b.stock || cost(b.stock)) && (b.nodeId == null || typeof b.nodeId === 'string'))) fail('building stockpile');
     if (!d.terrainEdits.every(e => [e.x, e.y, e.w, e.h, e.t].every(int) && e.w >= 0 && e.h >= 0 && e.w * e.h <= 1 << 20)) fail('terrain edit');
     const e = d.expedition;
     if (!e) fail('expedition');
@@ -194,7 +198,12 @@
         expedition: G.copy(d.expedition)
       });
       Object.assign(S.camera, d.camera);
-      for (const u of G.copy(d.units)) G.Units.adopt(u);
+      for (const u of G.copy(d.units)){
+        // Capacity upgrades in the unit definitions apply to existing units.
+        const def = G.Defs.units.get(u.type);
+        if (u.storage && def.storageSlots > u.storage.capacity) u.storage.capacity = def.storageSlots;
+        G.Units.adopt(u);
+      }
       for (const b of G.copy(d.buildings)) G.Buildings.adopt(b);
       S.selected = new Set([d.heroId]); S.selectionAnchorId = d.heroId;
       G.rebuildSpatial();

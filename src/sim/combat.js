@@ -6,6 +6,11 @@
   const G = GW;
 
   function acquire(u, S){
+    // Swarm units already pick a target every few ticks (src/sim/swarm.js); reuse it.
+    if (u.aiMode && !u.aiHold){
+      const t = typeof u.aiTargetId === 'number' ? G.Units.alive(u.aiTargetId) : null;
+      return t && t.team !== u.team ? { t, d: Math.sqrt(G.dist2(u, t)) } : null;
+    }
     if (u.targetId != null && S.time < u.targetNextScan){
       const t = G.Units.alive(u.targetId);
       if (t && t.team !== u.team){
@@ -48,9 +53,14 @@
       for (const u of S.units){
         if (u.hp <= 0 || u.isShip || u.damage <= 0 || u.range <= 0) continue;
         u.cool -= dt;
-        if (teams < 2){ u.targetId = null; continue; }
+        if (teams < 2 && typeof u.aiTargetId !== 'string'){ u.targetId = null; continue; }
         const q = acquire(u, S);
-        if (q && q.d <= u.range && u.cool <= 0) fire(u, q.t, S);
+        if (q && q.d <= u.range){ if (u.cool <= 0) fire(u, q.t, S); }
+        else if (u.cool <= 0 && typeof u.aiTargetId === 'string'){
+          // No unit in range: shoot the structure the AI is engaging, once within range.
+          const b = S.buildings.find(x => x.id === u.aiTargetId && x.hp > 0);
+          if (b && G.Buildings.nearestTarget(u, u.range) === b) fire(u, b, S);
+        }
       }
     }
   });

@@ -135,19 +135,24 @@
 
     // ---- Selection panel ----
     selectionSignature(us){
-      return us.map(u => `${u.id}:${u.command}:${Math.floor(G.Units.cargoTotal(u) / 10)}:${Math.ceil(u.hp / u.maxHp * 20)}:${u.squad}:${u.storage ? u.storage.items.length : ''}`).join('|') + '#' + G.State.formation;
+      return us.map(u => `${u.id}:${u.command}:${u.followId}:${u.haulState}:${u.path.length ? 1 : 0}:${Math.floor(G.Units.cargoTotal(u) / 10)}:${Math.ceil(u.hp / u.maxHp * 20)}:${u.squad}:${u.storage ? u.storage.items.length : ''}`).join('|') + '#' + G.State.formation;
     },
-    refreshSelection(force = false){
+    // `picked` is true when the player changed what is selected (other windows react to
+    // that); otherwise this only redraws the panel when the selected units' state changes.
+    refreshSelection(force = false, picked = false){
       const p = $('selectionPanel'), S = G.State, us = G.Selection.units(), ship = G.Units.ship(), shipSel = ship && S.selected.has(ship.id);
-      const sig = (shipSel ? 'ship|' : '') + this.selectionSignature(us);
+      const ids = (shipSel ? 'ship|' : '') + us.map(u => u.id).join(',');
+      const sig = ids + '#' + this.selectionSignature(us);
+      if (picked || ids !== this.selectionIds){ this.selectionIds = ids; G.Events.emit('ui:selection', { units: us, ship: shipSel }); }
       if (!force && sig === this.selectionSig) return;
       this.selectionSig = sig;
-      G.Events.emit('ui:selection', { units: us, ship: shipSel });
       if (shipSel && !us.length){ p.innerHTML = `<b>${esc(ship.name)}</b><br>Ship fabricator selected`; return; }
       if (!us.length){ p.innerHTML = "<b>No units selected</b><br><span class='muted'>Select friendly units to issue orders.</span>"; return; }
+      const followRow = `<button data-unit-command="follow" title="Then tap the unit to follow">Follow</button><button data-unit-command="idle" title="Cancel standing orders">Stop</button>`;
       if (us.length === 1 && us[0].isHero){
         const h = us[0];
-        p.innerHTML = `<b>${esc(h.name)}</b><br>Frame integrity: ${Math.ceil(h.hp)} / ${h.maxHp}<br><span class="muted">Select, then tap / right-click terrain.</span>`;
+        p.innerHTML = `<b>${esc(h.name)}</b><br>Frame integrity: ${Math.ceil(h.hp)} / ${h.maxHp}<br>${this.orderLine(h)}<div class="unit-command-row">${followRow}</div>`;
+        this.bindCommands(p, us);
         return;
       }
       const hp = Math.round(us.reduce((a, u) => a + u.hp / u.maxHp, 0) / us.length * 100);
@@ -155,18 +160,14 @@
       const parts = Object.entries(counts).map(([k, v]) => v + ' ' + esc(G.Defs.units.get(k)?.name || k)).join(' · ');
       const crew = us.filter(u => !u.isHero);
       const head = us.length === 1 ? `<b>${esc(us[0].name)}</b>` : `<b>${us.length} selected</b>`;
-      const cmds = crew.length ? `<div class="unit-command-row"><button data-unit-command="follow">Follow Vance</button><button data-unit-command="idle">Unfollow</button><button data-unit-command="guard">Guard Location</button><button data-unit-command="patrol">Patrol</button></div>` : '';
+      const cmds = `<div class="unit-command-row">${followRow}${crew.length ? '<button data-unit-command="guard">Guard Location</button><button data-unit-command="patrol">Patrol</button>' : ''}</div>`;
       const forms = us.length > 1 ? `<div class="formation-row"><span>Formation:</span>${G.FORMATIONS.map(f => `<button class="${S.formation === f ? 'active' : ''}" data-formation="${f}">${f === 'v' ? 'V' : f[0].toUpperCase() + f.slice(1)}</button>`).join('')}</div>` : '';
       const squads = crew.length ? `<div class="squad-assign-row"><span>Add to squad:</span>${[1, 2, 3, 4].map(n => `<button data-assign-squad="${n}">${n}</button>`).join('')}<button data-assign-squad="0">None</button></div>` : '';
       const builder = us.find(u => G.Units.can(u, 'build'));
-      const buildRow = builder ? `<div class="builder-row"><button id="truckBuildBtn">Build</button>${builder.storage ? '<button id="truckStorageBtn">Storage</button>' : ''}<span class="muted">Cargo ${Math.floor(G.Units.cargoTotal(builder))}/${builder.cargoCapacity || 0} metal${builder.storage ? ` · Storage ${builder.storage.items.length}/${builder.storage.capacity}` : ''}</span></div>` : '';
-      p.innerHTML = `${head}<br>Average health: ${hp}%<br>${parts}${cmds}${forms}${squads}${buildRow}`;
-      p.querySelectorAll('[data-unit-command]').forEach(b => b.addEventListener('click', () => {
-        const cmd = b.dataset.unitCommand;
-        if (cmd === 'follow'){ G.Orders.setCommand(us, 'follow'); this.toast('Crew following Vance'); }
-        else if (cmd === 'idle'){ G.Orders.setCommand(us, 'idle'); this.toast('Crew stopped following'); }
-        else { G.Input.commandMode = cmd; this.toast(cmd === 'guard' ? 'Tap a location to guard' : 'Tap a patrol destination'); }
-      }));
+      const buildRow = builder ? `<div class="builder-row"><button id="truckBuildBtn">Build</button>${builder.storage ? '<button id="truckStorageBtn">Storage</button>' : ''}<span class="muted">Storage <b>${builder.storage ? builder.storage.items.length : 0} / ${builder.storage ? builder.storage.capacity : 0}</b> · Cargo ${Math.floor(G.Units.cargoTotal(builder))} / ${builder.cargoCapacity || 0} metal</span></div>` : '';
+      const task = us.length === 1 ? '<br>' + this.orderLine(us[0]) : '';
+      p.innerHTML = `${head}<br>Average health: ${hp}%<br>${parts}${task}${cmds}${forms}${squads}${buildRow}`;
+      this.bindCommands(p, us);
       p.querySelectorAll('[data-formation]').forEach(b => b.addEventListener('click', () => {
         S.formation = b.dataset.formation;
         const anchor = G.Units.get(S.selectionAnchorId) || us[0];
@@ -178,6 +179,27 @@
       const sb = $('truckStorageBtn'); if (sb) sb.addEventListener('click', () => G.InventoryUI.openUnitStorage(builder));
     },
 
+    // What a single unit is doing, in words.
+    orderLine(u){
+      const t = u.followId != null && G.Units.alive(u.followId);
+      let s = 'Idle';
+      if (u.command === 'follow' && t) s = 'Following ' + esc(t.name);
+      else if (u.command === 'guard') s = 'Guarding a position';
+      else if (u.command === 'patrol') s = 'Patrolling';
+      else if (u.command === 'build') s = 'Constructing';
+      else if (u.command === 'gather'){
+        const where = u.mineId ? 'Mine Building' : (G.Gather.node(u.nodeId)?.name || 'salvage');
+        s = ({ toNode: 'Heading to ', collecting: 'Collecting at ', toMine: 'Heading to ', loading: 'Loading at ', waiting: 'Waiting for ore at ', return: 'Hauling to ship from ' }[u.haulState] || 'Working ') + esc(where);
+      } else if (u.path.length) s = 'Moving';
+      return `<span class="muted">${s}</span>`;
+    },
+    bindCommands(p, us){
+      p.querySelectorAll('[data-unit-command]').forEach(b => b.addEventListener('click', () => {
+        const cmd = b.dataset.unitCommand;
+        if (cmd === 'idle'){ G.Input.commandMode = null; G.Orders.setCommand(us, 'idle'); this.toast('Orders cleared'); }
+        else { G.Input.commandMode = cmd; this.toast(cmd === 'follow' ? 'Tap the unit to follow' : cmd === 'guard' ? 'Tap a location to guard' : 'Tap a patrol destination'); }
+      }));
+    },
     renderEconomy(){
       const res = G.Defs.resources.all().filter(r => !r.hidden);
       const sig = res.map(r => Math.floor(G.Economy.get(r.key))).join(',');
@@ -202,7 +224,7 @@
       if (this.dev){
         const m = S.metrics, avg = m.pathCalls ? m.pathMs / m.pathCalls : 0, sys = G.SystemManager.timings;
         const top = Object.entries(sys).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} ${v.toFixed(2)}`).join('<br>');
-        $('devPanel').innerHTML = `<b>DEVELOPER MODE</b><br>FPS ${m.fps.toFixed(0)}<br>Update ${m.updateMs.toFixed(2)} ms<br>Draw ${m.drawMs.toFixed(2)} ms<br>
+        $('devPanel').innerHTML = `<b>DEVELOPER MODE</b><br>Renderer ${G.GPU.ok ? 'WebGL2 (GPU)' : 'Canvas 2D · ' + G.esc(G.GPU.reason)}<br>FPS ${m.fps.toFixed(0)}<br>Update ${m.updateMs.toFixed(2)} ms<br>Draw ${m.drawMs.toFixed(2)} ms<br>
           Entities ${m.entities} · Visible ${m.visible}<br>LOD ${m.lod} · Chunks ${m.chunks} · Cached ${m.cached}/${G.CONFIG.CHUNK_CACHE_MAX}<br>
           Path calls ${m.pathCalls} · Avg ${avg.toFixed(2)} ms<br>Path queue ${m.pathQueue} · Flow fields ${m.flowFields}<br>Zoom ${S.camera.z.toFixed(2)}<br><br><b>Systems (ms)</b><br>${top}`;
       }
@@ -217,13 +239,13 @@
       G.Input && G.Input.cancelFormationGesture();
       S.selected = new Set(ids);
       S.selectionAnchorId = ids.length ? ids[0] : null;
-      G.UI.refreshSelection(true);
+      G.UI.refreshSelection(true, true);
     },
     toggle(id){
       const S = G.State;
       if (S.selected.has(id)){ S.selected.delete(id); if (S.selectionAnchorId === id) S.selectionAnchorId = [...S.selected][0] ?? null; }
       else { S.selected.add(id); if (S.selectionAnchorId == null) S.selectionAnchorId = id; }
-      G.UI.refreshSelection(true);
+      G.UI.refreshSelection(true, true);
     },
     clear(){ this.set([]); }
   };

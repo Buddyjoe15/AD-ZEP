@@ -22,7 +22,7 @@
     choose(key){
       if (!this.active() || !G.Defs.buildables.has(key)) return false;
       this.mode.key = key;
-      G.UI.toast('Tap a grid cell or hold and drag to refine placement');
+      G.UI.toast(G.Defs.buildables.get(key).placeOnNode === 'deposit' ? 'Tap a mine deposit: the building centres on it' : 'Tap a grid cell or hold and drag to refine placement');
       this.render();
       return true;
     },
@@ -36,9 +36,8 @@
     },
     previewAt(wx, wy){
       if (!this.placing()) return null;
-      const T = G.CONFIG.TILE, d = G.Defs.buildables.get(this.mode.key);
-      const gx = Math.floor(wx / T), gy = Math.floor(wy / T);
-      G.State.buildPreview = { key: this.mode.key, gx, gy, ok: G.Buildings.canPlace(gx, gy, d.w, d.h) };
+      const { gx, gy } = G.Buildings.placementAt(this.mode.key, wx, wy);
+      G.State.buildPreview = { key: this.mode.key, gx, gy, ok: G.Buildings.canPlaceKey(this.mode.key, gx, gy) };
       return G.State.buildPreview;
     },
     confirm(){

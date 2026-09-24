@@ -29,6 +29,9 @@
       this.cv = document.getElementById('game');
       this.g = this.cv.getContext('2d', { alpha: false });
       this.mini = document.getElementById('minimap');
+      this.ov = document.getElementById('overlay');
+      this.o = this.ov.getContext('2d');
+      if (!G.GPU.init(document.getElementById('gpu'))){ this.ov.style.display = 'none'; document.getElementById('gpu').style.display = 'none'; }
       this.resize();
       addEventListener('resize', () => this.resize());
     },
@@ -39,6 +42,8 @@
       this.w = innerWidth; this.h = innerHeight;
       this.cv.width = Math.floor(this.w * this.dpr); this.cv.height = Math.floor(this.h * this.dpr);
       this.cv.style.width = this.w + 'px'; this.cv.style.height = this.h + 'px';
+      if (this.ov){ this.ov.width = this.cv.width; this.ov.height = this.cv.height; this.ov.style.width = this.w + 'px'; this.ov.style.height = this.h + 'px'; }
+      G.GPU.resize(this.w, this.h, this.dpr);
       if (G.State.grid) G.centerCamera(cx, cy);
     },
     view(pad = 0){
@@ -71,6 +76,18 @@
       // Resource nodes.
       for (const n of S.resourceNodes){
         if (n.remaining <= 0 || !inView(n.x, n.y, 30)) continue;
+        if (G.Gather.isDeposit(n)){
+          // 1×1 mine deposit (hidden under its Mine Building once built).
+          if (G.Gather.mineOn(n)) continue;
+          const px = n.gx * T, py = n.gy * T;
+          g.fillStyle = '#3f3a33'; g.fillRect(px + 1, py + 1, T - 2, T - 2);
+          g.fillStyle = '#6f6453'; g.beginPath(); g.moveTo(px + 6, py + T - 8); g.lineTo(px + 16, py + 10); g.lineTo(px + 28, py + 20); g.lineTo(px + 40, py + 8); g.lineTo(px + T - 5, py + T - 6); g.closePath(); g.fill();
+          g.fillStyle = '#c9d4dc';
+          for (const [ox, oy, r] of [[15, 27, 4], [27, 33, 3.2], [33, 21, 3.6], [21, 16, 2.6]]){ g.beginPath(); g.arc(px + ox, py + oy, r, 0, TAU); g.fill(); }
+          g.strokeStyle = '#d0a65b'; g.lineWidth = 2 / z; g.setLineDash([5 / z, 4 / z]); g.strokeRect(px + 1, py + 1, T - 2, T - 2); g.setLineDash([]);
+          if (!far){ g.fillStyle = '#e8d9b4'; g.font = (10 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(n.name, n.x, py - 5); }
+          continue;
+        }
         g.save(); g.translate(n.x, n.y);
         g.fillStyle = '#6c6255'; g.strokeStyle = '#b4a27e'; g.lineWidth = 2 / z; g.beginPath(); g.arc(0, 0, 22, 0, TAU); g.fill(); g.stroke();
         g.fillStyle = '#9ca5a0'; g.fillRect(-13, -5, 26, 10); g.fillStyle = '#d0a65b'; g.fillRect(-4, -14, 8, 28);
@@ -113,45 +130,120 @@
         g.fillStyle = g.strokeStyle; g.font = `${11 / z}px sans-serif`; g.textAlign = 'center'; g.fillText(p.kind, p.x, p.y - 30);
       }
 
-      // Units.
+      // Units. With WebGL2 they are drawn by the GPU on their own canvas (one instanced call);
+      // the ship stays on this canvas and everything that must sit above units (selection,
+      // routes, beams, gunfire, previews) goes on a 2D overlay canvas. Without WebGL2 the
+      // same content is drawn here with Canvas 2D.
       const visible = [];
       for (const u of S.units) if (inView(u.x, u.y, u.isShip ? 340 : 80)) visible.push(u);
+      const gpu = G.GPU.ok, sprites = [], bars = [];
       for (const u of visible){
-        const sel = S.selected.has(u.id);
-        if (sel && !u.isShip && u.range > 0){
-          g.fillStyle = 'rgba(115,190,255,.025)'; g.strokeStyle = 'rgba(145,210,255,.12)'; g.lineWidth = 1 / z;
-          g.beginPath(); g.arc(u.x, u.y, u.range, 0, TAU); g.fill(); g.stroke();
-        }
-        if (sel){ g.strokeStyle = '#fff6a5'; g.lineWidth = 2 / z; g.beginPath(); g.arc(u.x, u.y, u.radius + 8, 0, TAU); g.stroke(); }
+        if (u.isShip) G.Visuals.drawUnit(g, u, z, t);
+        else if (gpu){ sprites.push(u); if (u.hp < u.maxHp || S.selected.has(u.id)) bars.push(u); }
       }
-      for (const u of visible) G.Visuals.drawUnit(g, u, z, t);
+      if (!gpu) this.drawUnits2D(g, visible, z, t);
+      let o = g;
+      if (gpu){
+        g.restore();
+        G.GPU.clear();
+        G.GPU.draw(sprites, bars, t);
+        o = this.o;
+        o.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+        o.clearRect(0, 0, this.w, this.h);
+        o.save(); o.scale(z, z); o.translate(-c.x, -c.y);
+      }
+      this.drawOverlay(o, visible, z, t, inView, !gpu);
+      o.restore();
+
+      const box = G.Input && G.Input.box;
+      if (box){
+        const x = Math.min(box.x0, box.x1), y = Math.min(box.y0, box.y1), w = Math.abs(box.x1 - box.x0), h = Math.abs(box.y1 - box.y0);
+        o.fillStyle = 'rgba(80,170,255,.12)'; o.fillRect(x, y, w, h); o.strokeStyle = '#7dc0ff'; o.lineWidth = 1; o.strokeRect(x + 0.5, y + 0.5, w, h);
+      }
+      Object.assign(S.metrics, { lod: far ? 'overview' : 'detail', cached: TC.chunks.size, visible: visible.length, chunks, drawMs: now() - t0 });
+      if (now() - this.minimapAt > 1000 / C.MINIMAP_HZ){ this.minimapAt = now(); this.drawMinimap(); }
+      else this.drawMinimapCamera();
+    },
+    // Canvas 2D unit drawing (fallback when hardware WebGL2 is unavailable). Units are
+    // stamped from the sprite atlas with one transform + drawImage each; zoomed out,
+    // ordinary units become team-coloured markers batched into one path per team.
+    drawUnits2D(g, visible, z, t){
+      const S = G.State, C = G.CONFIG, lod = z < C.UNIT_LOD_ZOOM, batches = new Map();
+      const A = G.SpriteAtlas, c = S.camera, k = this.dpr * z;
+      let img = null, lv = 0;   // atlas level nearest to 1:1 for this zoom (chosen on first use)
       for (const u of visible){
-        const sel = S.selected.has(u.id);
-        if (u.isShip){
-          const bw = u.w * T * 0.72;
-          G.Visuals.bar(g, u.x, u.gy * T - 15, bw, u.hp / u.maxHp, '#6fd27a');
+        if (u.isShip) continue;
+        if (lod && !u.isHero && !S.selected.has(u.id)){
+          const col = C.COLORS[u.team] || '#ccc';
+          let list = batches.get(col);
+          if (!list) batches.set(col, list = []);
+          list.push(u);
           continue;
         }
-        if (u.hp < u.maxHp || sel){
-          const off = G.Defs.units.get(u.type)?.barOffset || 34;
-          G.Visuals.bar(g, u.x, u.y - off, 32, u.hp / u.maxHp, u.hp / u.maxHp > 0.45 ? '#5fd16b' : '#e85e55');
+        const def = G.Defs.units.get(u.type);
+        if (!def) continue;
+        const e = A.entryFor(def, u.team), f = A.frame(e, u, t), ang = e.upright ? 0 : u.heading;
+        if (!img){ lv = k >= 1 ? 0 : k >= 0.5 ? 1 : 2; img = A.level(lv); }
+        const s = 1 / (1 << lv), co = Math.cos(ang) * k, si = Math.sin(ang) * k;
+        g.setTransform(co, si, -si, co, (u.x - c.x) * k, (u.y - c.y) * k);
+        g.drawImage(img, (A.cellX(f) + e.px.x) * s, (A.cellY(f) + e.px.y) * s, e.rect.w * A.RES * s, e.rect.h * A.RES * s, e.rect.x, e.rect.y, e.rect.w, e.rect.h);
+      }
+      g.setTransform(k, 0, 0, k, -c.x * k, -c.y * k);   // back to world space
+      for (const [col, list] of batches){
+        g.fillStyle = col; g.beginPath();
+        for (const u of list){ const r = Math.max(u.radius, 2.5 / z); g.rect(u.x - r, u.y - r, r * 2, r * 2); }
+        g.fill();
+      }
+      if (lod) return;
+      for (const u of visible){
+        if (u.isShip || !(u.hp < u.maxHp || S.selected.has(u.id))) continue;
+        const off = G.Defs.units.get(u.type)?.barOffset || 34;
+        G.Visuals.bar(g, u.x, u.y - off, 32, u.hp / u.maxHp, u.hp / u.maxHp > 0.45 ? '#5fd16b' : '#e85e55');
+      }
+    },
+    // Everything drawn above units, in world coordinates.
+    drawOverlay(g, visible, z, t, inView, lod2d){
+      const S = G.State, C = G.CONFIG, T = C.TILE;
+      const sel = visible.filter(u => S.selected.has(u.id) && !u.isShip);
+      if (sel.length){
+        g.fillStyle = 'rgba(115,190,255,.025)'; g.strokeStyle = 'rgba(145,210,255,.12)'; g.lineWidth = 1 / z;
+        g.beginPath(); for (const u of sel) if (u.range > 0){ g.moveTo(u.x + u.range, u.y); g.arc(u.x, u.y, u.range, 0, TAU); } g.fill(); g.stroke();
+        g.strokeStyle = '#fff6a5'; g.lineWidth = 2 / z;
+        g.beginPath(); for (const u of sel){ const r = u.radius + 8; g.moveTo(u.x + r, u.y); g.arc(u.x, u.y, r, 0, TAU); } g.stroke();
+      }
+      for (const u of visible) if (u.isShip) G.Visuals.bar(g, u.x, u.gy * T - 15, u.w * T * 0.72, u.hp / u.maxHp, '#6fd27a');
+      // Spider cargo gauges (the atlas art shows an empty hold).
+      if (!lod2d) for (const u of visible) if (u.cargo && u.cargoCapacity && z >= C.UNIT_LOD_ZOOM){
+        const f = Math.min(1, G.Units.cargoTotal(u) / u.cargoCapacity);
+        if (f > 0){ g.fillStyle = '#213039'; g.fillRect(u.x - 12, u.y + 22, 24, 3); g.fillStyle = '#e5bf65'; g.fillRect(u.x - 12, u.y + 22, 24 * f, 3); }
+      }
+      for (const u of sel){
+        if (u.command === 'follow'){
+          const tu = G.Units.alive(u.followId);
+          if (tu){ g.strokeStyle = 'rgba(112,227,221,.75)'; g.lineWidth = 1.5 / z; g.setLineDash([4 / z, 6 / z]); g.beginPath(); g.moveTo(u.x, u.y); g.lineTo(tu.x, tu.y); g.stroke(); g.setLineDash([]);
+            g.beginPath(); g.arc(tu.x, tu.y, tu.radius + 12, 0, TAU); g.stroke(); }
         }
-        if (sel && u.path.length){
+        if (u.path.length){
           g.strokeStyle = '#f1df73'; g.lineWidth = 1.5 / z; g.setLineDash([10 / z, 8 / z]); g.beginPath(); g.moveTo(u.x, u.y);
           for (let i = u.pathIndex; i < u.path.length; i++) g.lineTo(u.path[i].x, u.path[i].y);
           g.stroke(); g.setLineDash([]);
         }
-        if (sel && !u.isHero && u.command && u.command !== 'idle'){
+        if (!u.isHero && u.command && u.command !== 'idle'){
           g.fillStyle = '#fff2a8'; g.font = (11 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(u.command.toUpperCase(), u.x, u.y - 40);
         }
       }
       G.Visuals.lasers(g, visible, t);
-      for (const s of S.shots){ g.strokeStyle = s.team === 'blue' ? '#b9e2ff' : '#ffb08b'; g.lineWidth = 2 / z; g.beginPath(); g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); g.stroke(); }
-
-      // Placement and formation previews.
+      if (S.shots.length){
+        g.lineWidth = 2 / z;
+        for (const [team, col] of [['blue', '#b9e2ff'], ['red', '#ffb08b']]){
+          g.strokeStyle = col; g.beginPath();
+          for (const s of S.shots) if ((s.team === 'blue') === (team === 'blue') && inView(s.x1, s.y1, 700)){ g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); }
+          g.stroke();
+        }
+      }
       if (S.buildPreview){
         const bp = S.buildPreview, d = G.Defs.buildables.get(bp.key) || { w: 1, h: 1, cost: {} };
-        const ok = G.Buildings.canPlace(bp.gx, bp.gy, d.w, d.h) && !!G.Construction.builder(S.buildMode.builderId) && G.Economy.canAfford(d.cost);
+        const ok = G.Buildings.canPlaceKey(bp.key, bp.gx, bp.gy) && !!G.Construction.builder(S.buildMode.builderId) && G.Economy.canAfford(d.cost);
         g.fillStyle = ok ? 'rgba(125,220,130,.30)' : 'rgba(230,90,80,.32)'; g.strokeStyle = ok ? '#8de295' : '#ee6b62'; g.lineWidth = 2 / z;
         g.fillRect(bp.gx * T, bp.gy * T, T * d.w, T * d.h); g.strokeRect(bp.gx * T, bp.gy * T, T * d.w, T * d.h);
       }
@@ -165,16 +257,6 @@
           g.fillStyle = '#fff4b0'; g.font = (9 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(String(i + 1), q.x, q.y + 3 / z);
         });
       }
-      g.restore();
-
-      const box = G.Input && G.Input.box;
-      if (box){
-        const x = Math.min(box.x0, box.x1), y = Math.min(box.y0, box.y1), w = Math.abs(box.x1 - box.x0), h = Math.abs(box.y1 - box.y0);
-        g.fillStyle = 'rgba(80,170,255,.12)'; g.fillRect(x, y, w, h); g.strokeStyle = '#7dc0ff'; g.lineWidth = 1; g.strokeRect(x + 0.5, y + 0.5, w, h);
-      }
-      Object.assign(S.metrics, { lod: far ? 'overview' : 'detail', cached: TC.chunks.size, visible: visible.length, chunks, drawMs: now() - t0 });
-      if (now() - this.minimapAt > 1000 / C.MINIMAP_HZ){ this.minimapAt = now(); this.drawMinimap(); }
-      else this.drawMinimapCamera();
     },
     drawMinimap(){
       const m = this.mini, S = G.State, C = G.CONFIG;
@@ -183,11 +265,26 @@
       const base = this.miniBase, W = base.width = m.width, H = base.height = m.height;
       const g = base.getContext('2d'), sx = W / C.WORLD_W, sy = H / C.WORLD_H;
       g.drawImage(G.TerrainCache.getOverview(), 0, 0, W, H);
-      for (const n of S.resourceNodes) if (n.remaining > 0){ g.fillStyle = '#d0a65b'; g.fillRect(n.x * sx - 1, n.y * sy - 1, 3, 3); }
+      for (const n of S.resourceNodes) if (n.remaining > 0){ g.fillStyle = G.Gather.isDeposit(n) ? '#c9d4dc' : '#d0a65b'; g.fillRect(n.x * sx - 1, n.y * sy - 1, 3, 3); }
       for (const b of S.buildings){ g.fillStyle = '#adb5ad'; g.fillRect(b.x * sx - 1, b.y * sy - 1, 3, 3); }
       for (const s of S.constructionSites){ g.fillStyle = '#d4b96b'; g.fillRect(s.x * sx - 1, s.y * sy - 1, 3, 3); }
+      // Ordinary units batched per team; ship and Vance on top.
+      const byTeam = new Map();
       for (const u of S.units){
-        const sz = u.isShip ? 7 : u.isHero ? 5 : 3;
+        if (u.isShip || u.isHero) continue;
+        const col = C.COLORS[u.team] || '#ccc';
+        let list = byTeam.get(col);
+        if (!list) byTeam.set(col, list = []);
+        list.push(u);
+      }
+      for (const [col, list] of byTeam){
+        g.fillStyle = col; g.beginPath();
+        for (const v of list) g.rect(v.x * sx - 1.5, v.y * sy - 1.5, 3, 3);
+        g.fill();
+      }
+      for (const u of S.units){
+        if (!u.isShip && !u.isHero) continue;
+        const sz = u.isShip ? 7 : 5;
         g.fillStyle = u.isShip ? '#d5e1e5' : C.COLORS[u.team] || '#ccc';
         g.fillRect(u.x * sx - sz / 2, u.y * sy - sz / 2, sz, sz);
       }

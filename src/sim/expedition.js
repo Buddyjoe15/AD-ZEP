@@ -40,6 +40,7 @@
     // Signals, deposits and the testing zone for a freshly generated Earth.
     populate(){
       const S = G.State, E = this.state, sh = G.Units.ship(), rules = R(), T = G.CONFIG.TILE;
+      S.resourceNodes = [];
       this.editTerrain(sh.gx - 13, sh.gy - 5, 32, 28);
       this.testingZone();
       const region = S.grid.regionAt(sh.gx + 3, sh.gy + sh.h);
@@ -57,22 +58,41 @@
         }
         E.sites.push({ id: 'signal-' + i, x: p.x, y: p.y, kind: 'Archive', done: false, progress: 0 });
       }
-      S.resourceNodes = [];
       for (const [dx, dy] of [[-430, 390], [470, 430]]){
         const p = G.openPoint(sh.x + dx, sh.y + dy, region);
         G.Gather.addNode('scrap_mine', p.x, p.y);
       }
+      for (const [dx, dy] of rules.metalMines){
+        const site = this.mineSite(sh.x + dx, sh.y + dy, region);
+        if (site) G.Gather.addNode('metal_mine', (site.x + 0.5) * T, (site.y + 0.5) * T);
+      }
       E.waveAt = rules.firstWave;
     },
-    // One of every buildable and item, left of the ship, for testing.
+    // Tile near (wx, wy) where a deposit can take a 3×3 Mine Building: the whole block is
+    // open, reachable ground away from other deposits.
+    mineSite(wx, wy, region){
+      const S = G.State, T = G.CONFIG.TILE, cx = Math.floor(wx / T), cy = Math.floor(wy / T);
+      const ok = (x, y) => {
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){
+          if (!S.grid.passable(x + dx, y + dy) || (region && S.grid.regionAt(x + dx, y + dy) !== region)) return false;
+        }
+        return !S.resourceNodes.some(n => Math.abs((n.gx ?? Math.floor(n.x / T)) - x) < 5 && Math.abs((n.gy ?? Math.floor(n.y / T)) - y) < 5);
+      };
+      for (let r = 0; r <= 14; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++){
+        if (Math.max(Math.abs(dx), Math.abs(dy)) === r && ok(cx + dx, cy + dy)) return { x: cx + dx, y: cy + dy };
+      }
+      return null;
+    },
+    // One of every buildable and item, left of the ship, for testing, plus a metal deposit
+    // with a working Mine Building beneath the grid.
     testingZone(){
       const S = G.State, sh = G.Units.ship(), T = G.CONFIG.TILE;
       const entries = [
-        ...G.Defs.buildables.keys().map(key => ({ kind: 'building', key })),
+        ...G.Defs.buildables.all().filter(d => !d.placeOnNode).map(d => ({ kind: 'building', key: d.key })),
         ...G.Defs.items.keys().map(key => ({ kind: 'item', key }))
       ];
       const cols = 4, x0 = sh.gx - 16, y0 = sh.gy + 1, rows = Math.ceil(entries.length / cols);
-      this.editTerrain(x0 - 1, y0 - 2, cols * 3 + 1, rows * 3 + 3);
+      this.editTerrain(x0 - 1, y0 - 2, cols * 3 + 1, rows * 3 + 6);
       entries.forEach((e, i) => {
         const gx = x0 + (i % cols) * 3, gy = y0 + Math.floor(i / cols) * 3, x = (gx + 0.5) * T, y = (gy + 0.5) * T;
         if (e.kind === 'item'){ G.Containers.groundItem(x, y, G.Items.create(e.key), { gx, gy, testZone: true }); return; }
@@ -80,6 +100,14 @@
         if (d.container){ G.Containers.create(x, y, [], { opened: true, built: true, gx, gy, capacity: d.container.capacity, name: 'Test ' + d.name, testZone: true }); return; }
         G.Buildings.add(e.key, gx, gy, { id: 'test-' + G.newId(), extra: { testZone: true } });
       });
+      for (const d of G.Defs.buildables.all().filter(d => d.placeOnNode === 'deposit')){
+        const node = G.Defs.nodes.all().find(n => n.kind === 'deposit' && n.building === d.key);
+        if (!node) continue;
+        const gx = x0, gy = y0 + rows * 3;
+        G.Gather.addNode(node.key, (gx + Math.floor(d.w / 2) + 0.5) * T, (gy + Math.floor(d.h / 2) + 0.5) * T);
+        G.Buildings.add(d.key, gx, gy, { id: 'test-' + G.newId(), extra: { testZone: true } });
+        break;
+      }
     },
 
     departure(){
@@ -116,28 +144,6 @@
       if (!E || S.gameOver) return false;
       if (S.paused){ G.notify('Resume the expedition to issue orders'); return false; }
       switch (name){
-        case 'explore': {
-          const u = G.Units.hero(), p = E.sites.find(p => !p.done);
-          if (!u || !p) return false;
-          G.Orders.move([u], p.x, p.y);
-          const guard = S.units.find(v => v.team === 'blue' && v.hp > 0 && !v.isHero && G.Units.can(v, 'fight'));
-          if (guard) G.Orders.setCommand([guard], 'follow');
-          S.selected = new Set([u.id]);
-          this.log('ARIA: Vance en route to the next signal. Security escort assigned.');
-          return true;
-        }
-        case 'survey': {
-          const u = S.units.find(v => v.team === 'blue' && v.hp > 0 && !v.isHero && G.Units.can(v, 'survey')) || G.Units.hero(), p = E.sites.find(p => !p.done);
-          if (!p){ G.notify('All local signals analyzed'); return false; }
-          G.Orders.move([u], p.x, p.y);
-          return true;
-        }
-        case 'mine': {
-          const u = S.units.find(v => v.team === 'blue' && v.hp > 0 && G.Units.can(v, 'gather')), n = S.resourceNodes.find(n => n.remaining > 0);
-          if (!u || !n){ G.notify('A Utility Spider and an available deposit are required'); return false; }
-          G.Events.emit('build:cancel');
-          return G.Gather.command(u, n);
-        }
         case 'fabricate': {
           const owner = (arg && arg.ownerId != null) ? (G.Units.alive(arg.ownerId) || G.Buildings.get(arg.ownerId)) : G.Units.ship();
           return G.Fabrication.enqueue(owner, typeof arg === 'string' ? arg : arg && arg.recipe);

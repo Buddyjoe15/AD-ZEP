@@ -27,7 +27,7 @@
       if (!d) return null;
       if (!this.builder(builder && builder.id)){ G.notify('Utility Spider is unavailable'); return null; }
       if (builder.buildSiteId){ G.notify('Utility Spider is busy. Finish the job or recall first.'); return null; }
-      if (!G.Buildings.canPlace(gx, gy, d.w, d.h)){ G.notify('Cannot build there'); return null; }
+      if (!G.Buildings.canPlaceKey(key, gx, gy)){ G.notify(d.placeOnNode === 'deposit' ? d.name + ' must be placed centred on a free mine deposit' : 'Cannot build there'); return null; }
       const ap = this.approachPoint(gx, gy, d.w, d.h, builder);
       if (!G.State.paths.reachable(builder.x, builder.y, ap.x, ap.y)){ G.notify('No construction route. Choose a reachable tile.'); return null; }
       if (!G.Economy.canAfford(d.cost)){ G.notify('Need ' + G.Economy.describe(d.cost)); return null; }

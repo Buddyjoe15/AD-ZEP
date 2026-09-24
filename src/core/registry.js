@@ -69,13 +69,13 @@
       costOk(d, 'Buildable');
       return {
         hp: 500, buildTime: 2, cost: {}, description: '', behaviors: [], symbol: null, color: '#9bbcf0',
-        container: null, fabricator: null, spawner: null, team: 'blue', debugOnly: false,
+        container: null, fabricator: null, spawner: null, team: 'blue', debugOnly: false, placeOnNode: null,
         blocksMovement: !d.container, ...d
       };
     }),
     nodes: new Registry('resource node', d => {
       need(d, 'Node', ['name', 'resource', 'capacity', 'rate', 'range']);
-      return { description: '', ...d };
+      return { description: '', kind: 'scavenge', building: null, ...d };
     }),
     recipes: new Registry('fabrication recipe', d => {
       need(d, 'Recipe', ['name', 'unit', 'time']);
@@ -103,7 +103,15 @@
       for (const beh of b.behaviors) if (!beh.type) problems.push(`buildable ${b.key}: behavior without type`);
       if (b.spawner && !D.units.has(b.spawner.unit)) problems.push(`buildable ${b.key}: spawner unit ${b.spawner.unit} unknown`);
     }
-    for (const n of D.nodes.all()) if (!D.resources.has(n.resource)) problems.push(`node ${n.key}: unknown resource ${n.resource}`);
+    for (const n of D.nodes.all()){
+      if (!D.resources.has(n.resource)) problems.push(`node ${n.key}: unknown resource ${n.resource}`);
+      if (!['scavenge', 'deposit'].includes(n.kind)) problems.push(`node ${n.key}: kind must be scavenge or deposit`);
+      if (n.kind === 'deposit'){
+        const b = D.buildables.get(n.building);
+        if (!b) problems.push(`node ${n.key}: unknown building ${n.building}`);
+        else if (b.placeOnNode !== 'deposit' || b.w % 2 !== 1 || b.h % 2 !== 1) problems.push(`node ${n.key}: ${n.building} must have placeOnNode 'deposit' and an odd footprint to centre on it`);
+      }
+    }
     if (problems.length) throw new Error('Content definitions are inconsistent:\n' + problems.join('\n'));
     return true;
   };

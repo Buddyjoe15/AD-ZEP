@@ -88,6 +88,7 @@
     // Returns an array of world-space waypoints (empty when no progress is possible).
     find(sx, sy, tx, ty, maxNodes = G.CONFIG.PATH_MAX_NODES){
       const t0 = now(), grid = this.grid, T = G.CONFIG.TILE, cols = grid.cols, M = G.State.metrics;
+      this.lastExpanded = 0;
       const done = pts => { M.pathCalls++; M.pathMs += now() - t0; return pts; };
       const st = this.startTile(sx, sy);
       if (!st) return done([]);
@@ -111,6 +112,7 @@
         const hc = h(cur);
         if (hc < bestH){ bestH = hc; best = cur; }
         if (++expanded > maxNodes) break;
+        this.lastExpanded = expanded;
         const gc = g[cur];
         neighbours(grid, cur, (ni, step) => {
           if (closed[ni] === gen) return;
@@ -215,9 +217,11 @@
     }
     compact(){ if (this.head){ this.queue = this.queue.slice(this.head); this.head = 0; } }
     get length(){ return this.queue.length - this.head; }
-    process(budgetMs = G.CONFIG.PATH_BUDGET_MS, maxCount = G.CONFIG.PATH_MAX_PER_TICK){
-      const t0 = now();
-      let served = 0;
+    // Serves queued requests until `nodeBudget` A* expansions or `maxCount` requests have
+    // been spent this tick. The budget counts work, not time, so results are identical on
+    // fast and slow machines (a determinism requirement for tests, replays and lockstep).
+    process(nodeBudget = G.CONFIG.PATH_NODE_BUDGET, maxCount = G.CONFIG.PATH_MAX_PER_TICK){
+      let served = 0, spent = 0;
       while (this.head < this.queue.length && served < maxCount){
         const req = this.queue[this.head++];
         if (req.cancelled) continue;
@@ -229,7 +233,8 @@
         u.path = pts; u.pathIndex = 0;
         if (req.onDone) req.onDone(pts);
         served++;
-        if (now() - t0 > budgetMs) break;
+        spent += this.pathfinder.lastExpanded + 1;
+        if (spent >= nodeBudget) break;
       }
       if (this.head > 256 && this.head * 2 > this.queue.length) this.compact();
       G.State.metrics.pathQueue = this.length;
