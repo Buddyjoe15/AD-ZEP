@@ -39,7 +39,7 @@ npm run save:snapshot  # after bumping GW.SAVE_SCHEMA: record the new save shape
 npm run sprites        # regenerate the pixel-art test set in art/pixel-test (sprites:preview also renders previews)
 ```
 
-**Pixel-art sprites (test branch).** Utility Spiders, drones, Vance, the Repair Station and the grass terrain are drawn with top-down pixel art from [art/pixel-test](art/pixel-test/README.md). Add `?art=classic` to the URL, or use **DEBUG → Pixel-art sprites**, to switch back to the original art. See "Pixel art" in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+**Pixel-art sprites (test branch).** Utility Spiders, drones, Vance, the Repair Station and the grass terrain are drawn with top-down pixel art from [art/pixel-test](art/pixel-test/README.md). Add `?art=classic` to the URL, or use **DEBUG → Pixel-art sprites**, to switch back to the original art. See "Pixel art" in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). New art follows [art/PIXEL_ART_RULES.md](art/PIXEL_ART_RULES.md).
 
 Changing what a save contains? Follow the checklist in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#changing-the-save-format). The tests fail if the save format changes without a schema bump and migration.
 

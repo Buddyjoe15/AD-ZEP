@@ -9,6 +9,7 @@ Abyssal Dawn: Zero Earth Protocol, a browser strategy game. Read `README.md` and
 - Add no dependencies. `npm test` and `npm run build` must keep working.
 - The simulation layers (`src/core`, `src/data`, `src/world`, `src/sim`) never touch the DOM.
 - Commands: `npm test` (static checks + headless tests), `npm run test:browser` (Playwright, if installed), `npm run build`, `npm run save:snapshot`.
+- New pixel art follows `art/PIXEL_ART_RULES.md` (scale, palette, facings, shadows, and the questions to ask before drawing).
 
 ## Save format rules
 

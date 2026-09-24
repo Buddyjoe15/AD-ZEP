@@ -1,6 +1,6 @@
 # Pixel-art sprite test set
 
-A test set of straight top-down pixel sprites. It exists to prove sizes, the palette and the pipeline, and isn't final art. The repair station is a stand-in design.
+A test set of straight top-down pixel sprites. The rules for new art are in [../PIXEL_ART_RULES.md](../PIXEL_ART_RULES.md). It exists to prove sizes, the palette and the pipeline, and isn't final art. The repair station is a stand-in design.
 
 The game uses this art by default. Spiders, security and hostile drones, survey drones, Vance, the Repair Station (including its construction site and rubble) and grass/clearing terrain are drawn with it. Add `?art=classic` or use **DEBUG → Pixel-art sprites** to switch back to the original art. How it's wired in is described under "Pixel art" in `docs/ARCHITECTURE.md`.
 
