@@ -205,3 +205,15 @@ test('migrate_3_to_4: spawners in older saves get the default rally point and ke
   bad.buildings.find(x => x.spawner).spawner.rally = { x: 'far' };
   assert.throws(() => G.Save.validate(bad), /building/);
 });
+
+test('migrate_4_to_5: fabricators in older saves get no rally point, so units still wait beside them', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(4));
+  assert.ok(!('rally' in raw.units.find(u => u.isShip)), 'the schema 4 fixture predates fabrication rally points');
+  const S = G.Save.restore(raw, 1);
+  assert.equal(G.Units.ship().rally, null);
+  for (const b of S.buildings.filter(b => b.fabQueue)) assert.equal(b.rally, null);
+  const bad = readJSON(fixtureFile(G.SAVE_SCHEMA));
+  bad.units.find(u => u.isShip).rally = { x: -5, y: 3 };
+  assert.throws(() => G.Save.validate(bad), /rally point/);
+});

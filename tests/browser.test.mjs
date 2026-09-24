@@ -439,3 +439,64 @@ test('spawner rally point moves with a tap; the inventory closes with × and dra
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });
+
+test('fabrication rally point, draggable expedition log, unit stats and enemy info', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1365, height: 900 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    // Unit windows show HP and damage.
+    await page.evaluate(() => GW.Selection.set([GW.State.heroId]));   // Vance starts selected; clicking him would deselect
+    await page.waitForTimeout(150);
+    let p;
+    assert.match(await page.textContent('#selectionPanel'), /HP 300 \/ 300 · DMG \d+ \([\d.]+\/s\) · Range \d+/);
+    await page.evaluate(() => GW.Selection.set(GW.Units.crew().map(u => u.id)));
+    await page.waitForTimeout(150);
+    assert.match(await page.textContent("#selectionPanel"), /1× Security Drone\s*HP 100 \/ 100 · DMG 12 \(16\.7\/s\) · Range 205/);
+    assert.match(await page.textContent("#selectionPanel"), /Utility Spider\s*HP 520 \/ 520 · No weapon/);
+    // Ship rally point: set it from the fabrication window with a tap.
+    const ship = await page.evaluate(() => { const s = GW.Units.ship(); return { x: s.x, y: s.y }; });
+    p = await screen(page, ship.x, ship.y);
+    await page.mouse.click(p.x, p.y);
+    await page.waitForSelector('#ezFabrication:not(.hidden) #ezRally');
+    await page.click('#ezRally');
+    const spot = await page.evaluate(({ x, y }) => GW.openPoint(x - 420, y + 380), ship);
+    p = await screen(page, spot.x, spot.y);
+    await page.mouse.click(p.x, p.y);
+    const rally = await page.evaluate(() => GW.Units.ship().rally);
+    assert.ok(rally && Math.hypot(rally.x - spot.x, rally.y - spot.y) < 30, 'ship rally point set');
+    await page.waitForSelector('#ezRallyClear');
+    await page.evaluate(() => { GW.State.resources.metal = 1000; GW.Cheats.set('instantBuild', true); GW.Fabrication.enqueue(GW.Units.ship(), 'survey_drone'); });
+    await page.waitForFunction(({ r }) => { const u = GW.State.units[GW.State.units.length - 1]; return u.type === 'survey_drone' && Math.hypot(u.x - r.x, u.y - r.y) < 200; }, { r: rally }, { timeout: 15000 });
+    await page.screenshot({ path: path.join(OUT, 'ship-rally.png') });
+    await page.click('#ezFabClose');
+    // Expedition log: drag by its title bar, close with ×.
+    await page.click('#ezToggle');
+    await page.waitForSelector('#ezPanel:not(.hidden) #ezClose');
+    const before = await page.$eval('#ezPanel', el => el.getBoundingClientRect().toJSON());
+    const head = await page.$eval('#ezPanel [data-drag-handle] h3', el => el.getBoundingClientRect().toJSON());
+    await page.mouse.move(head.x + 40, head.y + 8); await page.mouse.down();
+    for (let i = 1; i <= 5; i++) await page.mouse.move(head.x + 40 - i * 50, head.y + 8 + i * 20);
+    await page.mouse.up();
+    const after = await page.$eval('#ezPanel', el => el.getBoundingClientRect().toJSON());
+    assert.ok(Math.abs(after.x - before.x + 250) < 3 && Math.abs(after.y - before.y - 100) < 3, `moved by (-250,100): ${after.x - before.x}, ${after.y - before.y}`);
+    await page.screenshot({ path: path.join(OUT, 'expedition-moved.png') });
+    await page.click('#ezClose');
+    assert.ok(await page.isHidden('#ezPanel'));
+    // Clicking a hostile unit shows its details without changing the selection.
+    const foe = await page.evaluate(() => { const h = GW.Units.hero(), u = GW.Units.spawn('hostile_machine', h.x + 700, h.y - 250); GW.rebuildSpatial(); return { id: u.id, x: u.x, y: u.y }; });
+    const selected = await page.evaluate(() => GW.State.selected.size);
+    p = await screen(page, foe.x, foe.y);
+    await page.mouse.click(p.x, p.y);
+    await page.waitForSelector('#targetPanel:not(.hidden)');
+    const info = await page.textContent('#targetPanel');
+    assert.match(info, /HOSTILE/); assert.match(info, /Hostile Autonomous Machine/); assert.match(info, /HP 65 \/ 65 · DMG 6 \(8\.3\/s\) · Range 140/);
+    assert.equal(await page.evaluate(() => GW.State.selected.size), selected, 'selection unchanged');
+    await page.screenshot({ path: path.join(OUT, 'enemy-info.png') });
+    await page.click('#targetClose');
+    assert.ok(await page.isHidden('#targetPanel'));
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});

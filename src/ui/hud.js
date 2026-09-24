@@ -28,6 +28,31 @@
       G.Events.on('unit:died', () => this.refreshSelection());
       this.refreshSelection(true);
     },
+    // Lets a floating panel be moved by dragging any [data-drag-handle] inside it (buttons
+    // in the handle still work). The panel keeps its place, clamped to the screen, until
+    // the page reloads.
+    draggable(panel){
+      let drag = null;
+      const place = (x, y) => {
+        const w = panel.offsetWidth, h = panel.querySelector('[data-drag-handle]')?.offsetHeight || 40;
+        panel.style.left = G.clamp(x, 0, Math.max(0, innerWidth - w)) + 'px';
+        panel.style.top = G.clamp(y, 0, Math.max(0, innerHeight - h)) + 'px';
+        panel.style.right = 'auto'; panel.style.bottom = 'auto'; panel.style.transform = 'none';
+      };
+      panel.addEventListener('pointerdown', e => {
+        const handle = e.target.closest('[data-drag-handle]');
+        if (!handle || e.target.closest('button')) return;
+        const r = panel.getBoundingClientRect();
+        drag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top };
+        handle.setPointerCapture(e.pointerId);
+        panel.classList.add('dragging');
+        e.preventDefault();
+      });
+      panel.addEventListener('pointermove', e => { if (drag && e.pointerId === drag.id) place(e.clientX - drag.dx, e.clientY - drag.dy); });
+      const end = e => { if (drag && e.pointerId === drag.id){ drag = null; panel.classList.remove('dragging'); } };
+      panel.addEventListener('pointerup', end); panel.addEventListener('pointercancel', end);
+      addEventListener('resize', () => { if (panel.style.transform === 'none') place(parseFloat(panel.style.left), parseFloat(panel.style.top)); });
+    },
     toast(msg){
       const n = $('toast');
       n.textContent = msg; n.style.opacity = '1';
@@ -134,8 +159,37 @@
     toggleDev(){ this.dev = !this.dev; $('devPanel').classList.toggle('hidden', !this.dev); },
 
     // ---- Selection panel ----
+    // ---- Enemy info (tap or click a hostile unit) ----
+    targetId: null,
+    showTarget(id){ this.targetId = id; this.refreshTarget(true); },
+    hideTarget(){ this.targetId = null; $('targetPanel').classList.add('hidden'); },
+    refreshTarget(force = false){
+      const p = $('targetPanel');
+      if (this.targetId == null){ if (!p.classList.contains('hidden')) p.classList.add('hidden'); return; }
+      const u = G.Units.get(this.targetId);
+      if (!u || u.hp <= 0){ this.hideTarget(); return; }
+      const t = u.aiTargetId != null ? (G.Units.alive(u.aiTargetId) || G.State.buildings.find(b => b.id === u.aiTargetId)) : null;
+      const doing = u.aiHold ? 'Holding at a rally point' : u.aiMode === 'engage' && t ? 'Attacking ' + (t.name || G.Defs.buildables.get(t.type)?.name || 'a structure')
+        : u.aiMode === 'march' ? 'Marching on Commander Vance' : u.targetId != null ? 'Firing' : 'Idle';
+      const src = u.spawnerId ? G.State.buildings.find(b => b.id === u.spawnerId) : null;
+      const sig = [u.id, Math.ceil(u.hp), doing, u.maxHp].join('|');
+      if (!force && sig === this.targetSig && !p.classList.contains('hidden')) return;
+      this.targetSig = sig;
+      p.innerHTML = `<div class="target-head"><div><small>HOSTILE</small><b>${esc(u.name)}</b></div><button id="targetClose" aria-label="Close enemy info">×</button></div>
+        <div class="target-bar"><i style="width:${G.clamp(u.hp / u.maxHp * 100, 0, 100)}%"></i></div>
+        ${this.statLine([u])}<br><span class="muted">Speed ${u.speed} · Sight ${u.sight}${src ? ' · From ' + esc(G.Defs.buildables.get(src.type)?.name || 'a spawner') : ''}</span><br>${esc(doing)}`;
+      p.classList.remove('hidden');
+      $('targetClose').onclick = () => this.hideTarget();
+    },
+    // "HP 240 / 300 · DMG 12 (16.7/s) · Range 240" for one unit, or totals for a group
+    // of one type.
+    statLine(list){
+      const u = list[0], n = list.length, hp = list.reduce((a, x) => a + x.hp, 0), max = list.reduce((a, x) => a + x.maxHp, 0);
+      const dmg = u.damage > 0 ? `DMG ${u.damage}${n > 1 ? ' each' : ''} (${(u.damage / u.reload).toFixed(1)}/s) · Range ${u.range}` : 'No weapon';
+      return `<span class="unit-stats">HP <b>${Math.ceil(hp)} / ${max}</b> · ${dmg}</span>`;
+    },
     selectionSignature(us){
-      return us.map(u => `${u.id}:${u.command}:${u.followId}:${u.haulState}:${u.path.length ? 1 : 0}:${Math.floor(G.Units.cargoTotal(u) / 10)}:${Math.ceil(u.hp / u.maxHp * 20)}:${u.squad}:${u.storage ? u.storage.items.length : ''}`).join('|') + '#' + G.State.formation;
+      return us.map(u => `${u.id}:${u.command}:${u.followId}:${u.haulState}:${u.path.length ? 1 : 0}:${Math.floor(G.Units.cargoTotal(u) / 10)}:${Math.ceil(u.hp)}:${u.damage}:${u.maxHp}:${u.squad}:${u.storage ? u.storage.items.length : ''}`).join('|') + '#' + G.State.formation;
     },
     // `picked` is true when the player changed what is selected (other windows react to
     // that); otherwise this only redraws the panel when the selected units' state changes.
@@ -146,18 +200,19 @@
       if (picked || ids !== this.selectionIds){ this.selectionIds = ids; G.Events.emit('ui:selection', { units: us, ship: shipSel }); }
       if (!force && sig === this.selectionSig) return;
       this.selectionSig = sig;
-      if (shipSel && !us.length){ p.innerHTML = `<b>${esc(ship.name)}</b><br>Ship fabricator selected`; return; }
+      if (shipSel && !us.length){ p.innerHTML = `<b>${esc(ship.name)}</b><br>${this.statLine([ship])}<br>Ship fabricator selected`; return; }
       if (!us.length){ p.innerHTML = "<b>No units selected</b><br><span class='muted'>Select friendly units to issue orders.</span>"; return; }
       const followRow = `<button data-unit-command="follow" title="Then tap the unit to follow">Follow</button><button data-unit-command="idle" title="Cancel standing orders">Stop</button>`;
       if (us.length === 1 && us[0].isHero){
         const h = us[0];
-        p.innerHTML = `<b>${esc(h.name)}</b><br>Frame integrity: ${Math.ceil(h.hp)} / ${h.maxHp}<br>${this.orderLine(h)}<div class="unit-command-row">${followRow}</div>`;
+        p.innerHTML = `<b>${esc(h.name)}</b><br>${this.statLine([h])}<br>${this.orderLine(h)}<div class="unit-command-row">${followRow}</div>`;
         this.bindCommands(p, us);
         return;
       }
       const hp = Math.round(us.reduce((a, u) => a + u.hp / u.maxHp, 0) / us.length * 100);
-      const counts = us.reduce((a, u) => (a[u.type] = (a[u.type] || 0) + 1, a), {});
-      const parts = Object.entries(counts).map(([k, v]) => v + ' ' + esc(G.Defs.units.get(k)?.name || k)).join(' · ');
+      const byType = us.reduce((a, u) => ((a[u.type] = a[u.type] || []).push(u), a), {});
+      const parts = us.length === 1 ? this.statLine(us)
+        : Object.entries(byType).map(([k, list]) => `<div class="unit-type-row">${list.length}× ${esc(G.Defs.units.get(k)?.name || k)}<br>${this.statLine(list)}</div>`).join('');
       const crew = us.filter(u => !u.isHero);
       const head = us.length === 1 ? `<b>${esc(us[0].name)}</b>` : `<b>${us.length} selected</b>`;
       const cmds = `<div class="unit-command-row">${followRow}${crew.length ? '<button data-unit-command="guard">Guard Location</button><button data-unit-command="patrol">Patrol</button>' : ''}</div>`;
@@ -166,7 +221,7 @@
       const builder = us.find(u => G.Units.can(u, 'build'));
       const buildRow = builder ? `<div class="builder-row"><button id="truckBuildBtn">Build</button>${builder.storage ? '<button id="truckStorageBtn">Storage</button>' : ''}<span class="muted">Storage <b>${builder.storage ? builder.storage.items.length : 0} / ${builder.storage ? builder.storage.capacity : 0}</b> · Cargo ${Math.floor(G.Units.cargoTotal(builder))} / ${builder.cargoCapacity || 0} metal</span></div>` : '';
       const task = us.length === 1 ? '<br>' + this.orderLine(us[0]) : '';
-      p.innerHTML = `${head}<br>Average health: ${hp}%<br>${parts}${task}${cmds}${forms}${squads}${buildRow}`;
+      p.innerHTML = `${head}${us.length > 1 ? `<br>Average health: ${hp}%` : ''}<br>${parts}${task}${cmds}${forms}${squads}${buildRow}`;
       this.bindCommands(p, us);
       p.querySelectorAll('[data-formation]').forEach(b => b.addEventListener('click', () => {
         S.formation = b.dataset.formation;
@@ -215,6 +270,7 @@
       if (t - this.lastSlow < 250) return;
       this.lastSlow = t;
       this.refreshSelection();
+      this.refreshTarget();
       this.refreshSquadButtons();
       const title = $('gameTitle').getBoundingClientRect(), dbg = $('dbgBtn');
       if (title.width){ dbg.style.left = (title.right + 6) + 'px'; dbg.style.top = Math.max(2, title.top + title.height / 2 - dbg.offsetHeight / 2) + 'px'; }

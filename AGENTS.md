@@ -12,7 +12,7 @@ Instructions for AI agents working on this repository. `CLAUDE.md` has the same 
 
 ## Save format rules
 
-The save system is `GW.Save` in `src/sim/save.js`. The current schema is `GW.SAVE_SCHEMA` in `src/core/namespace.js` (now 4). Its tests are in `tests/save.test.mjs`, with helpers in `tests/save-support.mjs`. Full background: "Saves" in `docs/ARCHITECTURE.md`.
+The save system is `GW.Save` in `src/sim/save.js`. The current schema is `GW.SAVE_SCHEMA` in `src/core/namespace.js` (now 5). Its tests are in `tests/save.test.mjs`, with helpers in `tests/save-support.mjs`. Full background: "Saves" in `docs/ARCHITECTURE.md`.
 
 ### When a change affects saves
 

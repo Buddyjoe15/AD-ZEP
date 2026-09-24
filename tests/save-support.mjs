@@ -89,6 +89,7 @@ export function representativeGame(){
   if (!scrap || !G.Gather.command(scavenger, scrap)) throw new Error('representative game: no scavenging node');
   const sh = G.Units.ship(), site = S.grid.nearestOpen(sh.gx + 4, sh.gy + sh.h + 3, 10);
   if (!G.Construction.order(spider2, 'generator', site.x, site.y)) throw new Error('representative game: construction order failed');
+  G.Fabrication.setRally(ship, G.openPoint(ship.x + 300, ship.y + 420));   // the Fabricator keeps none
   G.Fabrication.enqueue(ship, 'survey_drone');
   G.Fabrication.enqueue(ship, 'security_drone');
   const fab = S.buildings.find(b => b.fabQueue);

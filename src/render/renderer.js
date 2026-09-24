@@ -232,23 +232,28 @@
           g.fillStyle = '#fff2a8'; g.font = (11 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(u.command.toUpperCase(), u.x, u.y - 40);
         }
       }
-      // Spawner rally points: a flag where held units gather, and (for the spawner whose
-      // window is open) a dashed line from its spawn point.
-      for (const b of S.buildings){
-        const s = b.spawner;
-        if (!s || !s.rally || !s.hold || b.hp <= 0) continue;
-        const r = s.rally, open = G.SpawnerUI.buildingId === b.id;
+      // Rally points: a flag for every building that produces units (red for spawners,
+      // blue for the ship and Fabricators), and a dashed line from the one whose window is
+      // open.
+      const flag = (r, from, open, color, line) => {
         if (open){
-          const p = G.Spawner.spawnPoint(b);
-          g.strokeStyle = 'rgba(255,120,100,.8)'; g.lineWidth = 2 / z; g.setLineDash([8 / z, 6 / z]);
-          g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(r.x, r.y); g.stroke(); g.setLineDash([]);
-          g.beginPath(); g.arc(p.x, p.y, 10, 0, TAU); g.stroke();
+          g.strokeStyle = line; g.lineWidth = 2 / z; g.setLineDash([8 / z, 6 / z]);
+          g.beginPath(); g.moveTo(from.x, from.y); g.lineTo(r.x, r.y); g.stroke(); g.setLineDash([]);
+          g.beginPath(); g.arc(from.x, from.y, 10, 0, TAU); g.stroke();
         }
         const k = Math.max(1, 1 / z) * (open ? 1.2 : 1);
-        g.strokeStyle = '#2b1a17'; g.lineWidth = 3 * k; g.beginPath(); g.moveTo(r.x, r.y); g.lineTo(r.x, r.y - 34 * k); g.stroke();
-        g.fillStyle = '#e0685f'; g.beginPath(); g.moveTo(r.x, r.y - 34 * k); g.lineTo(r.x + 22 * k, r.y - 27 * k); g.lineTo(r.x, r.y - 20 * k); g.closePath(); g.fill();
-        g.fillStyle = 'rgba(224,104,95,.35)'; g.beginPath(); g.ellipse(r.x, r.y, 12 * k, 5 * k, 0, 0, TAU); g.fill();
+        g.strokeStyle = '#1b1f22'; g.lineWidth = 3 * k; g.beginPath(); g.moveTo(r.x, r.y); g.lineTo(r.x, r.y - 34 * k); g.stroke();
+        g.fillStyle = color; g.beginPath(); g.moveTo(r.x, r.y - 34 * k); g.lineTo(r.x + 22 * k, r.y - 27 * k); g.lineTo(r.x, r.y - 20 * k); g.closePath(); g.fill();
+        g.globalAlpha = 0.35; g.beginPath(); g.ellipse(r.x, r.y, 12 * k, 5 * k, 0, 0, TAU); g.fill(); g.globalAlpha = 1;
+      };
+      for (const b of S.buildings){
+        if (b.hp <= 0) continue;
+        const s = b.spawner;
+        if (s && s.rally && s.hold) flag(s.rally, G.SpawnerUI.buildingId === b.id ? G.Spawner.spawnPoint(b) : b, G.SpawnerUI.buildingId === b.id, '#e0685f', 'rgba(255,120,100,.8)');
+        if (b.fabQueue && b.rally) flag(b.rally, b, G.ExpeditionUI.fabOwnerId === b.id, '#5fb7e0', 'rgba(110,190,240,.85)');
       }
+      const ship = G.Units.ship();
+      if (ship && ship.rally) flag(ship.rally, ship, G.ExpeditionUI.fabOwnerId === ship.id, '#5fb7e0', 'rgba(110,190,240,.85)');
       G.Visuals.lasers(g, visible, t);
       if (S.shots.length){
         g.lineWidth = 2 / z;

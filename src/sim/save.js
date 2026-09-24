@@ -121,8 +121,18 @@
     return v;
   }
 
-  // Keyed by the schema each step upgrades from; add { 4: migrate_4_to_5 } and so on.
-  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4 };
+  // Schema 4 → schema 5 (v0.7): the ship and Fabricators have a rally point for the units
+  // they produce. Older saves have none (null): new units wait beside their fabricator,
+  // as they always did.
+  function migrate_4_to_5(d){
+    const v = G.copy(d);
+    v.schema = 5;
+    for (const o of [...(v.units || []), ...(v.buildings || [])]) if (o && Array.isArray(o.fabQueue) && o.rally === undefined) o.rally = null;
+    return v;
+  }
+
+  // Keyed by the schema each step upgrades from; add { 5: migrate_5_to_6 } and so on.
+  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5 };
 
   // Applies the steps in order until the save reaches G.SAVE_SCHEMA. A current save is
   // returned as is; anything newer or unknown is rejected.
@@ -173,6 +183,7 @@
       if (u.cargo && !Object.entries(u.cargo).every(([k, v]) => D.resources.has(k) && num(v) && v >= 0)) fail('unit cargo');
       if (u.storage && (!list(u.storage.items, 1000) || !u.storage.items.every(item) || !num(u.storage.capacity))) fail('unit storage');
       if (u.fabQueue && !queue(u.fabQueue)) fail('unit fabrication queue');
+      if (u.fabQueue && !(u.rally === null || point(u.rally))) fail('unit rally point');
       if (u.isShip && (![u.gx, u.gy, u.w, u.h].every(int))) fail('ship footprint');
       if (u.team === 'red' && (u.isHero || u.isShip)) fail('hostile flags');
       for (const k of ['followId']) if (u[k] != null && !int(u[k])) fail('unit ' + k);
@@ -191,6 +202,7 @@
     if (!d.constructionSites.every(s => point(s) && D.buildables.has(s.type) && num(s.remaining) && num(s.buildTime) && [s.gx, s.gy, s.w, s.h].every(int))) fail('construction site');
     if (!d.resourceNodes.every(n => point(n) && D.nodes.has(n.type) && num(n.remaining) && n.remaining >= 0 &&
       (D.nodes.get(n.type).kind !== 'deposit' || (int(n.gx) && int(n.gy))))) fail('resource node');
+    if (!d.buildings.every(b => !b.fabQueue || b.rally === null || point(b.rally))) fail('building rally point');
     if (!d.buildings.every(b => (!b.stock || cost(b.stock)) && (b.nodeId == null || typeof b.nodeId === 'string'))) fail('building stockpile');
     if (!d.terrainEdits.every(e => [e.x, e.y, e.w, e.h, e.t].every(int) && e.w >= 0 && e.h >= 0 && e.w * e.h <= 1 << 20)) fail('terrain edit');
     const e = d.expedition;

@@ -701,3 +701,35 @@ test('map editor: paint terrain around structures, erase objects, and keep it al
   assert.deepEqual(Array.from(G.State.terrainEdits), []);
   assert.equal(G.MapEdit.reset(TT.WATER), false, 'only passable terrain can fill the map');
 });
+
+test('rally points: units from the ship and Fabricators walk to their rally point', () => {
+  const G = newGame();
+  const S = G.State, ship = G.Units.ship(), fab = S.buildings.find(b => b.type === 'fabricator');
+  assert.equal(ship.rally, null, 'none by default');
+  assert.equal(fab.rally, null);
+  S.resources.metal = 5000;
+  G.Cheats.set('instantBuild', true);
+  // Without a rally point the unit stays beside the ship.
+  G.Fabrication.enqueue(ship, 'survey_drone'); G.Sim.step();
+  const idle = S.units[S.units.length - 1];
+  G.Sim.run(3);
+  assert.ok(!idle.path.length && Math.hypot(idle.x - ship.x, idle.y - ship.y) < 500);
+  // With one, new units walk there (spread around it).
+  const r1 = G.openPoint(ship.x + 900, ship.y + 700), r2 = G.openPoint(fab.x - 600, fab.y + 500);
+  assert.ok(G.Fabrication.setRally(ship, r1));
+  assert.ok(G.Fabrication.setRally(fab, r2));
+  for (let i = 0; i < 3; i++){ G.Fabrication.enqueue(ship, 'security_drone'); G.Sim.step(); }
+  G.Fabrication.enqueue(fab, 'survey_drone'); G.Sim.step();
+  const fromShip = S.units.slice(-4, -1), fromFab = S.units[S.units.length - 1];
+  G.Cheats.set('instantBuild', false);
+  G.Sim.run(15);
+  for (const u of fromShip) assert.ok(Math.hypot(u.x - r1.x, u.y - r1.y) < 200, 'at the ship rally point: ' + Math.round(Math.hypot(u.x - r1.x, u.y - r1.y)));
+  assert.ok(Math.hypot(fromFab.x - r2.x, fromFab.y - r2.y) < 200, 'at the Fabricator rally point');
+  // Saved and restored; cleared with null.
+  G.Save.restore(G.Save.serialize(), 1);
+  assert.deepEqual({ ...G.Units.ship().rally }, { x: r1.x, y: r1.y });
+  assert.deepEqual({ ...G.State.buildings.find(b => b.id === fab.id).rally }, { x: r2.x, y: r2.y });
+  G.Fabrication.setRally(G.Units.ship(), null);
+  assert.equal(G.Units.ship().rally, null);
+  assert.equal(G.Fabrication.setRally(find(G, 'survey_drone'), r1), false, 'only fabricators have rally points');
+});

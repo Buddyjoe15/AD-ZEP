@@ -53,7 +53,7 @@
         u.w = d.footprint.w; u.h = d.footprint.h;
         u.gx = Math.round(x / T - u.w / 2); u.gy = Math.round(y / T - u.h / 2);
       }
-      if (d.fabricator) u.fabQueue = [];
+      if (d.fabricator){ u.fabQueue = []; u.rally = null; }
       return u;
     },
     spawn(type, x, y, opts = {}){

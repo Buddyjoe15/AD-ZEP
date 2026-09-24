@@ -43,31 +43,7 @@
       $('inventoryPanel').classList.add('hidden');
     },
     bindHead(){ const b = $('invClose'); if (b) b.onclick = () => this.close(); },
-    // Drag the panel by its title bar. The position is kept (clamped to the screen) until
-    // the page is reloaded.
-    initDrag(){
-      const p = $('inventoryPanel');
-      let drag = null;
-      const place = (x, y) => {
-        const w = p.offsetWidth, h = p.querySelector('[data-drag-handle]')?.offsetHeight || 40;
-        p.style.left = G.clamp(x, 0, Math.max(0, innerWidth - w)) + 'px';
-        p.style.top = G.clamp(y, 0, Math.max(0, innerHeight - h)) + 'px';
-        p.style.right = 'auto';
-      };
-      p.addEventListener('pointerdown', e => {
-        const handle = e.target.closest('[data-drag-handle]');
-        if (!handle || e.target.closest('button')) return;
-        const r = p.getBoundingClientRect();
-        drag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top };
-        handle.setPointerCapture(e.pointerId);
-        p.classList.add('dragging');
-        e.preventDefault();
-      });
-      p.addEventListener('pointermove', e => { if (drag && e.pointerId === drag.id) place(e.clientX - drag.dx, e.clientY - drag.dy); });
-      const end = e => { if (drag && e.pointerId === drag.id){ drag = null; p.classList.remove('dragging'); } };
-      p.addEventListener('pointerup', end); p.addEventListener('pointercancel', end);
-      addEventListener('resize', () => { if (p.style.left) place(parseFloat(p.style.left), parseFloat(p.style.top)); });
-    },
+    initDrag(){ G.UI.draggable($('inventoryPanel')); },
     renderInventory(){
       const p = $('inventoryPanel'), I = G.Inventory;
       const head = title => `<div class="panel-drag-head" data-drag-handle title="Drag to move"><button type="button" class="panel-close" id="invClose" aria-label="Close inventory">×</button><h3>${title}</h3></div>`;

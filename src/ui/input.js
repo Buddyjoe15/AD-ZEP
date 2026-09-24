@@ -46,13 +46,14 @@
       else if (k === ' '){ e.preventDefault(); G.UI.togglePause(); }
       else if (k === 'escape'){
         if (G.BuildUI.active()) G.BuildUI.cancel();
-        else if (this.commandMode){ this.commandMode = null; this.rallyFor = null; G.UI.toast('Order cancelled'); if (G.SpawnerUI.isOpen()) G.SpawnerUI.render(); }
+        else if (this.commandMode){ this.commandMode = null; this.rallyFor = null; G.UI.toast('Order cancelled'); if (G.SpawnerUI.isOpen()) G.SpawnerUI.render(); G.ExpeditionUI.renderFabrication(); }
         else G.Selection.clear();
       }
     },
     p(e){ const r = G.Renderer.cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; },
 
     // ---- Hit tests (world coordinates) ----
+    enemyAt(wx, wy){ const u = this.unitAt(wx, wy, true); return u && u.team !== 'blue' ? u : null; },
     radius(){ return 28 / G.State.camera.z; },
     unitAt(wx, wy, anyTeam = false){
       const S = G.State, r = this.radius();
@@ -127,10 +128,14 @@
       }
       if (this.commandMode === 'rally'){
         consume();
-        const b = G.State.buildings.find(x => x.id === this.rallyFor && x.hp > 0);
+        // Any building that produces units: a spawner, a Fabricator, or the ship.
+        const id = this.rallyFor, o = G.State.buildings.find(x => x.id === id && x.hp > 0) || G.Units.alive(id);
         this.commandMode = null; this.rallyFor = null;
-        if (b){ G.Spawner.configure(b, { rally: { x: q.x, y: q.y } }); G.UI.toast('Rally point moved'); }
+        if (o && G.Spawner.def(o)) G.Spawner.configure(o, { rally: { x: q.x, y: q.y } });
+        else if (o && o.fabQueue) G.Fabrication.setRally(o, { x: q.x, y: q.y });
+        if (o) G.UI.toast('Rally point moved');
         if (G.SpawnerUI.isOpen()) G.SpawnerUI.render();
+        G.ExpeditionUI.renderFabrication();
         return;
       }
       if (this.commandMode === 'follow'){
@@ -153,6 +158,11 @@
       const target = this.gatherTarget(q.x, q.y), gatherer = this.gatherer();
       if (target && gatherer){ consume(); G.Gather.command(gatherer, target); return; }
       const hit = this.unitAt(q.x, q.y);
+      // Clicking a hostile unit shows its details (right-click still orders a move).
+      if (!hit && e.pointerType === 'mouse' && e.button === 0){
+        const foe = this.enemyAt(q.x, q.y);
+        if (foe){ consume(); G.UI.showTarget(foe.id); return; }
+      }
       if (hit && e.pointerType === 'mouse'){
         const has = G.State.selected.has(hit.id);
         if (e.shiftKey){ if (!has) G.Selection.toggle(hit.id); }
@@ -259,8 +269,9 @@
         this.lastTap = { t, x: o.x, y: o.y };
         if (dbl){ G.Selection.clear(); G.UI.toast('Units deselected'); }
         else {
-          const hit = this.unitAt(q.x, q.y);
+          const hit = this.unitAt(q.x, q.y), foe = !hit && this.enemyAt(q.x, q.y);
           if (hit){ if (S.selected.has(hit.id)) G.Selection.toggle(hit.id); else G.Selection.set([hit.id]); }
+          else if (foe) G.UI.showTarget(foe.id);
           else {
             const us = this.selectedUnits();
             if (us.length) G.Orders.move(us, q.x, q.y);

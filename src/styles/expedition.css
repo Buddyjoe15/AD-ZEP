@@ -113,3 +113,23 @@ body.in-game #ezToggle, body.in-game #status, body.in-game #dbgBtn { display: bl
   #minimap { width: 110px; height: 110px; }
   #selectionPanel { max-height: 115px; overflow: auto; bottom: 8px; }
 }
+
+/* Expedition log title bar: close on the left, drag to move (like the inventory). */
+#ezPanel .ezDragHead { padding: 10px 16px 0; margin: 0; }
+#ezPanel .ezDragHead h3 { font-size: 18px; color: #fff; letter-spacing: 0; text-transform: none; }
+#ezPanel .ezDragHead .panel-close { flex: 0 0 auto; min-width: 32px; min-height: 32px; padding: 0; text-align: center; font-size: 18px; line-height: 1; }
+#ezPanel #ezBody { max-height: calc(min(560px, calc(100vh - 88px)) - 46px); padding-top: 6px; }
+#ezPanel.dragging { opacity: .94; }
+#ezFabrication button.active { background: #1d5866; border-color: #6cc3d4; }
+
+/* Unit stats and the hostile-unit info card. */
+.unit-stats { font-size: 11px; color: #cfe0e6; }
+.unit-stats b { color: #fff; }
+.unit-type-row { margin-top: 3px; }
+#targetPanel { left: max(10px, env(safe-area-inset-left)); top: 128px; width: min(250px, 60vw); font-size: 12px; background: #2a1313ef; border-color: #7a3a36; pointer-events: auto; }
+#targetPanel.hidden { display: none; }
+#targetPanel .target-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+#targetPanel .target-head small { display: block; font-size: 9px; letter-spacing: .12em; color: #f08b80; }
+#targetPanel .target-head button { min-width: 28px; min-height: 28px; padding: 0; font-size: 16px; line-height: 1; }
+#targetPanel .target-bar { height: 5px; background: #3b2322; border-radius: 3px; overflow: hidden; margin: 6px 0; }
+#targetPanel .target-bar i { display: block; height: 100%; background: #e0685f; }
