@@ -5,13 +5,16 @@
 
   G.Scenario = {
     // Empty world for `seed`: terrain, spatial indexes and navigation, no entities.
-    createWorld(seed, { slot } = {}){
-      const prevSlot = G.State.activeSaveSlot;
+    createWorld(seed, { slot, map } = {}){
+      const prevSlot = G.State.activeSaveSlot, prevMap = G.State.map;
+      map = map || prevMap || G.MapGen.DEFAULT;
+      if (!G.MapGen.types[map]) throw new Error('Unknown map type ' + map);
       const S = G.resetState();
       G.setWorldSize(G.CONFIG.WORLD_TILES);
       S.seed = seed >>> 0;
       S.activeSaveSlot = slot || prevSlot || 1;
-      S.grid = G.MapGen.forest(S.seed);
+      S.map = map;
+      S.grid = G.MapGen.types[map].generate(S.seed);
       S.terrainEdits = [];
       S.spatial = new G.DenseGrid(G.CONFIG.WORLD_W, G.CONFIG.WORLD_H, G.CONFIG.SPATIAL_CELL);
       S.teamSpatial = { blue: G.teamGrid(), red: G.teamGrid() };
@@ -21,8 +24,8 @@
       G.Events.emit('world:created', S);
       return S;
     },
-    newGame({ seed = 72491, slot = 1 } = {}){
-      const S = this.createWorld(seed, { slot }), C = G.CONFIG, rules = G.EXPEDITION_RULES;
+    newGame({ seed = 72491, slot = 1, map = G.MapGen.DEFAULT } = {}){
+      const S = this.createWorld(seed, { slot, map }), C = G.CONFIG, rules = G.EXPEDITION_RULES;
       const cx = C.WORLD_W / 2, cy = C.WORLD_H / 2;
       const ship = G.Units.spawn('ship', cx, cy);
       ship.isShip = true; S.shipId = ship.id;

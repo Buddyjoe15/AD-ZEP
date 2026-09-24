@@ -55,7 +55,7 @@
       for (const owner of this.owners()){
         const q = owner.fabQueue[0];
         if (!q) continue;
-        q.left -= dt;
+        q.left = G.Cheats.instantBuild ? 0 : q.left - dt;
         if (q.left > 0) continue;
         const r = G.Defs.recipes.get(q.recipe);
         owner.fabQueue.shift();

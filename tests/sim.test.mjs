@@ -582,3 +582,97 @@ test('simulation is deterministic: the same swarm battle plays out identically t
   const a = play(), b = play();
   assert.deepEqual({ ...b }, { ...a });
 });
+
+test('new games use the all-grass test map; transit keeps the map type', () => {
+  const G = newGame();
+  const S = G.State;
+  assert.equal(S.map, 'grass');
+  assert.ok(S.grid.tiles.every(t => t === G.TT.GRASS), '100% grass');
+  assert.deepEqual(Array.from(S.terrainEdits), [], 'nothing to clear on open ground');
+  assert.ok(S.buildings.some(b => b.type === 'hostile_fabricator') && S.resourceNodes.length >= 4, 'testing zone and deposits still placed');
+  const forest = loadSim();
+  forest.Scenario.newGame({ seed: 72491, map: 'forest' });
+  assert.equal(fnv(forest.MapGen.forest(72491).tiles), 1434927080, 'forest generator unchanged');
+  assert.ok(forest.State.grid.tiles.some(t => t === forest.TT.TREE));
+});
+
+test('Utility Spider cargo holds 250 metal; loaded spiders follow the definition', () => {
+  const G = newGame();
+  const spider = find(G, 'utility_spider');
+  assert.equal(G.Defs.units.get('utility_spider').cargoCapacity, 250);
+  assert.equal(spider.cargoCapacity, 250);
+  const d = G.Save.serialize();
+  d.units.find(u => u.type === 'utility_spider').cargoCapacity = 600;
+  G.Save.restore(d, 1);
+  assert.equal(find(G, 'utility_spider').cargoCapacity, 250);
+  G.State.paused = false;
+  G.Gather.command(find(G, 'utility_spider'), G.State.resourceNodes.find(n => n.type === 'scrap_mine'));
+  let most = 0;
+  for (let i = 0; i < 40; i++){ G.Sim.run(1); most = Math.max(most, G.Units.cargoTotal(find(G, 'utility_spider'))); }
+  assert.ok(most > 200 && most <= 250, 'a load fills to 250, got ' + most);
+});
+
+test('debug cheats: godmode protects friendly units, instant build finishes at once, metal can be added', () => {
+  const G = newGame();
+  const S = G.State, hero = G.Units.hero(), guard = find(G, 'security_drone'), spider = find(G, 'utility_spider');
+  assert.equal(G.Cheats.addResource('metal', 5000), true);
+  assert.equal(G.Economy.get('metal'), G.EXPEDITION_RULES.startMetal + 5000);
+  assert.equal(G.Cheats.addResource('nope', 5), false);
+  G.Cheats.set('god', true);
+  for (let i = 0; i < 12; i++) G.Units.spawn('hostile_machine', hero.x + 150 + (i % 4) * 30, hero.y + Math.floor(i / 4) * 30);
+  G.Sim.run(6);
+  assert.equal(hero.hp, hero.maxHp, 'Vance untouched');
+  assert.equal(guard.hp, guard.maxHp);
+  G.Cheats.set('god', false);
+  // Instant build: the structure appears on the next tick, fabrication too.
+  G.Cheats.set('instantBuild', true);
+  const p = openTileNear(G, 2, 4);
+  assert.ok(G.Construction.order(spider, 'generator', p.x, p.y));
+  G.Sim.step();
+  assert.ok(S.buildings.some(b => b.type === 'generator' && b.gx === p.x && b.gy === p.y));
+  assert.equal(spider.buildSiteId, null);
+  const before = G.Units.countTeam('blue');
+  assert.ok(G.Fabrication.enqueue(G.Units.ship(), 'survey_drone'));
+  G.Sim.step();
+  assert.equal(G.Units.countTeam('blue'), before + 1);
+  G.Cheats.set('instantBuild', false);
+  assert.throws(() => G.Cheats.set('fly', true));
+});
+
+test('map editor: paint terrain around structures, erase objects, and keep it all in saves', () => {
+  const G = newGame();
+  const S = G.State, sh = G.Units.ship(), grid = S.grid, TT = G.TT;
+  // Water brush over the ship's edge: the ship's tiles are skipped, others painted.
+  const n = G.MapEdit.paint(sh.gx, sh.gy + 2, 5, TT.WATER);
+  assert.ok(n > 0 && n < 25, 'painted ' + n);
+  assert.equal(grid.get(sh.gx - 2, sh.gy + 2), TT.WATER);
+  assert.equal(grid.get(sh.gx + 1, sh.gy + 2), TT.GRASS, 'under the ship stays as it was');
+  // A unit standing where water is painted is moved to dry ground.
+  const u = find(G, 'survey_drone'), ux = Math.floor(u.x / T), uy = Math.floor(u.y / T);
+  G.MapEdit.paint(ux, uy, 3, TT.ROCK);
+  assert.ok(grid.passable(Math.floor(u.x / T), Math.floor(u.y / T)), 'unit evacuated');
+  // Passable brushes cover the whole square and replace older edits they cover.
+  G.MapEdit.paint(ux, uy, 9, TT.PATH);
+  assert.equal(grid.get(ux, uy), TT.PATH);
+  const edits = S.terrainEdits.length;
+  G.MapEdit.paint(ux, uy, 9, TT.FOREST);
+  assert.equal(S.terrainEdits.length, edits, 'the covered stroke was dropped');
+  // Erase: a structure, a resource node, a signal.
+  const wall = G.Buildings.add('wall', ux + 8, uy);
+  assert.equal(G.MapEdit.removeAt(wall.x, wall.y), 'Wall');
+  assert.ok(!S.buildings.includes(wall));
+  assert.equal(grid.passable(ux + 8, uy), true);
+  const node = S.resourceNodes.find(n => n.type === 'scrap_mine');
+  assert.ok(G.MapEdit.removeAt(node.x, node.y));
+  assert.ok(!S.resourceNodes.includes(node));
+  assert.equal(G.MapEdit.removeAt(sh.x, sh.y), null, 'the ship cannot be erased');
+  // Edits survive a save and load.
+  const tiles = Array.from(grid.tiles);
+  G.Save.restore(G.Save.serialize(), 1);
+  assert.deepEqual(Array.from(G.State.grid.tiles), tiles);
+  // Reset to grass clears every edit.
+  assert.ok(G.MapEdit.reset());
+  assert.ok(G.State.grid.tiles.every(t => t === TT.GRASS));
+  assert.deepEqual(Array.from(G.State.terrainEdits), []);
+  assert.equal(G.MapEdit.reset(TT.WATER), false, 'only passable terrain can fill the map');
+});

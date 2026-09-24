@@ -65,7 +65,7 @@
     },
     exportFile(){
       const blob = new Blob([G.Save.exportJSON()], { type: 'application/json' }), url = URL.createObjectURL(blob), a = document.createElement('a');
-      a.href = url; a.download = 'AD-EZP-expedition.json'; a.click();
+      a.href = url; a.download = 'AD-ZEP-expedition.json'; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     },
     renderPanel(){

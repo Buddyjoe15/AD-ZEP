@@ -49,7 +49,7 @@ export function fingerprint(value){
 // (arrival report), units with every order type, cargo, storage, follow, guard and patrol
 // orders, hostile swarm units from a running spawner, a construction site, fabrication
 // queues, a Mine Building with a stockpile, containers holding items, equipment, and the
-// landing and testing-zone terrain edits.
+// terrain edits painted with the Map Editor.
 export function representativeGame(){
   const G = newGame(72491);
   const S = G.State, T = G.CONFIG.TILE;
@@ -108,6 +108,9 @@ export function representativeGame(){
   const wall = G.Buildings.add('wall', wallAt.x, wallAt.y);
   const chestAt = S.grid.nearestOpen(sh.gx + 10, sh.gy + sh.h + 6, 10);
   G.Buildings.add('chest', chestAt.x, chestAt.y).items.push(G.Items.create('field_cap'));
+  // Map Editor strokes: a pond (impassable, painted around nothing) and a path.
+  G.MapEdit.paint(sh.gx + 20, sh.gy - 14, 5, G.TT.WATER);
+  G.MapEdit.paint(sh.gx + 12, sh.gy - 14, 3, G.TT.PATH);
 
   // Hostiles: a held group from the Hostile Fabricator, a few marching on Vance, one
   // attacking the wall and one attacking the straggler.

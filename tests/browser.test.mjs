@@ -328,9 +328,62 @@ test('old browser saves are backed up before upgrading; unloadable saves are rep
     assert.equal(await page.evaluate(() => localStorage.getItem(GW.Save.backupKey(3, 1))), v1);
     assert.equal(await page.evaluate(() => GW.Units.crew().length), 5, 'Vance and four drones');
     await page.evaluate(() => GW.Save.save(3));
-    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem(GW.Save.keyFor(3))).schema), 2);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem(GW.Save.keyFor(3))).schema === GW.SAVE_SCHEMA), true, 'rewritten in the current format');
     assert.equal(await page.evaluate(() => localStorage.getItem(GW.Save.backupKey(3, 1))), v1, 'backup survives the autosave');
     await page.evaluate(() => localStorage.clear());
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('debug cheats and the Map Editor work from the interface', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1365, height: 900 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    assert.equal(await page.title(), 'Abyssal Dawn: Zero Earth Protocol');
+    assert.ok(await page.evaluate(() => GW.State.grid.tiles.every(t => t === GW.TT.GRASS)), 'new games start on all grass');
+    assert.ok(await page.isHidden('#mapEdBtn'), 'Map Editor button only in debug mode');
+    await page.click('#dbgBtn');
+    // Cheats.
+    const metal = await page.evaluate(() => GW.Economy.get('metal'));
+    await page.click('#dbgPanel [data-metal="1000"]');
+    assert.equal(await page.evaluate(() => GW.Economy.get('metal')), metal + 1000);
+    await page.click('#dbgPanel [data-cheat="god"]');
+    await page.click('#dbgPanel [data-cheat="instantBuild"]');
+    assert.deepEqual(await page.evaluate(() => [GW.Cheats.god, GW.Cheats.instantBuild]), [true, true]);
+    // Map Editor: drag a water stroke east of Vance.
+    await page.click('#mapEdBtn');
+    assert.ok(await page.isVisible('#mapEdPanel'));
+    assert.ok(await page.isVisible('#mapEdBtn'), 'button stays while the editor is open');
+    await page.click('#mapEdPanel [data-terrain="water"]');
+    await page.click('#mapEdPanel [data-brush="3"]');
+    const tiles = await page.evaluate(() => { const h = GW.Units.hero(), T = GW.CONFIG.TILE; return { gx: Math.floor(h.x / T) + 4, gy: Math.floor(h.y / T) - 3, T }; });
+    const a = await screen(page, (tiles.gx + 0.5) * tiles.T, (tiles.gy + 0.5) * tiles.T), b = await screen(page, (tiles.gx + 6.5) * tiles.T, (tiles.gy + 0.5) * tiles.T);
+    await page.mouse.move(a.x, a.y); await page.mouse.down();
+    for (let i = 1; i <= 6; i++) await page.mouse.move(a.x + (b.x - a.x) * i / 6, a.y);
+    await page.mouse.up();
+    const row = await page.evaluate(({ gx, gy }) => Array.from({ length: 7 }, (_, i) => GW.State.grid.get(gx + i, gy)), tiles);
+    assert.ok(row.every(t => t === 2), 'water along the stroke: ' + row);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: path.join(OUT, 'map-editor.png') });
+    // Objects: place a wall; Erase: remove it.
+    await page.click('#mapEdPanel [data-tab="objects"]');
+    const wallIndex = await page.evaluate(() => GW.MapEditorUI.objects().findIndex(e => e.key === 'wall'));
+    await page.click(`#mapEdPanel [data-obj="${wallIndex}"]`);
+    const w = await screen(page, (tiles.gx + 0.5) * tiles.T, (tiles.gy + 4.5) * tiles.T);
+    await page.mouse.click(w.x, w.y);
+    assert.equal(await page.evaluate(({ gx, gy }) => GW.Buildings.at(gx, gy + 4)?.type, tiles), 'wall');
+    await page.click('#mapEdPanel [data-tab="erase"]');
+    await page.mouse.click(w.x, w.y);
+    assert.equal(await page.evaluate(({ gx, gy }) => GW.Buildings.at(gx, gy + 4), tiles), null);
+    // Reset asks once, then clears the map to grass.
+    await page.click('#mapEdPanel [data-tab="terrain"]');
+    await page.click('#medReset'); await page.click('#medReset');
+    assert.ok(await page.evaluate(() => GW.State.grid.tiles.every(t => t === GW.TT.GRASS)));
+    await page.click('#medClose');
+    assert.ok(await page.isHidden('#mapEdBtn'), 'hidden again once debug mode is closed');
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

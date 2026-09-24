@@ -75,7 +75,7 @@ GW.Defs.buildables.define('refinery', {
 
 **Resource nodes, climates and expedition balance** live in `src/data/world.js` (`GW.EXPEDITION_RULES`). A node is either `kind: 'scavenge'` (collected directly by gatherers) or `kind: 'deposit'` (a 1×1 tile that needs its `building` built centred on it). Add a new mine type by defining a deposit node, then either reuse `mine_building` or add a buildable with `placeOnNode: 'deposit'`, an odd footprint and an `extractor` behaviour.
 
-The debug catalog (DEBUG button) lists every registered structure, item, unit and node, so new content can be placed and inspected immediately.
+The debug catalog (DEBUG button) lists every registered structure, item, unit and node, so new content can be placed and inspected immediately. It also holds the cheats (`GW.Cheats`: metal, godmode, instant build). The Map Editor (`src/ui/mapeditor.js`) paints terrain and places or erases objects through `GW.MapEdit` in `src/sim/debugtools.js`.
 
 ## Scaling notes
 
@@ -98,9 +98,9 @@ Browser benchmarks (tick budget is 33 ms): 5,000 enemies swarming Vance take abo
 
 AI contributors: the binding rules are under "Save format rules" in [`CLAUDE.md`](../CLAUDE.md) (the same text is in [`AGENTS.md`](../AGENTS.md)).
 
-`GW.Save.serialize()` writes schema `GW.SAVE_SCHEMA` (currently 2). `migrate()` upgrades older saves one step at a time through named functions in `src/sim/save.js` (`migrate_1_to_2`, then `migrate_2_to_3`, and so on), registered in `MIGRATIONS` by the schema they start from. `validate()` then rejects malformed data before anything changes. If rebuilding the world still fails part way, `restore()` rolls back to the game that was running.
+`GW.Save.serialize()` writes schema `GW.SAVE_SCHEMA` (currently 3). `migrate()` upgrades older saves one step at a time through named functions in `src/sim/save.js` (`migrate_1_to_2`, then `migrate_2_to_3`, and so on), registered in `MIGRATIONS` by the schema they start from. `validate()` then rejects malformed data before anything changes. If rebuilding the world still fails part way, `restore()` rolls back to the game that was running.
 
-Terrain is regenerated from the seed, and `terrainEdits` replays any changes made after generation. The map generator must keep its RNG call order: a terrain fingerprint test fails if generation changes.
+Terrain is regenerated from the seed by the save's map type (`map`: `grass` for new games, `forest` for saves from before v0.7; see `GW.MapGen.types`), and `terrainEdits` replays any changes made after generation, including Map Editor strokes. The forest generator must keep its RNG call order: a terrain fingerprint test fails if generation changes. To add a map type, add a generator to `GW.MapGen.types`; never change what an existing type generates.
 
 `tests/save.test.mjs` guards the format:
 

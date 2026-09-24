@@ -88,6 +88,7 @@
       const S = G.State;
       for (const site of [...S.constructionSites]){
         const u = this.builderFor(site);
+        if (u && G.Cheats.instantBuild){ G.Construction.complete(site); continue; }
         if (!u){
           // Builder lost: the site cannot finish, so refund it rather than block departure.
           S.constructionSites = S.constructionSites.filter(s => s !== site);

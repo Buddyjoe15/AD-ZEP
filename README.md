@@ -1,4 +1,4 @@
-# Abyssal Dawn: Earth Zero Protocol — v0.6
+# Abyssal Dawn: Zero Earth Protocol — v0.7
 
 A browser expedition strategy game. Commander Elias Vance and the UES Aster Vale land on an unfamiliar Earth. You study signals, mine metal with Utility Spiders, fabricate drones, build field structures, and survive hostile machines while the drive stabilises. Then you recall the crew and transit to the next Earth.
 
@@ -21,6 +21,7 @@ Choose **New Game → Save Slot → Launch expedition**. The same seed always ge
 | Mine | Build a **Mine Building** on a Metal Mine deposit (it snaps on), then right-click the building with a Spider selected | Tap the building with a Spider selected |
 | Follow | Select any friendly unit(s) → **Follow** → click the unit to follow · **Stop** cancels | Same, with taps |
 | Inspect | Long-press anything | Long-press anything |
+| Debug & Map Editor | **DEBUG** (top bar): add metal, godmode, instant build, and place anything. **MAP EDITOR** (shown in debug mode): paint terrain with a 1–9 tile brush, place structures, deposits and signals, erase objects, reset the map to grass | Same; two fingers still pan and zoom while editing |
 | Load test | Click the red **HF** Hostile Fabricator in the testing zone (or place one from DEBUG): set spawn speed and count, choose hold or hunt, press Start | Same |
 | Other | H: centre on ship · I: inventory · Space: pause · Esc: cancel · F3: diagnostics | — |
 
@@ -42,6 +43,20 @@ The browser tests need Playwright and Chromium (`npm install --no-save playwrigh
 The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/world`, `src/sim`) and a **presentation** layer (`src/render`, `src/ui`). The simulation runs headless in Node, which is how the tests drive whole expeditions in milliseconds.
 
 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** explains the structure and how to add units, items, structures, behaviours, resources and systems. Most new content is a data definition only.
+
+## What changed in v0.7
+
+- **Renamed** to *Abyssal Dawn: Zero Earth Protocol* (AD-ZEP). Saves keep their internal `AD-EZP` identifier, so existing saves still load.
+- **Test map.** New games start on open grass with no terrain at all. The testing zone, ship, deposits and signals are placed as before. Add water, trees, mountains, paths and ruins with the Map Editor.
+- **Map Editor** (debug mode). The **MAP EDITOR** button next to DEBUG opens a panel with three tabs:
+  - *Terrain*: 12 terrain types with a 1×1 to 9×9 brush. Tap or drag to paint. Blocking terrain (water, trees, rock, ruin walls) never covers structures or resource nodes, and units standing there are moved aside.
+  - *Objects*: every structure, both resource node types, and signals.
+  - *Erase*: removes structures (not the ship), containers, nodes, signals and construction sites; construction sites are refunded.
+
+  *Reset map to grass* clears everything. Edits are saved with the game.
+- **Debug cheats.** Add 100, 1,000 or 10,000 metal. **Godmode** makes friendly units take no damage (structures still do). **Instant build** finishes construction and fabrication on the next tick. Cheats are session settings and are not saved.
+- **Utility Spider** cargo holds 250 metal (was 600). Spiders in older saves are updated when loaded.
+- **Save format: schema 3.** Saves record which map built their terrain (`map`: `grass` or `forest`). Saves from v0.5 and v0.6 are migrated as `forest` and keep their original forest terrain. The original is backed up before the upgrade, as before.
 
 ## What changed in v0.6
 

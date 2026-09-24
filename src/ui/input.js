@@ -100,6 +100,16 @@
         this.buildGesture = { id: e.pointerId };
         this.dragCam = null; this.box = null; this.cancelTouchHold(); this.cancelFormationGesture(); return;
       }
+      // Map Editor: one finger (or the left button) edits; a second finger ends the stroke
+      // and pinches as usual.
+      if (G.MapEditorUI.active() && (e.pointerType !== 'mouse' || e.button === 0)){
+        if (this.ptr.size === 1){
+          this.ptr.get(e.pointerId).handled = true;
+          if (G.MapEditorUI.pointerDown(q.x, q.y)) this.editGesture = { id: e.pointerId };
+          return;
+        }
+        G.MapEditorUI.pointerUp(); this.editGesture = null;
+      }
       if (this.ptr.size === 2){
         this.cancelTouchHold(); this.cancelFormationGesture(); this.cancelInspect();
         const a = [...this.ptr.values()];
@@ -164,6 +174,10 @@
       const o = this.ptr.get(e.pointerId);
       if (!o) return;
       const p = this.p(e), dist = Math.hypot(p.x - o.sx, p.y - o.sy);
+      if (this.editGesture && this.editGesture.id === e.pointerId){
+        o.x = p.x; o.y = p.y; o.moved = o.moved || dist > SLOP;
+        const q = G.worldFromScreen(p.x, p.y); G.MapEditorUI.pointerMove(q.x, q.y); return;
+      }
       if (this.inspect && this.inspect.id === e.pointerId && dist > 10) this.cancelInspect();
       if (this.buildGesture && this.buildGesture.id === e.pointerId){
         o.x = p.x; o.y = p.y; o.moved = o.moved || dist > 4;
@@ -194,6 +208,7 @@
     up(e){
       const o = this.ptr.get(e.pointerId);
       if (!o) return;
+      if (this.editGesture && this.editGesture.id === e.pointerId){ G.MapEditorUI.pointerUp(); this.editGesture = null; }
       const S = G.State, inspected = this.inspect && this.inspect.id === e.pointerId && this.inspect.shown;
       this.cancelInspect();
       const finish = () => { this.ptr.delete(e.pointerId); if (this.ptr.size < 2) this.pinch = null; this.dragCam = null; this.touchHold = null; };
@@ -248,6 +263,7 @@
       finish();
     },
     cancel(e){
+      if (this.editGesture){ G.MapEditorUI.pointerUp(); this.editGesture = null; }
       this.cancelTouchHold(); this.cancelFormationGesture(); this.cancelInspect();
       this.buildGesture = null; this.ptr.delete(e.pointerId); this.box = null; this.dragCam = null;
       if (this.ptr.size < 2) this.pinch = null;

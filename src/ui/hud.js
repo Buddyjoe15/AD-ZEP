@@ -10,7 +10,7 @@
   G.UI = {
     dev: false, menuTab: 'overview', menuWasPaused: false, selectionSig: '', economySig: '', lastSlow: 0,
     init(){
-      document.querySelectorAll('.version-label').forEach(n => { n.textContent = 'AD-EZP ' + G.VERSION; });
+      document.querySelectorAll('.version-label').forEach(n => { n.textContent = 'AD-ZEP ' + G.VERSION; });
       $('inventoryBtn').addEventListener('click', () => this.toggleInventory());
       $('pauseBtn').addEventListener('click', () => this.togglePause());
       $('menuBtn').addEventListener('click', () => this.openGameMenu());
