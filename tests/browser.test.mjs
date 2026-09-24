@@ -77,7 +77,9 @@ for (const target of ['index.html', 'dist/ad-ezp.html']){
       await page.mouse.click(p.x, p.y);
       assert.ok(await page.evaluate(() => GW.State.selected.has(GW.State.heroId)));
       await page.mouse.click(p.x + 160, p.y + 60, { button: 'right' });
-      await page.waitForTimeout(600);
+      // Wait on game progress rather than a fixed time: slow CI runners drop simulation
+      // steps when frames take long, so 600 ms of wall clock is not always 600 ms of game.
+      await page.waitForFunction(([x, y]) => Math.hypot(GW.Units.hero().x - x, GW.Units.hero().y - y) > 20, [hero.x, hero.y], { timeout: 8000 }).catch(() => {});
       const moved = await page.evaluate(([x, y]) => Math.hypot(GW.Units.hero().x - x, GW.Units.hero().y - y), [hero.x, hero.y]);
       assert.ok(moved > 20, 'Vance moved ' + moved);
 
