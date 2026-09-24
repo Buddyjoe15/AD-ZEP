@@ -89,7 +89,37 @@ for (const target of ['index.html', 'dist/ad-ezp.html']){
       await page.mouse.click(p.x, p.y);
       assert.equal(await page.evaluate(() => GW.State.constructionSites.length), 1);
 
+      // The Spider panel shows storage out of 25.
+      assert.match(await page.textContent('#selectionPanel'), /Storage\s*0 \/ 25/);
+      // Place a Mine Building from the build menu: clicking beside a deposit snaps it on.
+      const dep = await page.evaluate(() => { const n = GW.State.resourceNodes.filter(n => n.type === 'metal_mine' && !GW.Gather.mineOn(n))
+        .sort((a, b) => GW.dist2(a, GW.Units.ship()) - GW.dist2(b, GW.Units.ship()))[0]; GW.centerCamera(n.x, n.y); GW.State.resources.metal = 1000; return { x: n.x, y: n.y, gx: n.gx, gy: n.gy }; });
+      await page.evaluate(() => { const u = GW.State.units.find(u => u.type === 'utility_spider'); GW.Orders.setCommand([u], 'idle'); GW.Selection.set([u.id]); });
+      await page.click('#truckBuildBtn');
+      await page.click('[data-build-pick="mine_building"]');
+      p = await screen(page, dep.x + 30, dep.y + 20);
+      await page.mouse.click(p.x, p.y);
+      const site = await page.evaluate(() => GW.State.constructionSites.find(s => s.type === 'mine_building'));
+      assert.ok(site, 'mine site queued');
+      assert.deepEqual([site.gx, site.gy, site.w, site.h], [dep.gx - 1, dep.gy - 1, 3, 3], '3×3 centred on the 1×1 deposit');
+      await page.screenshot({ path: path.join(OUT, `${tag}-mine-site.png`) });
+
+      // Follow: select the Security Drone, press Follow, tap the Survey Drone.
+      const units = await page.evaluate(() => { const g = GW.State.units.find(u => u.type === 'security_drone'), s = GW.State.units.find(u => u.type === 'survey_drone');
+        GW.centerCamera((g.x + s.x) / 2, (g.y + s.y) / 2); GW.Selection.set([g.id]); return { sx: s.x, sy: s.y, sid: s.id, gid: g.id }; });
+      await page.waitForSelector('#selectionPanel [data-unit-command="follow"]');
+      assert.equal(await page.$('#selectionPanel [data-unit-command="follow"]:has-text("Follow Vance")'), null, 'no Follow Vance button');
+      await page.click('#selectionPanel [data-unit-command="follow"]');
+      p = await screen(page, units.sx, units.sy);
+      await page.mouse.click(p.x, p.y);
+      const f = await page.evaluate(id => { const u = GW.Units.get(id); return { command: u.command, followId: u.followId, sel: [...GW.State.selected] }; }, units.gid);
+      assert.equal(f.command, 'follow'); assert.equal(f.followId, units.sid);
+      assert.deepEqual(f.sel, [units.gid], 'choosing the target does not change the selection');
+      assert.match(await page.textContent('#selectionPanel'), /Following Survey Drone/);
+      await page.screenshot({ path: path.join(OUT, `${tag}-follow.png`) });
+
       // Box-select everyone with a drag.
+      await page.evaluate(() => { const h = GW.Units.hero(); GW.centerCamera(h.x, h.y); });
       await page.mouse.move(20, 200); await page.mouse.down(); await page.mouse.move(1340, 880, { steps: 5 }); await page.mouse.up();
       assert.ok(await page.evaluate(() => GW.State.selected.size >= 4));
 

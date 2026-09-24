@@ -414,7 +414,9 @@ test('Hostile Fabricator spawns at the chosen speed up to the chosen count', () 
   S.paused = false;   // gameplay resumes after a load (the UI does this when it enters the scene)
   const b2 = S.buildings.find(x => x.id === b.id);
   assert.equal(G.Spawner.state(b2).amount, 50);
-  assert.equal(G.Spawner.clear(b2), 50);
+  const alive = G.Spawner.spawnedBy(b2).length;   // nearby crew may have shot a few held units
+  assert.ok(alive >= 45);
+  assert.equal(G.Spawner.clear(b2), alive);
   assert.equal(S.units.filter(u => u.team === 'red').length, 0);
   // Very fast rates are spread over ticks, and the whole run still completes.
   G.Spawner.configure(b2, { rate: 1000, amount: 1200, hold: true });
@@ -425,4 +427,86 @@ test('Hostile Fabricator spawns at the chosen speed up to the chosen count', () 
   assert.equal(G.Spawner.state(b2).spawned, 1200, 'counted as spawned (nearby crew may already be shooting some)');
   assert.equal(G.Spawner.state(b2).running, false);
   assert.equal(G.Defs.buildables.get('hostile_fabricator').debugOnly, true, 'not in the Spider build menu');
+});
+
+test('metal mines need a centred 3×3 Mine Building, then extract slowly into a stockpile Spiders haul', () => {
+  const G = newGame();
+  const S = G.State, spider = find(G, 'utility_spider');
+  const deposits = S.resourceNodes.filter(n => n.type === 'metal_mine');
+  assert.ok(deposits.length >= 3, 'deposits near the ship plus one in the testing zone');
+  const free = deposits.find(n => !G.Gather.mineOn(n) && !S.buildings.some(b => b.nodeId === n.id));
+  assert.ok(free.remaining >= 1e6 - 1, 'near-endless reserve');
+  // A bare deposit does nothing and cannot be hauled from.
+  assert.equal(G.Gather.command(spider, free), false);
+  // Placement: only centred on the deposit.
+  const d = G.Defs.buildables.get('mine_building');
+  assert.equal(d.w, 3); assert.equal(d.h, 3);
+  assert.equal(G.Buildings.canPlaceKey('mine_building', free.gx, free.gy), false, 'off-centre');
+  assert.equal(G.Buildings.canPlaceKey('mine_building', free.gx - 1, free.gy - 1), true, 'centred');
+  const snap = G.Buildings.placementAt('mine_building', free.x + 40, free.y - 30);
+  assert.deepEqual([snap.gx, snap.gy], [free.gx - 1, free.gy - 1], 'snaps onto the nearby deposit');
+  assert.equal(G.Buildings.canPlaceKey('wall', free.gx, free.gy), false, 'other structures cannot cover a deposit');
+  // Build it with the Spider.
+  S.resources.metal = 500;
+  assert.ok(G.Construction.order(spider, 'mine_building', free.gx - 1, free.gy - 1));
+  G.Sim.run(40);
+  const mine = S.buildings.find(b => b.type === 'mine_building' && b.gx === free.gx - 1);
+  assert.ok(mine, 'mine built');
+  assert.equal(free.buildingId, mine.id);
+  // Extraction is slow (2/s) compared with scavenging (20/s).
+  const s0 = G.Gather.stockTotal(mine);
+  G.Sim.run(10);
+  const made = G.Gather.stockTotal(mine) - s0;
+  assert.ok(made > 17 && made < 23, 'about 20 in 10 s, got ' + made);
+  // Haul from the stockpile to the ship.
+  const metal = G.Economy.get('metal');
+  assert.ok(G.Gather.command(spider, mine));
+  G.Sim.run(60);
+  assert.ok(G.Economy.get('metal') > metal + 30, 'hauled metal arrived: ' + (G.Economy.get('metal') - metal));
+  assert.equal(spider.mineId, mine.id);
+  assert.ok(free.remaining > 1e6 - 1000);
+  // Saves keep the pairing; destroying the mine frees the deposit.
+  const saved = G.Save.serialize();
+  G.Save.validate(saved);
+  G.Save.restore(saved, 1); S.paused = false;
+  const mine2 = S.buildings.find(b => b.id === mine.id), node2 = S.resourceNodes.find(n => n.id === free.id);
+  assert.equal(G.Gather.mineOn(node2), mine2);
+  mine2.hp = 0; G.Sim.run(0.2);
+  assert.equal(node2.buildingId, null);
+  assert.equal(G.Buildings.canPlaceKey('mine_building', node2.gx - 1, node2.gy - 1), true);
+});
+
+test('Follow: any friendly unit follows the unit chosen for it', () => {
+  const G = newGame();
+  const S = G.State, hero = G.Units.hero(), survey = find(G, 'survey_drone'), guard = find(G, 'security_drone'), spider = find(G, 'utility_spider');
+  // A drone follows another drone (not Vance).
+  assert.equal(G.Orders.setCommand([guard], 'follow', null, survey.id).length, 1);
+  assert.equal(guard.followId, survey.id);
+  const dest = G.openPoint(survey.x + 900, survey.y + 300);
+  G.Orders.move([survey], dest.x, dest.y);
+  G.Sim.run(12);
+  assert.ok(Math.hypot(guard.x - survey.x, guard.y - survey.y) < 200, 'guard kept up with the survey drone');
+  // Vance can follow too, and a unit never follows itself.
+  assert.equal(G.Orders.setCommand([hero, spider], 'follow', null, spider.id).length, 1, 'only Vance; the Spider skips itself');
+  assert.equal(hero.command, 'follow');
+  assert.equal(spider.command, 'idle');
+  // Following ends when the target dies.
+  survey.hp = 0;
+  G.Sim.run(0.5);
+  assert.equal(guard.command, 'idle');
+  // Stop clears it; hostiles cannot be followed.
+  G.Orders.setCommand([hero], 'idle');
+  assert.equal(hero.command, 'idle');
+  const foe = G.Units.spawn('hostile_machine', hero.x + 2000, hero.y);
+  assert.equal(G.Orders.setCommand([guard], 'follow', null, foe.id).length, 0);
+});
+
+test('Utility Spider storage holds 25 and older saves are upgraded', () => {
+  const G = newGame();
+  const spider = find(G, 'utility_spider');
+  assert.equal(spider.storage.capacity, 25);
+  const d = G.Save.serialize();
+  d.units.find(u => u.type === 'utility_spider').storage.capacity = 10;
+  G.Save.restore(d, 1);
+  assert.equal(find(G, 'utility_spider').storage.capacity, 25);
 });

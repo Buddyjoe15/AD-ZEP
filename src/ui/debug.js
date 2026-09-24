@@ -36,6 +36,8 @@
       if (b?.fabQueue?.length) rows.push(['Queue', b.fabQueue.length + ' in production']);
       rows.push(['Build time', d.buildTime + 's'], ['Cost', G.Economy.describe(d.cost)]);
       if (d.container) rows.push(['Capacity', d.container.capacity + ' slots']);
+      const ex = d.behaviors.find(x => x.type === 'extractor');
+      if (ex) rows.push(['Stockpile', `${Math.floor(b ? G.Gather.stockTotal(b) : 0)} / ${ex.stockCap}`], ['Placement', 'Centred on a mine deposit']);
       if (d.spawner){ const s = b ? G.Spawner.state(b) : d.spawner; rows.push(['Spawns', G.Defs.units.get(d.spawner.unit)?.name]); if (b) rows.push(['Progress', `${s.spawned} / ${s.amount} at ${s.rate}/s${s.running ? ' (running)' : ''}`]); }
       return { title: d.name, sub: 'Building', rows, desc: d.description };
     },
@@ -45,7 +47,14 @@
       if (d.cargoCapacity) rows.push(['Cargo', u ? `${Math.floor(G.Units.cargoTotal(u))} / ${u.cargoCapacity}` : d.cargoCapacity]);
       return { title: u?.name || d.name, sub: 'Unit', rows, desc: '' };
     },
-    nodeDetails(d, n){ return { title: d.name, sub: 'Asset', rows: [['Resource', d.resource], ['Remaining', n ? `${Math.round(n.remaining)} / ${d.capacity}` : d.capacity], ['Rate', d.rate + '/s']], desc: d.description }; },
+    nodeDetails(d, n){
+      const rows = [['Resource', d.resource], ['Type', d.kind === 'deposit' ? 'Mine (1×1)' : 'Scavenge']];
+      if (d.kind === 'deposit'){
+        rows.push(['Reserve', n ? Math.round(n.remaining).toLocaleString() : d.capacity.toLocaleString()], ['Extraction', d.rate + '/s with a ' + (G.Defs.buildables.get(d.building)?.name || d.building)]);
+        if (n) rows.push(['Mine', G.Gather.mineOn(n) ? 'Built' : 'Not built']);
+      } else rows.push(['Remaining', n ? `${Math.round(n.remaining)} / ${d.capacity}` : d.capacity], ['Collect rate', d.rate + '/s']);
+      return { title: d.name, sub: 'Asset', rows, desc: d.description };
+    },
     siteDetails(kind, p){
       const rows = [['Kind', kind]];
       if (p) rows.push(['Study', p.done ? 'Complete' : `${Math.round(p.progress / G.EXPEDITION_RULES.signalStudySeconds * 100)}%`]);
@@ -78,15 +87,18 @@
       const S = G.State, T = G.CONFIG.TILE, gx = Math.floor(wx / T), gy = Math.floor(wy / T), cx = (gx + 0.5) * T, cy = (gy + 0.5) * T;
       const free = () => G.Buildings.canPlace(gx, gy, 1, 1);
       if (e.kind === 'building'){
-        const d = G.Defs.buildables.get(e.key);
-        if (!G.Buildings.canPlace(gx, gy, d.w, d.h)){ G.notify('Tile is occupied'); return false; }
-        G.Buildings.add(e.key, gx, gy, { id: 'debug-' + G.newId() });
+        const d = G.Defs.buildables.get(e.key), at = G.Buildings.placementAt(e.key, wx, wy);
+        if (!G.Buildings.canPlaceKey(e.key, at.gx, at.gy)){ G.notify(d.placeOnNode === 'deposit' ? 'Place it on a free mine deposit' : 'Tile is occupied'); return false; }
+        G.Buildings.add(e.key, at.gx, at.gy, { id: 'debug-' + G.newId() });
       } else if (e.kind === 'item'){
         if (!free()){ G.notify('Tile is occupied'); return false; }
         G.Containers.groundItem(cx, cy, G.Items.create(e.key), { gx, gy });
       } else if (!S.grid.passable(gx, gy)){ G.notify('Tile is blocked'); return false; }
       else if (e.kind === 'unit') G.Units.spawn(e.key, cx, cy);
-      else if (e.kind === 'node') G.Gather.addNode(e.key, cx, cy);
+      else if (e.kind === 'node'){
+        if (G.Defs.nodes.get(e.key).kind === 'deposit' && G.Gather.depositAt(gx, gy)){ G.notify('A deposit is already here'); return false; }
+        G.Gather.addNode(e.key, cx, cy);
+      }
       else S.expedition.sites.push({ id: 'debug-site-' + G.newId(), x: cx, y: cy, kind: e.key, done: false, progress: 0 });
       G.notify(e.name + ' placed');
       return true;

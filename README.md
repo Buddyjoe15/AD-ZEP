@@ -18,6 +18,8 @@ Choose **New Game → Save Slot → Launch expedition**. The same seed always ge
 | Camera | WASD / arrows, mouse wheel, minimap | Drag empty ground, pinch |
 | Fabricate | Click the ship (or a Fabricator) | Tap the ship |
 | Build | Select a Utility Spider → Build | Same |
+| Mine | Build a **Mine Building** on a Metal Mine deposit (it snaps on), then right-click the building with a Spider selected | Tap the building with a Spider selected |
+| Follow | Select any friendly unit(s) → **Follow** → click the unit to follow · **Stop** cancels | Same, with taps |
 | Inspect | Long-press anything | Long-press anything |
 | Load test | Click the red **HF** Hostile Fabricator in the testing zone (or place one from DEBUG): set spawn speed and count, choose hold or hunt, press Start | Same |
 | Other | H: centre on ship · I: inventory · Space: pause · Esc: cancel · F3: diagnostics | — |
@@ -55,6 +57,9 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
   - The testing-zone Sensor Station no longer collects a generated signal for free.
   - Removing a backpack can no longer strand items beyond your capacity.
   - Minimap colours now match the terrain.
+- **Two ways to get metal.** *Scavenging Mines* are loose salvage a Spider collects itself, fast (20/s), until they run out. *Metal Mines* are 1×1 deposits with a near-endless reserve. Nothing happens until you build a 3×3 **Mine Building** centred over one. It then extracts slowly (2/s) into a 300-unit stockpile, and Spiders haul that stockpile to the ship. Each Earth has two Metal Mines near the ship, and the testing zone has one with a Mine Building already on it.
+- **Follow** replaces "Follow Vance". Any friendly unit, Vance included, can follow any other friendly unit you tap. A dashed line shows who it is following.
+- **Utility Spider storage** is 25 slots, shown in the selection panel. Older saves are upgraded when loaded.
 - **Hostile Fabricator** (test tool): a spawner structure that produces Hostile Autonomous Machines at 1–1,000 per second, up to 20,000 in total. Spawned units hold position or hunt the crew. Its window shows live unit counts, on-screen count, fps and frame times. It is hidden from the Spider's build menu.
 - **Now working:** the Repair Station heals nearby units, and the Sensor Station studies signals in range (its description already claimed this).
 - **Removed dead features:** the XP/skill tree and coin currency. The v0.5 expedition layer had disabled both, and they no longer appear in the interface.

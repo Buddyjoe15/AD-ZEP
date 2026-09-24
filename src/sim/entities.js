@@ -85,7 +85,8 @@
       if (G.State.paths) G.State.paths.cancel(u);
       u.path = []; u.pathIndex = 0; u.command = 'idle'; u.commandNextPath = 0;
       u.guardPoint = null; u.patrolA = null; u.patrolB = null;
-      if (u.cargo){ u.nodeId = null; u.haulState = 'idle'; }
+      if (u.cargo){ u.nodeId = null; u.mineId = null; u.haulState = 'idle'; }
+      u.followId = null;
       if (!keepRecall) u.recallPoint = null;
     },
     navIdle(u){ return !u.path.length && !u.pathPending; }

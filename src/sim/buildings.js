@@ -73,6 +73,28 @@
       }
       return true;
     },
+    // Full placement rule for a buildable: open footprint, and deposits respected. Mine
+    // structures (placeOnNode: 'deposit') must be centred on a free deposit; every other
+    // structure must leave deposits uncovered.
+    canPlaceKey(key, gx, gy){
+      const d = G.Defs.buildables.get(key);
+      if (!d || !this.canPlace(gx, gy, d.w, d.h)) return false;
+      const inside = G.State.resourceNodes.filter(n => G.Gather.isDeposit(n) && n.gx >= gx && n.gx < gx + d.w && n.gy >= gy && n.gy < gy + d.h);
+      if (d.placeOnNode !== 'deposit') return inside.length === 0;
+      const centre = G.Gather.depositAt(gx + Math.floor(d.w / 2), gy + Math.floor(d.h / 2));
+      return !!centre && inside.length === 1 && !G.Gather.mineOn(centre) && G.Defs.nodes.get(centre.type).building === key;
+    },
+    // Top-left tile for placing `key` near a world point: snapped over the nearest free
+    // deposit for mine structures, the tile under the point otherwise.
+    placementAt(key, wx, wy){
+      const d = G.Defs.buildables.get(key), T = G.CONFIG.TILE;
+      if (d && d.placeOnNode === 'deposit'){
+        const n = G.Gather.freeDepositNear(wx, wy, 3);
+        if (n) return { gx: n.gx - Math.floor(d.w / 2), gy: n.gy - Math.floor(d.h / 2), node: n };
+        return { gx: Math.floor(wx / T) - Math.floor(d.w / 2), gy: Math.floor(wy / T) - Math.floor(d.h / 2), node: null };
+      }
+      return { gx: Math.floor(wx / T), gy: Math.floor(wy / T), node: null };
+    },
     // Largest damage reduction from friendly aura structures covering `unit`.
     damageReduction(unit){
       if (!unit || unit.team !== 'blue') return 0;

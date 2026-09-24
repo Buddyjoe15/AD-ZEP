@@ -44,7 +44,11 @@
       else if (k === 'f3'){ e.preventDefault(); G.UI.toggleDev(); }
       else if (k === 'i'){ e.preventDefault(); G.UI.toggleInventory(); }
       else if (k === ' '){ e.preventDefault(); G.UI.togglePause(); }
-      else if (k === 'escape'){ if (G.BuildUI.active()) G.BuildUI.cancel(); else { this.commandMode = null; G.Selection.clear(); } }
+      else if (k === 'escape'){
+        if (G.BuildUI.active()) G.BuildUI.cancel();
+        else if (this.commandMode){ this.commandMode = null; G.UI.toast('Order cancelled'); }
+        else G.Selection.clear();
+      }
     },
     p(e){ const r = G.Renderer.cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; },
 
@@ -73,6 +77,12 @@
     },
     buildingAt(wx, wy){ const T = G.CONFIG.TILE; return G.Buildings.at(Math.floor(wx / T), Math.floor(wy / T)); },
     nodeAt(wx, wy){ const r = 32 / G.State.camera.z; return G.State.resourceNodes.find(n => n.remaining > 0 && Math.hypot(n.x - wx, n.y - wy) < r) || null; },
+    // Something a gatherer can be sent to: a Mine Building, or a scavenge / deposit node.
+    gatherTarget(wx, wy){
+      const b = this.buildingAt(wx, wy);
+      if (b && G.Gather.isMine(b)) return b;
+      return this.nodeAt(wx, wy);
+    },
     canInteract(){ const S = G.State; return S.camera.z >= G.CONFIG.INTERACT_MIN_ZOOM && S.selected.has(S.heroId); },
     selectedUnits(){ return G.Selection.units(); },
     gatherer(){ return this.selectedUnits().find(u => G.Units.can(u, 'gather')); },
@@ -97,22 +107,33 @@
         this.pinch = { anchor: G.worldFromScreen((a[0].x + a[1].x) / 2, (a[0].y + a[1].y) / 2), d: Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), z: G.State.camera.z };
         return;
       }
+      // A pointer consumed here must not also act as a tap / click on release.
+      const consume = () => { const o = this.ptr.get(e.pointerId); if (o) o.handled = true; };
       if (e.button === 2){
-        const us = this.selectedUnits(), node = this.nodeAt(q.x, q.y), gatherer = this.gatherer();
-        if (node && gatherer) G.Gather.command(gatherer, node);
+        const us = this.selectedUnits(), target = this.gatherTarget(q.x, q.y), gatherer = this.gatherer();
+        if (target && gatherer) G.Gather.command(gatherer, target);
         else if (us.length) G.Orders.move(us, q.x, q.y);
         return;
       }
+      if (this.commandMode === 'follow'){
+        consume();
+        const t = this.unitAt(q.x, q.y);
+        if (!t){ G.UI.toast('Tap the friendly unit to follow · Esc to cancel'); return; }
+        const us = this.selectedUnits(), done = G.Orders.setCommand(us, 'follow', null, t.id);
+        G.UI.toast(done.length ? `${done.length === 1 ? done[0].name : done.length + ' units'} following ${t.name}` : 'A unit cannot follow itself');
+        this.commandMode = null; G.UI.refreshSelection(true); return;
+      }
       if (this.commandMode){
+        consume();
         G.Orders.setCommand(this.selectedUnits(), this.commandMode, q);
         G.UI.toast(this.commandMode === 'guard' ? 'Guard location set' : 'Patrol route set');
         this.commandMode = null; G.UI.refreshSelection(true); return;
       }
       this.startInspect(e.pointerId, e.clientX, e.clientY, q);
       const chest = this.canInteract() && this.containerAt(q.x, q.y);
-      if (chest){ G.InventoryUI.openContainer(chest); return; }
-      const node = this.nodeAt(q.x, q.y), gatherer = this.gatherer();
-      if (node && gatherer){ G.Gather.command(gatherer, node); return; }
+      if (chest){ consume(); G.InventoryUI.openContainer(chest); return; }
+      const target = this.gatherTarget(q.x, q.y), gatherer = this.gatherer();
+      if (target && gatherer){ consume(); G.Gather.command(gatherer, target); return; }
       const hit = this.unitAt(q.x, q.y);
       if (hit && e.pointerType === 'mouse'){
         const has = G.State.selected.has(hit.id);
@@ -185,6 +206,7 @@
         G.UI.toast('Formation move issued');
         this.cancelFormationGesture(); finish(); return;
       }
+      if (o.handled){ this.box = null; finish(); return; }
       const q = G.worldFromScreen(o.x, o.y);
       // Plain click / tap on the map (no drag).
       if (!o.moved && !o.gesture && (o.button === 0 || o.button == null)){

@@ -71,6 +71,18 @@
       // Resource nodes.
       for (const n of S.resourceNodes){
         if (n.remaining <= 0 || !inView(n.x, n.y, 30)) continue;
+        if (G.Gather.isDeposit(n)){
+          // 1×1 mine deposit (hidden under its Mine Building once built).
+          if (G.Gather.mineOn(n)) continue;
+          const px = n.gx * T, py = n.gy * T;
+          g.fillStyle = '#3f3a33'; g.fillRect(px + 1, py + 1, T - 2, T - 2);
+          g.fillStyle = '#6f6453'; g.beginPath(); g.moveTo(px + 6, py + T - 8); g.lineTo(px + 16, py + 10); g.lineTo(px + 28, py + 20); g.lineTo(px + 40, py + 8); g.lineTo(px + T - 5, py + T - 6); g.closePath(); g.fill();
+          g.fillStyle = '#c9d4dc';
+          for (const [ox, oy, r] of [[15, 27, 4], [27, 33, 3.2], [33, 21, 3.6], [21, 16, 2.6]]){ g.beginPath(); g.arc(px + ox, py + oy, r, 0, TAU); g.fill(); }
+          g.strokeStyle = '#d0a65b'; g.lineWidth = 2 / z; g.setLineDash([5 / z, 4 / z]); g.strokeRect(px + 1, py + 1, T - 2, T - 2); g.setLineDash([]);
+          if (!far){ g.fillStyle = '#e8d9b4'; g.font = (10 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(n.name, n.x, py - 5); }
+          continue;
+        }
         g.save(); g.translate(n.x, n.y);
         g.fillStyle = '#6c6255'; g.strokeStyle = '#b4a27e'; g.lineWidth = 2 / z; g.beginPath(); g.arc(0, 0, 22, 0, TAU); g.fill(); g.stroke();
         g.fillStyle = '#9ca5a0'; g.fillRect(-13, -5, 26, 10); g.fillStyle = '#d0a65b'; g.fillRect(-4, -14, 8, 28);
@@ -136,6 +148,11 @@
           const off = G.Defs.units.get(u.type)?.barOffset || 34;
           G.Visuals.bar(g, u.x, u.y - off, 32, u.hp / u.maxHp, u.hp / u.maxHp > 0.45 ? '#5fd16b' : '#e85e55');
         }
+        if (sel && u.command === 'follow'){
+          const t = G.Units.alive(u.followId);
+          if (t){ g.strokeStyle = 'rgba(112,227,221,.75)'; g.lineWidth = 1.5 / z; g.setLineDash([4 / z, 6 / z]); g.beginPath(); g.moveTo(u.x, u.y); g.lineTo(t.x, t.y); g.stroke(); g.setLineDash([]);
+            g.beginPath(); g.arc(t.x, t.y, t.radius + 12, 0, TAU); g.stroke(); }
+        }
         if (sel && u.path.length){
           g.strokeStyle = '#f1df73'; g.lineWidth = 1.5 / z; g.setLineDash([10 / z, 8 / z]); g.beginPath(); g.moveTo(u.x, u.y);
           for (let i = u.pathIndex; i < u.path.length; i++) g.lineTo(u.path[i].x, u.path[i].y);
@@ -151,7 +168,7 @@
       // Placement and formation previews.
       if (S.buildPreview){
         const bp = S.buildPreview, d = G.Defs.buildables.get(bp.key) || { w: 1, h: 1, cost: {} };
-        const ok = G.Buildings.canPlace(bp.gx, bp.gy, d.w, d.h) && !!G.Construction.builder(S.buildMode.builderId) && G.Economy.canAfford(d.cost);
+        const ok = G.Buildings.canPlaceKey(bp.key, bp.gx, bp.gy) && !!G.Construction.builder(S.buildMode.builderId) && G.Economy.canAfford(d.cost);
         g.fillStyle = ok ? 'rgba(125,220,130,.30)' : 'rgba(230,90,80,.32)'; g.strokeStyle = ok ? '#8de295' : '#ee6b62'; g.lineWidth = 2 / z;
         g.fillRect(bp.gx * T, bp.gy * T, T * d.w, T * d.h); g.strokeRect(bp.gx * T, bp.gy * T, T * d.w, T * d.h);
       }
@@ -183,7 +200,7 @@
       const base = this.miniBase, W = base.width = m.width, H = base.height = m.height;
       const g = base.getContext('2d'), sx = W / C.WORLD_W, sy = H / C.WORLD_H;
       g.drawImage(G.TerrainCache.getOverview(), 0, 0, W, H);
-      for (const n of S.resourceNodes) if (n.remaining > 0){ g.fillStyle = '#d0a65b'; g.fillRect(n.x * sx - 1, n.y * sy - 1, 3, 3); }
+      for (const n of S.resourceNodes) if (n.remaining > 0){ g.fillStyle = G.Gather.isDeposit(n) ? '#c9d4dc' : '#d0a65b'; g.fillRect(n.x * sx - 1, n.y * sy - 1, 3, 3); }
       for (const b of S.buildings){ g.fillStyle = '#adb5ad'; g.fillRect(b.x * sx - 1, b.y * sy - 1, 3, 3); }
       for (const s of S.constructionSites){ g.fillStyle = '#d4b96b'; g.fillRect(s.x * sx - 1, s.y * sy - 1, 3, 3); }
       for (const u of S.units){

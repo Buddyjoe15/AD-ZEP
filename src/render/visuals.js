@@ -143,6 +143,28 @@
     if (b.hp < b.maxHp) bar(g, b.x, b.y - h / 2 - 7, w * 0.8, b.hp / b.maxHp);
   });
 
+  // Mine Building: 3×3 headframe over the deposit, with a turning wheel while it extracts
+  // and a stockpile gauge.
+  V.registerBuilding('mine_building', (g, b, z, t, def) => {
+    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T, w = b.w * T, h = b.h * T;
+    const cap = (def.behaviors.find(x => x.type === 'extractor') || {}).stockCap || 300;
+    const stock = G.Gather.stockTotal(b), full = stock >= cap - 0.01, working = !!b.nodeId && !full;
+    g.fillStyle = '#5a5143'; g.strokeStyle = '#1f1b16'; g.lineWidth = 2 / z;
+    g.fillRect(px + 3, py + 3, w - 6, h - 6); g.strokeRect(px + 3, py + 3, w - 6, h - 6);
+    g.fillStyle = '#7b6f5a'; g.fillRect(px + 10, py + 10, w - 20, h - 20);
+    g.strokeStyle = '#b8a16a'; g.lineWidth = 4;
+    g.beginPath(); g.moveTo(px + 18, py + h - 18); g.lineTo(b.x, py + 18); g.lineTo(px + w - 18, py + h - 18); g.stroke();
+    const a = working ? t * 2.4 : 0;
+    g.save(); g.translate(b.x, b.y - 6); g.rotate(a);
+    g.strokeStyle = '#e1cf9b'; g.lineWidth = 3; g.beginPath(); g.arc(0, 0, 18, 0, TAU); g.stroke();
+    for (let i = 0; i < 4; i++){ g.rotate(Math.PI / 4); g.beginPath(); g.moveTo(-18, 0); g.lineTo(18, 0); g.stroke(); }
+    g.restore();
+    g.fillStyle = '#26221c'; g.fillRect(b.x - 16, py + h - 28, 32, 14);
+    g.fillStyle = '#f2e6c4'; g.font = 'bold 10px sans-serif'; g.textAlign = 'center'; g.fillText('MINE', b.x, py + h - 17);
+    bar(g, b.x, py + h - 9, w - 24, stock / cap, full ? '#e0c15b' : '#c9d4dc');
+    if (b.hp < b.maxHp) bar(g, b.x, py - 6, w * 0.8, b.hp / b.maxHp);
+  });
+
   V.registerBuilding('generic', (g, b, z, t, def) => {
     const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T;
     g.fillStyle = def?.color || '#8a948d'; g.strokeStyle = '#1b2320'; g.lineWidth = 2 / z;
@@ -156,6 +178,10 @@
     if (u.command === 'gather' && u.haulState === 'collecting'){
       const n = G.Gather.node(u.nodeId), d = n && G.Defs.nodes.get(n.type);
       if (n && n.remaining > 0 && Math.hypot(u.x - n.x, u.y - n.y) <= d.range + 0.1) return { x: n.x, y: n.y, mode: 'mine' };
+    }
+    if (u.command === 'gather' && u.haulState === 'loading' && u.mineId){
+      const b = G.State.buildings.find(x => x.id === u.mineId);
+      if (b) return { x: b.x, y: b.y, mode: 'mine' };
     }
     if (u.command === 'build' && u.buildSiteId){
       const s = G.Construction.site(u.buildSiteId);

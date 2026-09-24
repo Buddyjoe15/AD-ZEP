@@ -1,8 +1,19 @@
 /* Resource nodes, fabrication recipes, climates and control reference. */
+
+/* Resource nodes come in two kinds:
+     scavenge – loose salvage. A Spider collects it directly and quickly (`rate` per second)
+                until the pile (`capacity`) is gone.
+     deposit  – a 1×1 mine. Nothing happens until its `building` (a Mine Building) is built
+                centred over it; that structure then extracts `rate` per second into its own
+                stockpile, which Spiders haul to the ship. `capacity` is effectively endless. */
 GW.Defs.nodes.defineAll({
   scrap_mine: {
-    name: 'Scavenging Mine', resource: 'metal', capacity: 1200, rate: 20, range: 62,
-    description: 'A salvage-rich deposit for Utility Spiders.'
+    name: 'Scavenging Mine', kind: 'scavenge', resource: 'metal', capacity: 1200, rate: 20, range: 62,
+    description: 'Loose salvage. A Utility Spider collects it quickly until it runs out.'
+  },
+  metal_mine: {
+    name: 'Metal Mine', kind: 'deposit', resource: 'metal', capacity: 1000000, rate: 2, range: 0, building: 'mine_building',
+    description: 'A near-endless metal seam. Build a Mine Building over it; extraction is slow but never runs dry.'
   }
 });
 
@@ -26,6 +37,7 @@ GW.EXPEDITION_RULES = {
   readiness: 180, readinessMin: 90, readinessPerUpgrade: 15,
   repairCost: 100, upgradeCost: 180, upgradeHp: 40, upgradeMax: 5,
   boostSeconds: 90, elementPMax: 10,
+  metalMines: [[620, -260], [-240, 780]],   // metal deposits placed near the ship on each Earth
   signalCount: 6, signalStudySeconds: 4, archiveReward: { metal: 70 }, signalRange: 100,
   firstWave: 110, waveInterval: 100, waveBase: 2, waveMax: 5,
   hazardSafeRadius: 700, crewRadius: 620,
