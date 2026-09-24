@@ -61,7 +61,6 @@
       else if (action === 'save') G.Save.save(G.State.activeSaveSlot);
       else if (action === 'export') this.exportFile();
       else G.Expedition.action(action, arg);
-      if (action === 'explore') G.UI.refreshSelection(true);
       this.renderPanel(); this.renderFabrication();
     },
     exportFile(){
@@ -82,7 +81,7 @@
           <li>${E.repairs === 100 ? '✓' : '○'} Drive repaired</li><li>${E.readiness <= 0 ? '✓' : '○'} Stabilization ${E.readiness <= 0 ? 'complete' : Math.ceil(E.readiness) + 's'}</li>
           <li>${d.away === 0 ? '✓' : '○'} Crew at ship ${d.crew - d.away}/${d.crew}</li><li>${d.cargo < 0.01 ? '✓' : '○'} Drone cargo unloaded (${Math.floor(d.cargo)} metal)</li>
           <li>${!G.Fabrication.totalQueued() && !S.constructionSites.length ? '✓' : '○'} Field work and fabrication complete</li></ul>
-        <div class="ezGrid">${btn('Explore with Vance', 'explore')}${btn('Assign mining', 'mine')}${btn(E.repairs === 100 ? 'Drive repaired ✓' : 'Repair drive · ' + R.repairCost + ' metal', 'repair')}${btn('Recall + unload', 'recall')}${btn('Survey drone', 'survey')}${btn('P boost · −' + R.boostSeconds + 's', 'boost')}</div>
+        <div class="ezGrid">${btn(E.repairs === 100 ? 'Drive repaired ✓' : 'Repair drive · ' + R.repairCost + ' metal', 'repair')}${btn('Recall + unload', 'recall')}${btn('P boost · −' + R.boostSeconds + 's', 'boost')}</div>
         <button class="ezTransit" data-ez="transit" ${d.ready ? '' : 'disabled'}>${d.ready ? 'TRANSIT TO NEXT EARTH →' : 'DEPARTURE BLOCKED'}</button>
         <p class="ezHint">${d.ready ? 'All checks passed. Departure is your choice.' : d.reasons.map(esc).join('<br>')}</p>
         <h3>Departure manifest</h3><p>Vance, surviving drones, health, equipment, upgrades and contained Element P persist. Carry up to ${cap} bulk metal; ${Math.max(0, metal - cap)} excess metal would remain. Field structures and untouched deposits stay behind.</p>

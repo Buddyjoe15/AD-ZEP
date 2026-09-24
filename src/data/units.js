@@ -32,7 +32,8 @@ GW.Defs.units.defineAll({
     capabilities: ['build', 'gather', 'carry', 'storage'], visual: 'utility'
   },
   hostile_machine: {
-    name: 'Hostile Autonomous Machine', team: 'red', hp: 65, speed: 118, radius: 10, range: 140, damage: 6, reload: 0.72, sight: 650,
-    capabilities: ['fight'], visual: 'rifle', ai: 'hunter', selectable: false
+    name: 'Hostile Autonomous Machine', team: 'red', hp: 65, speed: 118, radius: 10, range: 140, damage: 6, reload: 0.72, sight: 480,
+    capabilities: ['fight'], visual: 'rifle', selectable: false,
+    ai: 'swarm', aggroTiles: 10, attackStructures: true   // marches on Vance; engages anything within 10 tiles
   }
 });

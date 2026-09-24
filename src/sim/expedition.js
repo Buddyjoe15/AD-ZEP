@@ -144,32 +144,6 @@
       if (!E || S.gameOver) return false;
       if (S.paused){ G.notify('Resume the expedition to issue orders'); return false; }
       switch (name){
-        case 'explore': {
-          const u = G.Units.hero(), p = E.sites.find(p => !p.done);
-          if (!u || !p) return false;
-          G.Orders.move([u], p.x, p.y);
-          const guard = S.units.find(v => v.team === 'blue' && v.hp > 0 && !v.isHero && G.Units.can(v, 'fight'));
-          if (guard) G.Orders.setCommand([guard], 'follow', null, u.id);
-          S.selected = new Set([u.id]);
-          this.log('ARIA: Vance en route to the next signal. Security escort assigned.');
-          return true;
-        }
-        case 'survey': {
-          const u = S.units.find(v => v.team === 'blue' && v.hp > 0 && !v.isHero && G.Units.can(v, 'survey')) || G.Units.hero(), p = E.sites.find(p => !p.done);
-          if (!p){ G.notify('All local signals analyzed'); return false; }
-          G.Orders.move([u], p.x, p.y);
-          return true;
-        }
-        case 'mine': {
-          // Quick salvage first while any is left, then the nearest Mine Building.
-          const u = S.units.find(v => v.team === 'blue' && v.hp > 0 && G.Units.can(v, 'gather'));
-          const nearest = list => list.reduce((best, t) => !best || G.dist2(u, t) < G.dist2(u, best) ? t : best, null);
-          const target = u && (nearest(S.resourceNodes.filter(n => !G.Gather.isDeposit(n) && n.remaining > 0)) ||
-            nearest(S.buildings.filter(b => b.team === 'blue' && b.hp > 0 && G.Gather.isMine(b))));
-          if (!u || !target){ G.notify('A Utility Spider and a scavenge site or Mine Building are required'); return false; }
-          G.Events.emit('build:cancel');
-          return G.Gather.command(u, target);
-        }
         case 'fabricate': {
           const owner = (arg && arg.ownerId != null) ? (G.Units.alive(arg.ownerId) || G.Buildings.get(arg.ownerId)) : G.Units.ship();
           return G.Fabrication.enqueue(owner, typeof arg === 'string' ? arg : arg && arg.recipe);

@@ -95,9 +95,21 @@
       }
       return { gx: Math.floor(wx / T), gy: Math.floor(wy / T), node: null };
     },
+    // Nearest structure an attacker of another team may target within `r` (edge distance).
+    // Testing-zone fixtures are never targeted.
+    nearestTarget(u, r){
+      const T = G.CONFIG.TILE;
+      let best = null, bd = Infinity;
+      for (const b of G.State.buildings){
+        if (b.hp <= 0 || b.team === u.team || b.testZone) continue;
+        const dx = Math.max(Math.abs(u.x - b.x) - b.w * T / 2, 0), dy = Math.max(Math.abs(u.y - b.y) - b.h * T / 2, 0), d = Math.hypot(dx, dy);
+        if (d <= r && d < bd){ bd = d; best = b; }
+      }
+      return best;
+    },
     // Largest damage reduction from friendly aura structures covering `unit`.
     damageReduction(unit){
-      if (!unit || unit.team !== 'blue') return 0;
+      if (!unit || unit.team !== 'blue' || !unit.radius) return 0;
       let best = 0;
       for (const b of G.State.buildings){
         if (b.hp <= 0 || b.team !== unit.team) continue;
@@ -139,7 +151,10 @@
         }
       }
       // Destroyed structures leave the world.
-      if (destroyed) for (const b of S.buildings.filter(b => b.hp <= 0)) G.Buildings.remove(b);
+      if (destroyed) for (const b of S.buildings.filter(b => b.hp <= 0)){
+        if (b.fabQueue && b.fabQueue.length) G.Fabrication.refundQueue(b);
+        G.Buildings.remove(b);
+      }
     }
   });
 })();

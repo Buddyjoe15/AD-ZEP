@@ -112,27 +112,8 @@
     }
   }
 
-  // Hostile hunters head for the nearest friendly unit, re-planning every ~1.4 s.
-  const AI = {
-    hunter(u){
-      const S = G.State;
-      if (u.aiHold || !G.Units.navIdle(u) || S.time < u.aiNextPath) return;
-      u.aiNextPath = S.time + 1.35 + (u.id % 8) * 0.11;
-      let best = null, bd = Infinity;
-      // Local search first; the full scan only runs when nothing is within 2000 px.
-      for (const [team, hash] of Object.entries(S.teamSpatial)){
-        if (team === u.team) continue;
-        const v = hash.nearest(u.x, u.y, 2000);
-        if (v && G.dist2(u, v) < bd){ bd = G.dist2(u, v); best = v; }
-      }
-      if (!best) for (const v of S.units){
-        if (v.team === u.team || v.hp <= 0) continue;
-        const d = G.dist2(u, v);
-        if (d < bd){ bd = d; best = v; }
-      }
-      if (best) S.paths.request(u, best.x, best.y, { maxNodes: 4000 });
-    }
-  };
+  // Autonomous behaviours by definition `ai` key (e.g. 'swarm', src/sim/swarm.js).
+  const AI = {};
   G.AI = AI;
 
   G.SystemManager.register('commands', {

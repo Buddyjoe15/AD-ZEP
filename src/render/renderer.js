@@ -136,9 +136,25 @@
         }
         if (sel){ g.strokeStyle = '#fff6a5'; g.lineWidth = 2 / z; g.beginPath(); g.arc(u.x, u.y, u.radius + 8, 0, TAU); g.stroke(); }
       }
-      for (const u of visible) G.Visuals.drawUnit(g, u, z, t);
+      // Zoomed out, ordinary units become team-coloured markers drawn in one batched path per
+      // team; Vance, the ship and selected units keep full art.
+      const lod = z < C.UNIT_LOD_ZOOM, batches = lod ? new Map() : null;
+      for (const u of visible){
+        if (lod && !u.isShip && !u.isHero && !S.selected.has(u.id)){
+          const col = C.COLORS[u.team] || '#ccc';
+          let list = batches.get(col);
+          if (!list) batches.set(col, list = []);
+          list.push(u);
+        } else G.Visuals.drawUnit(g, u, z, t);
+      }
+      if (lod) for (const [col, list] of batches){
+        g.fillStyle = col; g.beginPath();
+        for (const u of list){ const r = Math.max(u.radius, 2.5 / z); g.rect(u.x - r, u.y - r, r * 2, r * 2); }
+        g.fill();
+      }
       for (const u of visible){
         const sel = S.selected.has(u.id);
+        if (lod && !sel && !u.isShip && !u.isHero) continue;   // markers carry no bars or labels
         if (u.isShip){
           const bw = u.w * T * 0.72;
           G.Visuals.bar(g, u.x, u.gy * T - 15, bw, u.hp / u.maxHp, '#6fd27a');
@@ -163,7 +179,14 @@
         }
       }
       G.Visuals.lasers(g, visible, t);
-      for (const s of S.shots){ g.strokeStyle = s.team === 'blue' ? '#b9e2ff' : '#ffb08b'; g.lineWidth = 2 / z; g.beginPath(); g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); g.stroke(); }
+      if (S.shots.length){
+        g.lineWidth = 2 / z;
+        for (const [team, col] of [['blue', '#b9e2ff'], ['red', '#ffb08b']]){
+          g.strokeStyle = col; g.beginPath();
+          for (const s of S.shots) if ((s.team === 'blue') === (team === 'blue') && inView(s.x1, s.y1, 700)){ g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); }
+          g.stroke();
+        }
+      }
 
       // Placement and formation previews.
       if (S.buildPreview){
@@ -203,8 +226,23 @@
       for (const n of S.resourceNodes) if (n.remaining > 0){ g.fillStyle = G.Gather.isDeposit(n) ? '#c9d4dc' : '#d0a65b'; g.fillRect(n.x * sx - 1, n.y * sy - 1, 3, 3); }
       for (const b of S.buildings){ g.fillStyle = '#adb5ad'; g.fillRect(b.x * sx - 1, b.y * sy - 1, 3, 3); }
       for (const s of S.constructionSites){ g.fillStyle = '#d4b96b'; g.fillRect(s.x * sx - 1, s.y * sy - 1, 3, 3); }
+      // Ordinary units batched per team; ship and Vance on top.
+      const byTeam = new Map();
       for (const u of S.units){
-        const sz = u.isShip ? 7 : u.isHero ? 5 : 3;
+        if (u.isShip || u.isHero) continue;
+        const col = C.COLORS[u.team] || '#ccc';
+        let list = byTeam.get(col);
+        if (!list) byTeam.set(col, list = []);
+        list.push(u);
+      }
+      for (const [col, list] of byTeam){
+        g.fillStyle = col; g.beginPath();
+        for (const v of list) g.rect(v.x * sx - 1.5, v.y * sy - 1.5, 3, 3);
+        g.fill();
+      }
+      for (const u of S.units){
+        if (!u.isShip && !u.isHero) continue;
+        const sz = u.isShip ? 7 : 5;
         g.fillStyle = u.isShip ? '#d5e1e5' : C.COLORS[u.team] || '#ccc';
         g.fillRect(u.x * sx - sz / 2, u.y * sy - sz / 2, sz, sz);
       }

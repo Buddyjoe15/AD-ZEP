@@ -153,7 +153,8 @@ test('inventory stacks, equipment and backpack capacity', () => {
 test('utility spider mines a node and delivers to the ship', () => {
   const G = newGame();
   const spider = find(G, 'utility_spider');
-  assert.ok(G.Expedition.action('mine'));
+  const scrap = G.State.resourceNodes.find(n => n.type === 'scrap_mine');
+  assert.ok(G.Gather.command(spider, scrap));
   G.Sim.run(70);
   assert.ok(G.State.expedition.progress.delivered >= 600, 'delivered ' + G.State.expedition.progress.delivered);
   assert.ok(G.Economy.get('metal') >= 180 + 600);
@@ -264,7 +265,7 @@ test('sensor stations and surveyors study signals', () => {
 
 test('saves round-trip and invalid data is rejected without side effects', () => {
   const G = newGame();
-  G.Expedition.action('mine');
+  G.Gather.command(find(G, 'utility_spider'), G.State.resourceNodes.find(n => n.type === 'scrap_mine'));
   G.Sim.run(20);
   const a = G.Save.serialize();
   G.Save.validate(a);
@@ -406,7 +407,7 @@ test('Hostile Fabricator spawns at the chosen speed up to the chosen count', () 
   assert.ok(G.Spawner.spawnedBy(b).every(u => u.aiHold && !u.path.length));
   G.Spawner.configure(b, { hold: false });
   G.Sim.run(2);
-  assert.ok(G.Spawner.spawnedBy(b).some(u => u.path.length || u.pathPending), 'hunters plan routes');
+  assert.ok(G.Spawner.spawnedBy(b).some(u => u.path.length || u.pathPending), 'released units start advancing');
   // Settings survive a save; removing clears only this spawner's units.
   const d = G.Save.serialize();
   G.Save.validate(d);
@@ -509,4 +510,75 @@ test('Utility Spider storage holds 25 and older saves are upgraded', () => {
   d.units.find(u => u.type === 'utility_spider').storage.capacity = 10;
   G.Save.restore(d, 1);
   assert.equal(find(G, 'utility_spider').storage.capacity, 25);
+});
+
+test('swarm: enemies march on Vance down one shared flow field, without per-unit route searches', () => {
+  const G = newGame();
+  const S = G.State, hero = G.Units.hero(), T = 48;
+  for (const u of S.units) if (u.team === 'blue' && !u.isShip && !u.isHero) u.hp = 0;   // nothing to distract them
+  G.Sim.run(0.1);
+  const foes = [];
+  for (let i = 0; i < 300; i++){
+    const p = G.openPoint(hero.x + 45 * T + (i % 20) * 30, hero.y - 20 * T + Math.floor(i / 20) * 30, 0, 20);
+    foes.push(G.Units.spawn('hostile_machine', p.x, p.y));
+  }
+  G.rebuildSpatial();
+  hero.maxHp = hero.hp = 1e9;
+  for (let i = 0; i < 20 && !(G.Swarm.field && G.Swarm.field.ready); i++) G.Sim.run(0.5);
+  assert.ok(G.Swarm.field && G.Swarm.field.ready, 'field built (it spans several ticks)');
+  const d0 = foes.reduce((a, u) => a + Math.hypot(u.x - hero.x, u.y - hero.y), 0) / foes.length;
+  const calls = S.metrics.pathCalls;
+  G.Sim.run(8);
+  const d1 = foes.filter(u => u.hp > 0).reduce((a, u) => a + Math.hypot(u.x - hero.x, u.y - hero.y), 0) / foes.length;
+  assert.ok(d1 < d0 - 450, `advanced on Vance: ${d0.toFixed(0)} → ${d1.toFixed(0)} px`);
+  assert.ok(S.metrics.pathCalls - calls < 60, `few individual searches (${S.metrics.pathCalls - calls}) for 300 marching units`);
+  // The field follows Vance when he moves.
+  const goal = S.grid.nearestOpen(Math.floor(hero.x / T) - 30, Math.floor(hero.y / T) + 10, 10);
+  hero.x = (goal.x + 0.5) * T; hero.y = (goal.y + 0.5) * T;
+  G.Sim.run(3);
+  assert.equal(G.Swarm.field.goal, goal.y * S.grid.cols + goal.x);
+});
+
+test('swarm: aggro engages anything friendly within 10 tiles, including structures', () => {
+  const G = newGame();
+  const S = G.State, hero = G.Units.hero(), T = 48, drone = S.units.find(u => u.type === 'security_drone');
+  hero.maxHp = hero.hp = 1e9;
+  // A drone far from Vance: an enemy 8 tiles away engages it; one 16 tiles away ignores it.
+  const spot = G.openPoint(hero.x - 60 * T, hero.y - 40 * T, 0, 20);
+  Object.assign(drone, { x: spot.x, y: spot.y, path: [] }); G.Orders.setCommand([drone], 'idle');
+  drone.maxHp = drone.hp = 1e9; drone.damage = 0;
+  const near = G.Units.spawn('hostile_machine', ...Object.values(G.openPoint(spot.x + 8 * T, spot.y, 0, 4)));
+  const far = G.Units.spawn('hostile_machine', ...Object.values(G.openPoint(spot.x, spot.y + 16 * T, 0, 4)));
+  G.rebuildSpatial();
+  G.Sim.run(3);
+  assert.equal(near.aiTargetId, drone.id, 'near enemy engages the drone');
+  assert.ok(Math.hypot(near.x - drone.x, near.y - drone.y) < 200, 'and closes to firing range');
+  assert.notEqual(far.aiTargetId, drone.id, 'far enemy keeps marching');
+  assert.equal(far.aiMode, 'march');
+  assert.ok(drone.hp < 1e9, 'the drone is being shot');
+  // Structures: a player wall with no units around draws fire; testing-zone fixtures never do.
+  drone.hp = 0; near.hp = 0; far.hp = 0; G.Sim.run(0.1);
+  const wspot = S.grid.nearestOpen(Math.floor(hero.x / T) + 40, Math.floor(hero.y / T) + 30, 10);
+  const wall = G.Buildings.add('wall', wspot.x, wspot.y);
+  const e = G.Units.spawn('hostile_machine', ...Object.values(G.openPoint(wall.x + 6 * T, wall.y, 0, 4)));
+  G.rebuildSpatial();
+  G.Sim.run(4);
+  assert.equal(e.aiTargetId, wall.id);
+  assert.ok(wall.hp < wall.maxHp, 'wall damaged: ' + wall.hp);
+  const fixture = S.buildings.find(b => b.testZone);
+  assert.equal(G.Buildings.nearestTarget({ team: 'red', x: fixture.x, y: fixture.y }, 500) === fixture, false);
+});
+
+test('simulation is deterministic: the same swarm battle plays out identically twice', () => {
+  const play = () => {
+    const G = newGame(), S = G.State, h = G.Units.hero(), T = 48;
+    for (let i = 0; i < 400; i++){ const p = G.openPoint(h.x + 30 * T + (i % 20) * 30, h.y + Math.floor(i / 20) * 30, 0, 20); G.Units.spawn('hostile_machine', p.x, p.y); }
+    G.rebuildSpatial();
+    G.Sim.run(12);
+    let hash = 2166136261;
+    for (const u of S.units){ for (const v of [u.id, Math.round(u.x * 100), Math.round(u.y * 100), Math.round(u.hp * 100)]){ hash ^= v; hash = Math.imul(hash, 16777619) >>> 0; } }
+    return { hash, n: S.units.length, pathCalls: S.metrics.pathCalls };
+  };
+  const a = play(), b = play();
+  assert.deepEqual({ ...b }, { ...a });
 });

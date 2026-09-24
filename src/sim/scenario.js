@@ -13,8 +13,8 @@
       S.activeSaveSlot = slot || prevSlot || 1;
       S.grid = G.MapGen.forest(S.seed);
       S.terrainEdits = [];
-      S.spatial = new G.SpatialHash();
-      S.teamSpatial = { blue: new G.SpatialHash(G.CONFIG.TARGET_CELL), red: new G.SpatialHash(G.CONFIG.TARGET_CELL) };
+      S.spatial = new G.DenseGrid(G.CONFIG.WORLD_W, G.CONFIG.WORLD_H, G.CONFIG.SPATIAL_CELL);
+      S.teamSpatial = { blue: G.teamGrid(), red: G.teamGrid() };
       S.paths = new G.PathService(S.grid);
       G.Units.rebuildIndex();
       G.SystemManager.resetAll();
@@ -63,7 +63,7 @@
 
   // Fixed simulation order. Spatial indexes are rebuilt inside 'movement' (and by
   // G.rebuildSpatial() whenever a world is created or restored).
-  G.SIM_ORDER = ['time', 'containers', 'economy', 'commands', 'gather', 'construction', 'fabrication',
+  G.SIM_ORDER = ['time', 'containers', 'economy', 'swarm', 'commands', 'gather', 'construction', 'fabrication',
     'paths', 'movement', 'buildings', 'combat', 'expedition', 'cleanup', 'rules'];
 
   G.Sim = {

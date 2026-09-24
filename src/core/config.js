@@ -10,15 +10,15 @@
 
     // Rendering
     CHUNK_TILES: 16, CHUNK_CACHE_MAX: 64, CHUNKS_BUILT_PER_FRAME: 2,
-    LOD_ZOOM: 0.30, ZOOM_MIN: 0.055, ZOOM_MAX: 2.2, MINIMAP_HZ: 8,
+    LOD_ZOOM: 0.30, UNIT_LOD_ZOOM: 0.45, ZOOM_MIN: 0.055, ZOOM_MAX: 2.2, MINIMAP_HZ: 8,
     COLORS: { blue: '#49a4ff', red: '#ef5b55', neutral: '#d4c46c' },
 
     // Spatial partitioning
-    SPATIAL_CELL: 128,         // unit collision / picking
+    SPATIAL_CELL: 48,          // dense grid for unit collision / picking (one tile)
     TARGET_CELL: 256,          // per-team hashes used for target acquisition (long radii)
 
     // Pathfinding
-    PATH_BUDGET_MS: 4,          // per simulation tick
+    PATH_NODE_BUDGET: 60000,    // A* expansions served per tick (work-based, so deterministic)
     PATH_MAX_PER_TICK: 96,      // hard cap on queued requests served per tick
     PATH_MAX_NODES: 40000,      // A* expansion cap; partial path returned when hit
     PATH_RETARGET_RADIUS: 24,   // tiles searched for a reachable stand-in goal

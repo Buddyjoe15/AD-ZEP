@@ -84,13 +84,15 @@ The debug catalog (DEBUG button) lists every registered structure, item, unit an
 | Passability | `Grid.passable()` is two array reads (terrain lookup table plus structure occupancy counter). Structures stamp occupancy when placed or removed. |
 | Reachability | 4-connected region labels, rebuilt lazily after occupancy changes. Unreachable targets are retargeted to the nearest reachable tile without running A*. |
 | Route search | A* with typed arrays reused through generation stamps, an allocation-free index heap, a node budget with partial paths, and line-of-sight smoothing. |
-| Many requests | `PathService.request()` queues AI searches; `paths` serves them within `PATH_BUDGET_MS` / `PATH_MAX_PER_TICK`. A newer request replaces an older one for the same unit. |
+| Many requests | `PathService.request()` queues searches; `paths` serves them within `PATH_NODE_BUDGET` A* expansions / `PATH_MAX_PER_TICK` per tick. A newer request replaces an older one for the same unit. |
+| Swarms | `ai: 'swarm'` units share one `TargetField` toward Vance: a Dijkstra field over the swarm's bounding window, built `buildTiles` tiles per tick and refreshed periodically with a small per-unit crowd cost. Units steer straight at the farthest field point in line of sight a few tiles ahead, and engage anything within `aggroTiles`. Tuning lives in `GW.SWARM_RULES`. |
+| Determinism | Per-tick budgets count work, not milliseconds, so the same inputs give the same game on any machine (covered by a test). Keep it that way: never branch simulation logic on wall-clock time. |
 | Group orders | Groups of `FLOWFIELD_MIN_GROUP` or more share one windowed Dijkstra field. Units smooth their paths incrementally while moving. |
-| Neighbour queries | Numeric-key spatial hash with pooled buckets: one for collision and picking, plus one per team (coarser cells) for target acquisition. |
+| Neighbour queries | Dense typed-array grids (per-cell linked lists, rebuilt every tick): tile-sized cells for collision and picking, plus coarser per-team grids for target acquisition. Every unit object has the same fields in the same order (`GW.Units.blank()`), which keeps hot loops fast. |
 | Lookups | Units are indexed by id (`GW.Units.get`). |
-| Rendering | View culling, an LRU terrain chunk cache (built a few chunks per frame), a far-zoom overview image, and a minimap redrawn at 8 Hz. |
+| Rendering | View culling, an LRU terrain chunk cache (built a few chunks per frame), a far-zoom overview image, batched team-coloured markers for ordinary units below `UNIT_LOD_ZOOM`, batched gunfire, and a minimap redrawn at 8 Hz. |
 
-Headless benchmarks (tick budget is 33 ms): 500 fighting units about 3.6 ms, 2,000 about 11 ms, 5,000 about 28 ms. Past roughly 5,000 active units, the next steps would be moving the simulation into a Worker (it is already DOM-free) and switching to structure-of-arrays storage for positions.
+Browser benchmark (tick budget is 33 ms): 5,000 enemies swarming Vance take about 4.5 ms per tick. The Node test harness runs the simulation inside a `vm` sandbox that is several times slower than a browser, so its timings are only useful for comparing changes against each other. Past roughly 5,000 active units, the next steps would be moving the simulation into a Worker (it is already DOM-free) and switching to structure-of-arrays storage for positions.
 
 ## Saves
 

@@ -44,6 +44,20 @@ GW.EXPEDITION_RULES = {
   startingCrew: ['survey_drone', 'security_drone', 'utility_spider']
 };
 
+// Swarm AI (src/sim/swarm.js).
+GW.SWARM_RULES = {
+  rebuildSeconds: 0.75,   // how often the flow field toward Vance may be rebuilt as he moves
+  buildTiles: 6000,       // flow-field tiles settled per tick (the build spans ticks; ~1-2 ms)
+  refreshSeconds: 1.5,    // periodic rebuild while a swarm exists, to update crowd costs
+  crowdCost: 0.35,        // extra field cost per unit already standing on a tile (spreads swarms over gaps)
+  firstBuildTiles: 24000, // larger step while no field exists yet, so a new swarm starts moving promptly
+  margin: 24,             // tiles of slack around the swarm and Vance covered by the field (detours)
+  lookahead: 6,           // tiles walked down the field when a unit picks its next straight leg
+  steerSeconds: 0.4,      // how often a marching unit re-picks its leg
+  spread: 14,             // per-unit offset (px) so a swarm fans out instead of queueing single file
+  crowdHold: 3            // overlapping neighbours at which a unit stops pushing forward and waits
+};
+
 GW.KEY_BINDINGS = [
   ['WASD / Arrow Keys', 'Pan camera'], ['Mouse Wheel', 'Zoom at cursor'], ['Pinch', 'Touch zoom'],
   ['Left Click / Tap', 'Select unit'], ['Drag Select', 'Select multiple units'], ['Hold + Drag', 'Touch mass selection'],

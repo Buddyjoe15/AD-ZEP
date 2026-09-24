@@ -126,7 +126,8 @@ for (const target of ['index.html', 'dist/ad-ezp.html']){
       // Expedition log renders and its actions work.
       await page.click('#ezToggle');
       await page.waitForSelector('#ezPanel:not(.hidden) .ezChecklist');
-      await page.click('#ezPanel [data-ez="survey"]');
+      assert.equal(await page.$('#ezPanel [data-ez="explore"], #ezPanel [data-ez="mine"], #ezPanel [data-ez="survey"]'), null, 'removed buttons stay gone');
+      await page.click('#ezPanel [data-ez="recall"]');
       await page.screenshot({ path: path.join(OUT, `${tag}-expedition-log.png`) });
       await page.click('#ezToggle');
 
@@ -227,30 +228,37 @@ test('touch controls on a phone-sized screen', { skip, timeout: 60000 }, async (
   } finally { await browser.close(); }
 });
 
-test('renders 2,000 units at an interactive frame rate', { skip, timeout: 60000 }, async () => {
+test('5,000 enemies swarm Vance at an interactive frame rate', { skip, timeout: 90000 }, async () => {
   const browser = await launch();
   try {
     const page = await browser.newPage({ viewport: { width: 1365, height: 900 } });
     const errors = track(page);
     await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
-    const fps = await page.evaluate(async () => {
-      const S = GW.State, sh = GW.Units.ship();
-      GW.CONFIG.POPULATION_CAP = 1e9;
-      for (let i = 0; i < 1000; i++){
-        const a = GW.openPoint(sh.x - 1500 + (i % 50) * 60, sh.y + 500 + Math.floor(i / 50) * 60);
-        const b = GW.openPoint(sh.x - 1500 + (i % 50) * 60, sh.y + 1800 + Math.floor(i / 50) * 60);
-        GW.Units.spawn('security_drone', a.x, a.y); GW.Units.spawn('hostile_machine', b.x, b.y);
+    const r = await page.evaluate(async () => {
+      const S = GW.State, h = GW.Units.hero(), N = 5000;
+      for (const u of S.units) if (u.team === 'blue') u.maxHp = u.hp = 1e9;   // measure the swarm, not a defeat
+      for (let i = 0; i < N; i++){
+        const a = (i / N) * Math.PI * 2, rad = 1500 + (i % 25) * 40;
+        const q = GW.openPoint(h.x + Math.cos(a) * rad, h.y + Math.sin(a) * rad, 0, 30);
+        GW.Units.spawn('hostile_machine', q.x, q.y);
       }
       GW.rebuildSpatial();
-      GW.centerCamera(sh.x, sh.y + 1500, 0.35);
-      await new Promise(r => setTimeout(r, 1000));
-      let frames = 0; const t0 = performance.now();
-      await new Promise(r => { const f = () => { frames++; if (performance.now() - t0 < 3000) requestAnimationFrame(f); else r(); }; requestAnimationFrame(f); });
-      return { fps: frames / ((performance.now() - t0) / 1000), units: S.units.length, update: S.metrics.updateMs, draw: S.metrics.drawMs };
+      GW.centerCamera(h.x, h.y, 0.3);
+      const t0 = performance.now();
+      await new Promise(res => { const k = () => GW.Swarm.field && GW.Swarm.field.ready ? res() : setTimeout(k, 20); k(); });
+      const fieldMs = performance.now() - t0;
+      const d0 = S.units.filter(u => u.team === 'red').reduce((a, u) => a + Math.hypot(u.x - h.x, u.y - h.y), 0) / N;
+      let frames = 0, worst = 0, last = performance.now(); const start = last;
+      await new Promise(res => { const f = () => { const n = performance.now(); worst = Math.max(worst, n - last); last = n; frames++; if (n - start < 6000) requestAnimationFrame(f); else res(); }; requestAnimationFrame(f); });
+      const red = S.units.filter(u => u.team === 'red');
+      const d1 = red.reduce((a, u) => a + Math.hypot(u.x - h.x, u.y - h.y), 0) / red.length;
+      return { fps: frames / 6, worst, fieldMs, d0, d1, update: S.metrics.updateMs, draw: S.metrics.drawMs, queue: S.paths.length, units: S.units.length };
     });
-    console.log(`    stress: ${fps.fps.toFixed(1)} fps, ${fps.units} units alive, update ${fps.update.toFixed(1)} ms, draw ${fps.draw.toFixed(1)} ms`);
-    await page.screenshot({ path: path.join(OUT, 'stress.png') });
-    assert.ok(fps.fps > 10, 'frame rate ' + fps.fps.toFixed(1));
+    console.log(`    swarm: ${r.fps.toFixed(1)} fps (worst frame ${r.worst.toFixed(0)} ms), update ${r.update.toFixed(1)} ms, draw ${r.draw.toFixed(1)} ms, field built in ${r.fieldMs.toFixed(0)} ms, closed ${r.d0.toFixed(0)} → ${r.d1.toFixed(0)} px, path queue ${r.queue}`);
+    await page.screenshot({ path: path.join(OUT, 'swarm.png') });
+    assert.ok(r.fps > 20, 'frame rate ' + r.fps.toFixed(1));
+    assert.ok(r.d1 < r.d0 - 250, 'the swarm advanced on Vance');
+    assert.ok(r.queue < 200, 'no route-search backlog');
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

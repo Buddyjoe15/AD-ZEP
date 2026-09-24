@@ -22,19 +22,31 @@
       S.unitIndex = new Map();
       for (const u of S.units) S.unitIndex.set(u.id, u);
     },
+    // Every unit object has exactly these fields, created in this order. A single object
+    // shape keeps property access fast in the hot loops (movement, separation, combat)
+    // when thousands of units exist; fields a unit type does not use stay null.
+    blank(){
+      return {
+        id: 0, type: '', team: 'blue', name: '', x: 0, y: 0, heading: 0,
+        hp: 1, maxHp: 1, speed: 0, radius: 1, range: 0, damage: 0, reload: 999, cool: 0, sight: 0,
+        path: [], pathIndex: 0, pathPending: false,
+        command: 'idle', guardPoint: null, patrolA: null, patrolB: null, patrolTarget: 0, commandNextPath: 0,
+        recallPoint: null, recallRetry: 0, targetId: null, targetNextScan: 0, aiNextPath: 0, squad: null,
+        followId: null, crowd: 0,
+        aiMode: null, aiTargetId: null, aiNextScan: 0, aiHold: false, spawnerId: null,
+        cargo: null, cargoCapacity: 0, haulState: 'idle', nodeId: null, mineId: null, buildSiteId: null,
+        storage: null, fabQueue: null, isHero: false, isShip: false, gx: null, gy: null, w: null, h: null
+      };
+    },
     // Builds a unit object from its definition without adding it to the world.
     make(type, x, y, opts = {}){
       const d = G.Defs.units.require(type);
-      const u = {
+      const u = Object.assign(this.blank(), {
         id: opts.id != null ? opts.id : G.newId(), type, team: opts.team || d.team, name: d.name,
-        x, y, heading: 0, hp: d.hp, maxHp: d.hp, speed: d.speed, radius: d.radius,
-        range: d.range, damage: d.damage, reload: d.reload, cool: 0, sight: d.sight,
-        path: [], pathIndex: 0, pathPending: false,
-        command: 'idle', guardPoint: null, patrolA: null, patrolB: null, patrolTarget: 0, commandNextPath: 0,
-        recallPoint: null, recallRetry: 0, targetId: null, targetNextScan: 0, aiNextPath: 0, squad: null
-      };
-      if (d.cargoCapacity > 0){ u.cargo = {}; u.cargoCapacity = d.cargoCapacity; u.haulState = 'idle'; u.nodeId = null; }
-      if (capsOf(d).has('build')) u.buildSiteId = null;
+        x, y, hp: d.hp, maxHp: d.hp, speed: d.speed, radius: d.radius,
+        range: d.range, damage: d.damage, reload: d.reload, sight: d.sight
+      });
+      if (d.cargoCapacity > 0){ u.cargo = {}; u.cargoCapacity = d.cargoCapacity; }
       if (d.storageSlots > 0) u.storage = { id: 'storage-' + u.id, name: d.name + ' Storage', capacity: d.storageSlots, items: [], opened: true, mobileUnitId: u.id };
       if (d.footprint){
         const T = G.CONFIG.TILE;
@@ -53,8 +65,8 @@
       return u;
     },
     // Adds an existing unit object (restore / transit). Occupancy is stamped here.
-    adopt(u){
-      const S = G.State;
+    adopt(data){
+      const S = G.State, u = Object.assign(this.blank(), data);   // normalise to the canonical shape
       S.units.push(u);
       if (!S.unitIndex) this.rebuildIndex(); else S.unitIndex.set(u.id, u);
       if (u.w && S.grid) S.grid.stamp(u.gx, u.gy, u.w, u.h, 1);

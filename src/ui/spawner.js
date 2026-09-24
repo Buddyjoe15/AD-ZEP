@@ -33,7 +33,7 @@
         <h3>How many to spawn</h3>
         <div class="spChips">${S.AMOUNTS.map(v => chip('amount', v, s.amount, v >= 1000 ? v / 1000 + 'k' : v)).join('')}<input id="spAmount" type="number" min="1" max="${S.MAX_AMOUNT}" step="1" value="${s.amount}" aria-label="Custom amount"></div>
         <h3>Spawned units</h3>
-        <div class="spChips">${chip('hold', 'hold', s.hold ? 'hold' : 'hunt', 'Hold position')}${chip('hold', 'hunt', s.hold ? 'hold' : 'hunt', 'Hunt the crew')}</div>
+        <div class="spChips">${chip('hold', 'hold', s.hold ? 'hold' : 'hunt', 'Hold position')}${chip('hold', 'hunt', s.hold ? 'hold' : 'hunt', 'Advance on Vance')}</div>
         <div class="spActions">
           <button id="spStart" class="spPrimary">${s.running ? 'Pause' : s.spawned > 0 && s.spawned < s.amount ? 'Resume' : 'Start spawning'}</button>
           <button id="spReset">Reset count</button><button id="spClear">Remove spawned</button>
