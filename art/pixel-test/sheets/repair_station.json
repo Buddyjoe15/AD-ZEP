@@ -1,0 +1,58 @@
+{
+  "name": "repair_station",
+  "frameWidth": 48,
+  "frameHeight": 48,
+  "origin": [
+    0,
+    0
+  ],
+  "footprintTiles": [
+    2,
+    2
+  ],
+  "worldPxPerArtPx": 2,
+  "rows": "single row",
+  "states": {
+    "foundation": {
+      "start": 0,
+      "frames": 1
+    },
+    "frame": {
+      "start": 1,
+      "frames": 1
+    },
+    "near-complete": {
+      "start": 2,
+      "frames": 1
+    },
+    "finished": {
+      "start": 3,
+      "frames": 1
+    },
+    "working": {
+      "start": 4,
+      "frames": 4,
+      "fps": 6
+    },
+    "damaged": {
+      "start": 8,
+      "frames": 1
+    },
+    "rubble": {
+      "start": 9,
+      "frames": 1
+    }
+  },
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      2,
+      2
+    ],
+    "elevation": "ground"
+  },
+  "team": "team0..team2 (magenta ramp)",
+  "image": "repair_station.png",
+  "sheetWidth": 480,
+  "sheetHeight": 48
+}

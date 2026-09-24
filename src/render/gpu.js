@@ -9,7 +9,7 @@
   const G = GW;
 
   const SA = () => G.SpriteAtlas;
-  const FLOATS = 12;                    // per sprite: x, y, angle, radius | u0, v0 | rect x, y, w, h (world) | pad x2
+  const FLOATS = 12;                    // per sprite: x, y, angle, radius | u0, v0 | rect x, y, w, h (world) | scale | pad
   const BAR_FLOATS = 8;                 // per bar: x, y, width, frac, r, g, b, pad
 
   const SPRITE_VS = `#version 300 es
@@ -17,9 +17,10 @@
     layout(location=1) in vec4 inst;      // x, y, angle, radius
     layout(location=2) in vec2 uv0;       // atlas uv of the art's top-left
     layout(location=3) in vec4 rect;      // art bounds relative to the unit (world px): x, y, w, h
+    layout(location=4) in float scale;    // atlas px per world px for this sprite
     uniform vec3 cam;                     // camera x, y, zoom
     uniform vec2 view;                    // viewport CSS px
-    uniform vec2 cell;                    // atlas uv per world px
+    uniform vec2 cell;                    // atlas uv per atlas px (1 / atlas size)
     uniform float minPx;
     out vec2 vUv;
     void main(){
@@ -29,12 +30,16 @@
       vec2 world = inst.xy + vec2(local.x * c - local.y * s, local.x * s + local.y * c);
       vec2 px = (world - cam.xy) * cam.z;
       gl_Position = vec4(px.x / view.x * 2.0 - 1.0, 1.0 - px.y / view.y * 2.0, 0.0, 1.0);
-      vUv = uv0 + corner * rect.zw * cell;
+      vUv = uv0 + corner * rect.zw * scale * cell;
     }`;
   const SPRITE_FS = `#version 300 es
     precision mediump float;
-    in vec2 vUv; uniform sampler2D atlas; out vec4 color;
-    void main(){ color = texture(atlas, vUv); if (color.a < 0.02) discard; }`;
+    in vec2 vUv; uniform sampler2D atlas; uniform float shadow; out vec4 color;
+    void main(){
+      color = texture(atlas, vUv);
+      if (shadow > 0.0){ if (color.a < 0.5) discard; color = vec4(0.0, 0.0, 0.0, shadow); return; }
+      if (color.a < 0.02) discard;
+    }`;
   const BAR_VS = `#version 300 es
     layout(location=0) in vec2 corner;
     layout(location=1) in vec4 inst;      // x (centre), y (top), width, fraction
@@ -68,7 +73,7 @@
 
   G.GPU = {
     ok: false, gl: null, canvas: null, reason: '',
-    sprites: new Float32Array(FLOATS * 1024), bars: new Float32Array(BAR_FLOATS * 256),
+    sprites: new Float32Array(FLOATS * 1024), shadows: new Float32Array(FLOATS * 256), bars: new Float32Array(BAR_FLOATS * 256),
     init(canvas){
       this.canvas = canvas;
       if (G.GPU_DISABLED){ this.reason = 'disabled'; return false; }
@@ -83,7 +88,7 @@
         this.gl = gl;
         this.sprite = { prog: compile(gl, SPRITE_VS, SPRITE_FS) };
         this.bar = { prog: compile(gl, BAR_VS, BAR_FS) };
-        for (const P of [this.sprite, this.bar]) for (const n of ['cam', 'view', 'cell', 'minPx', 'atlas']) P[n] = gl.getUniformLocation(P.prog, n);
+        for (const P of [this.sprite, this.bar]) for (const n of ['cam', 'view', 'cell', 'minPx', 'atlas', 'shadow']) P[n] = gl.getUniformLocation(P.prog, n);
         const quad = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, quad);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
@@ -96,7 +101,7 @@
           return v;
         };
         this.sprite.buf = gl.createBuffer(); this.bar.buf = gl.createBuffer();
-        this.sprite.vao = vao(this.sprite.buf, [[1, 4, 0, FLOATS], [2, 2, 4, FLOATS], [3, 4, 6, FLOATS]]);
+        this.sprite.vao = vao(this.sprite.buf, [[1, 4, 0, FLOATS], [2, 2, 4, FLOATS], [3, 4, 6, FLOATS], [4, 1, 10, FLOATS]]);
         this.bar.vao = vao(this.bar.buf, [[1, 4, 0, BAR_FLOATS], [2, 3, 4, BAR_FLOATS]]);
         this.tex = gl.createTexture(); this.uploaded = -1;
         canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); this.ok = false; this.reason = 'context lost'; });
@@ -121,7 +126,8 @@
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, A.canvas);
       gl.generateMipmap(gl.TEXTURE_2D);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      // Pixel art stays crisp when magnified; Canvas art is smoothed.
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, G.PixelArt.enabled ? gl.NEAREST : gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       this.uploaded = A.version;
@@ -141,17 +147,24 @@
       ents.length = units.length;
       for (let i = 0; i < units.length; i++){ const def = D.get(units[i].type); ents[i] = def ? SA().entryFor(def, units[i].team) : null; }
       if (this.uploaded !== SA().version) this.upload();
-      // Pass 2: instance data.
-      const A = SA(), buf = this.grow('sprites', FLOATS, units.length), AH = A.canvas.height, AW = A.canvas.width;
-      let n = 0;
+      // Pass 2: instance data. Pixel-art sprites also get a shadow instance at their offset.
+      const A = SA(), AH = A.canvas.height, AW = A.canvas.width;
+      const buf = this.grow('sprites', FLOATS, units.length), sb = this.grow('shadows', FLOATS, units.length);
+      let n = 0, ns = 0;
       for (let i = 0; i < units.length; i++){
         const u = units[i], e = ents[i];
         if (!e) continue;
-        const f = A.frame(e, u, t), o = n * FLOATS;
+        const at = e.at[A.frame(e, u, t)], o = n * FLOATS;
         buf[o] = u.x; buf[o + 1] = u.y; buf[o + 2] = e.upright ? 0 : u.heading; buf[o + 3] = u.radius;
-        buf[o + 4] = (A.cellX(f) + e.px.x) / AW; buf[o + 5] = (A.cellY(f) + e.px.y) / AH;
-        buf[o + 6] = e.rect.x; buf[o + 7] = e.rect.y; buf[o + 8] = e.rect.w; buf[o + 9] = e.rect.h;
+        buf[o + 4] = at[0] / AW; buf[o + 5] = at[1] / AH;
+        buf[o + 6] = e.rect.x; buf[o + 7] = e.rect.y; buf[o + 8] = e.rect.w; buf[o + 9] = e.rect.h; buf[o + 10] = e.scale;
         n++;
+        if (e.shadow){
+          const q = ns * FLOATS;
+          for (let k = 0; k < FLOATS; k++) sb[q + k] = buf[o + k];
+          sb[q] += e.shadow[0]; sb[q + 1] += e.shadow[1];
+          ns++;
+        }
       }
       gl.viewport(0, 0, this.canvas.width, this.canvas.height);
       gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -159,12 +172,22 @@
         const P = this.sprite;
         gl.useProgram(P.prog);
         gl.uniform3f(P.cam, c.x, c.y, c.z); gl.uniform2f(P.view, R.w, R.h);
-        gl.uniform2f(P.cell, A.RES / AW, A.RES / AH);
+        gl.uniform2f(P.cell, 1 / AW, 1 / AH);
         gl.uniform1f(P.minPx, 5);
         gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.tex); gl.uniform1i(P.atlas, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, P.buf);
-        gl.bufferData(gl.ARRAY_BUFFER, buf.subarray(0, n * FLOATS), gl.STREAM_DRAW);
         gl.bindVertexArray(P.vao);
+        if (ns){
+          // Shadows first. MAX blending: where shadows overlap the result is one 55% shadow,
+          // not two stacked ones. The layer is composited over the map, darkening it.
+          gl.bufferData(gl.ARRAY_BUFFER, sb.subarray(0, ns * FLOATS), gl.STREAM_DRAW);
+          gl.uniform1f(P.shadow, G.PixelArt.SHADOW_ALPHA);
+          gl.blendEquation(gl.MAX); gl.blendFunc(gl.ONE, gl.ONE);
+          gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, ns);
+          gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        }
+        gl.uniform1f(P.shadow, 0);
+        gl.bufferData(gl.ARRAY_BUFFER, buf.subarray(0, n * FLOATS), gl.STREAM_DRAW);
         gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, n);
       }
       if (barUnits.length){

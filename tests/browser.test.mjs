@@ -502,3 +502,52 @@ test('fabrication rally point, draggable expedition log, unit stats and enemy in
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });
+
+test('pixel-art sprites: eight facings, engine shadows, structure states, dust terrain and the classic toggle', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  for (const renderer of ['gpu', '2d']){
+    const browser = await launch();
+    try {
+      const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+      const errors = track(page);
+      await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href + '?renderer=' + renderer);
+      const r = await page.evaluate(() => {
+        const G = GW, S = G.State, h = G.Units.hero(), T = G.CONFIG.TILE, P = G.PixelArt;
+        S.paused = true;
+        const gx = Math.floor(h.x / T) - 1, gy = Math.floor(h.y / T) + 3;
+        const hurt = G.Buildings.add('repair', gx, gy, { team: 'blue' }); hurt.hp = 100;
+        const spider = G.Units.spawn('utility_spider', h.x - 120, h.y); spider.hp = 100;
+        const drones = [];
+        for (let i = 0; i < 8; i++){ const u = G.Units.spawn('hostile_machine', h.x + 150 + i * 40, h.y - 150); u.heading = i * Math.PI / 4 - Math.PI / 2; drones.push(u); }
+        G.rebuildSpatial(); G.centerCamera(h.x, h.y, 1);
+        G.Renderer.draw();
+        const e = G.SpriteAtlas.entryFor(G.Defs.units.get('hostile_machine'), 'red');
+        const frames = drones.map(u => G.SpriteAtlas.frame(e, u, 0));
+        return {
+          enabled: P.enabled, pixel: !!e.pixel, facings: e.facings.length, shadow: !!e.shadow,
+          distinct: new Set(frames).size, facingOf: drones.map(u => P.facing(u.heading)),
+          damaged: P.stationState(hurt, 0) === P.data.sprites.repair_station.states.damaged.start,
+          dust: P.dustIds().has(S.grid.get(Math.floor(h.x / T), Math.floor(h.y / T))), gpu: G.GPU.ok, sprites: S.metrics.gpuSprites
+        };
+      });
+      assert.ok(r.enabled && r.pixel, 'pixel art is on by default');
+      assert.equal(r.facings, 8); assert.ok(r.shadow, 'shadows are drawn by the engine');
+      assert.deepEqual(r.facingOf, [0, 1, 2, 3, 4, 5, 6, 7], 'each heading picks its facing');
+      assert.equal(r.distinct, 8, 'one frame per facing');
+      assert.ok(r.damaged, 'a station below half health shows its damaged state');
+      assert.ok(r.dust, 'grass is drawn as the dust plain');
+      assert.equal(r.gpu, renderer === 'gpu');
+      if (r.gpu) assert.ok(r.sprites > 10, 'units drawn by the GPU');
+      await page.screenshot({ path: path.join(OUT, `pixel-art-${renderer}.png`) });
+      // Destroyed stations leave rubble for a while (presentation only).
+      assert.equal(await page.evaluate(() => { const b = GW.State.buildings.find(x => x.type === 'repair'); b.hp = 0; GW.State.paused = false; return new Promise(res => setTimeout(() => res(GW.PixelArt.rubble.length), 300)); }), 1);
+      // Debug panel toggles back to the classic art.
+      await page.click('#dbgBtn');
+      await page.click('#dbgPixelArt');
+      const classic = await page.evaluate(() => { GW.Renderer.draw(); return { on: GW.PixelArt.enabled, pixel: !!GW.SpriteAtlas.entryFor(GW.Defs.units.get('utility_spider'), 'blue').pixel }; });
+      assert.deepEqual(classic, { on: false, pixel: false });
+      await page.screenshot({ path: path.join(OUT, `pixel-art-${renderer}-classic.png`) });
+      assert.deepEqual(errors, []);
+    } finally { await browser.close(); }
+  }
+});

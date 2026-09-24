@@ -1,0 +1,44 @@
+{
+  "name": "drone",
+  "frameWidth": 17,
+  "frameHeight": 17,
+  "origin": [
+    8,
+    8
+  ],
+  "worldPxPerArtPx": 2,
+  "rows": "facing",
+  "facings": [
+    "up",
+    "up-right",
+    "right",
+    "down-right",
+    "down",
+    "down-left",
+    "left",
+    "up-left"
+  ],
+  "authoredFacings": [
+    "up",
+    "up-right"
+  ],
+  "animations": {
+    "fly": {
+      "start": 0,
+      "frames": 4,
+      "fps": 16
+    }
+  },
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      4,
+      5
+    ],
+    "elevation": "air"
+  },
+  "team": "team0..team2 (magenta ramp)",
+  "image": "drone.png",
+  "sheetWidth": 68,
+  "sheetHeight": 136
+}
