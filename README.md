@@ -24,15 +24,18 @@ Choose **New Game → Save Slot → Launch expedition**. The same seed always ge
 | Load test | Click the red **HF** Hostile Fabricator in the testing zone (or place one from DEBUG): set spawn speed and count, choose hold or hunt, press Start | Same |
 | Other | H: centre on ship · I: inventory · Space: pause · Esc: cancel · F3: diagnostics | — |
 
-Saves go to three browser slots (autosave every 60 s and on each transit). You can also export and import them as JSON from the Expedition log. Saves from v0.5 load and are migrated automatically.
+Saves go to three browser slots (autosave every 60 s and on each transit). You can also export and import them as JSON from the Expedition log. Saves from v0.5 load and are migrated automatically. Before an older save is upgraded, its original is kept in browser storage as a backup. A save that can't be loaded is reported instead of loaded, and your current game is left as it was.
 
 ## Develop
 
 ```
-npm test               # static checks + 20 headless simulation tests (no dependencies)
+npm test               # static checks + headless simulation and save-format tests (no dependencies)
 npm run test:browser   # real-browser tests: desktop, touch, bundled build, 2,000-unit stress
 npm run build          # dist/ad-ezp.html, one self-contained file
+npm run save:snapshot  # after bumping GW.SAVE_SCHEMA: record the new save shape and fixture
 ```
+
+Changing what a save contains? Follow the checklist in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#changing-the-save-format). The tests fail if the save format changes without a schema bump and migration.
 
 The browser tests need Playwright and Chromium (`npm install --no-save playwright && npx playwright install chromium`). A global install also works. `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` can point at existing installations. When Playwright is missing, the tests are skipped. CI (`.github/workflows/test.yml`) runs everything and uploads the build and screenshots.
 
@@ -59,7 +62,8 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
   - Minimap colours now match the terrain.
 - **GPU unit rendering.** Units are drawn by WebGL2: each unit's art (including Vance's hover and the Spider's walk frames) is painted once into a sprite atlas, and every visible unit is then drawn in a single instanced call, with health bars in a second. Map, structures and overlays stay on Canvas 2D layers. Drawing 3,000 units went from 9–50 ms of CPU per frame to about 1.5 ms. Browsers without hardware-accelerated WebGL2 automatically use a Canvas 2D fallback that stamps the same sprites. `?renderer=2d` or `?renderer=gpu` forces either one, and F3 shows which is active.
 - **Swarm AI for enemies.** Hostile Autonomous Machines no longer each run their own route search. They follow one shared flow field toward Vance, built in small fixed slices across ticks and weighted to spread crowds across gaps. When anything friendly comes within 10 tiles (crew, the ship or player structures), they break off and attack it, and resume the march when it's gone. Enemies boxed in near the front hold position instead of shoving. In a real browser, 5,000 swarming enemies take about 4.5 ms per tick (11 ms before), and zoomed-out views stay at 45–60 fps by drawing distant units as batched markers.
-- **Deterministic simulation.** Background work (flow fields, route searches) is budgeted by amount of work, not time, so a given game plays out identically on any machine. A test checks this.
+- **Deterministic simulation.** Background work (flow fields, route searches) is budgeted by amount of work, not time, so a given game plays out identically on any machine. A test checks this. The static check also rejects wall-clock reads and `Math.random` in the simulation. Armour wear, the last random choice, is now seeded.
+- **Save discipline.** The save format is fingerprinted per schema version. There is one fixture save per version, migrations are a chain of named steps, and saves must round-trip exactly. Older browser saves are backed up before they are upgraded, and a save that fails to load leaves the current game running.
 - **Expedition log** no longer has Explore with Vance, Assign mining or Survey drone.
 - **Two ways to get metal.** *Scavenging Mines* are loose salvage a Spider collects itself, fast (20/s), until they run out. *Metal Mines* are 1×1 deposits with a near-endless reserve. Nothing happens until you build a 3×3 **Mine Building** centred over one. It then extracts slowly (2/s) into a 300-unit stockpile, and Spiders haul that stockpile to the ship. Each Earth has two Metal Mines near the ship, and the testing zone has one with a Mine Building already on it.
 - **Follow** replaces "Follow Vance". Any friendly unit, Vance included, can follow any other friendly unit you tap. A dashed line shows who it is following.

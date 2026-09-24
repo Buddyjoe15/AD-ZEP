@@ -262,7 +262,11 @@ test('5,000 enemies swarm Vance at an interactive frame rate', { skip, timeout: 
     await page.screenshot({ path: path.join(OUT, 'swarm.png') });
     // A frame-rate floor is only meaningful on the renderer the game picks by itself; a
     // forced WebGL run in CI uses a CPU-emulated GPU that fills every pixel in software.
-    if (process.env.RENDERER !== 'gpu') assert.ok(r.fps > 20, 'frame rate ' + r.fps.toFixed(1));
+    // Shared CI runners have no GPU at all, so page compositing alone costs them 40+ ms a
+    // frame and wall-clock fps measures the runner. There, check the game's own work per
+    // frame (simulation tick + drawing) against the 33 ms tick budget instead.
+    if (process.env.CI) assert.ok(r.update + r.draw < 33, `update ${r.update.toFixed(1)} + draw ${r.draw.toFixed(1)} ms per frame`);
+    else if (process.env.RENDERER !== 'gpu') assert.ok(r.fps > 20, 'frame rate ' + r.fps.toFixed(1));
     assert.ok(r.d1 < r.d0 - 250, 'the swarm advanced on Vance');
     assert.ok(r.queue < 200, 'no route-search backlog');
     assert.deepEqual(errors, []);
@@ -291,6 +295,42 @@ test('GPU renderer draws every visible unit in one instanced pass', { skip, time
     assert.equal(r.sprites, r.visible - 1, 'every visible unit except the ship (drawn on the map layer) is a GPU sprite');
     assert.ok(r.opaque > r.sprites * 40, `units are visible on the GPU layer (${r.opaque} opaque px)`);
     await page.screenshot({ path: path.join(OUT, 'gpu.png') });
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('old browser saves are backed up before upgrading; unloadable saves are reported, not loaded', { skip, timeout: 60000 }, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+    const errors = track(page);
+    const url = pathToFileURL(path.join(ROOT, 'index.html')).href;
+    const v1 = fs.readFileSync(path.join(ROOT, 'tests/fixtures/save-schema-1.json'), 'utf8');
+    await page.goto(url);
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'mainMenu');
+    await page.evaluate(v1 => {
+      localStorage.clear();
+      localStorage.setItem(GW.Save.keyFor(3), v1);
+      const broken = JSON.parse(v1); broken.units[0].hp = -5;
+      localStorage.setItem(GW.Save.keyFor(2), JSON.stringify(broken));
+    }, v1);
+    await page.reload();
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'mainMenu');
+    await page.click('[data-home="load"]');
+    assert.match(await page.textContent('[data-load-slot="2"]'), /Unreadable save/);
+    // The broken slot is reported and nothing loads.
+    await page.click('[data-load-slot="2"]');
+    assert.match(await page.textContent('#toast'), /Save Slot 2 could not be loaded: Invalid expedition save: unit stats\..*backup/);
+    assert.equal(await page.evaluate(() => GW.SceneManager.currentName), 'mainMenu');
+    // The v0.5 save is backed up untouched, then upgraded and loaded.
+    await page.click('[data-load-slot="3"]');
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay');
+    assert.equal(await page.evaluate(() => localStorage.getItem(GW.Save.backupKey(3, 1))), v1);
+    assert.equal(await page.evaluate(() => GW.Units.crew().length), 5, 'Vance and four drones');
+    await page.evaluate(() => GW.Save.save(3));
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem(GW.Save.keyFor(3))).schema), 2);
+    assert.equal(await page.evaluate(() => localStorage.getItem(GW.Save.backupKey(3, 1))), v1, 'backup survives the autosave');
+    await page.evaluate(() => localStorage.clear());
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

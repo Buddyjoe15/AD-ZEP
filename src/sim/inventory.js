@@ -51,6 +51,10 @@
 
   const inv = () => G.State.inventory;
   const changed = () => G.Events.emit('inventory:changed');
+  const armorPick = () => {
+    const S = G.State, h = G.Units.hero();
+    return G.hashRandom(S.seed, Math.round(S.time / G.CONFIG.FIXED_DT), h ? Math.round(h.hp * 1000) : 0);
+  };
 
   G.Inventory = {
     baseCapacity: 10,
@@ -109,8 +113,10 @@
       for (const it of Object.values(inv().equipment)) if (it) n += G.Items.effects(it).damageReduction || 0;
       return Math.min(0.65, n);
     },
-    // Wears one random piece of armour that is currently providing protection.
-    wearArmor(amount, rnd = Math.random){
+    // Wears one piece of armour that is currently providing protection, chosen
+    // deterministically from the seed, the tick and Vance's health (so replays and
+    // reloaded saves wear the same piece).
+    wearArmor(amount, rnd = armorPick){
       const worn = Object.values(inv().equipment).filter(it => it && it.durability > 0 && G.Items.effects(it).damageReduction);
       if (!worn.length) return;
       const it = worn[(rnd() * worn.length) | 0];

@@ -12,11 +12,11 @@ src/sim/              gameplay systems: units, economy, buildings, inventory, or
 src/render/           canvas art registry, terrain chunk cache, renderer + minimap
 src/ui/               HUD, inventory, build mode, expedition panels, debug catalog, input, menus
 src/main.js           boot + fixed-timestep loop
-tools/                build (single-file bundle) and static checks
-tests/                headless simulation tests, browser tests, v0.5 save fixture
+tools/                build (single-file bundle), static checks, save-format snapshot
+tests/                headless simulation and save tests, browser tests, one fixture save per schema
 ```
 
-**The rule:** nothing in `core`, `data`, `world` or `sim` touches the DOM. `tools/check.mjs` enforces this. Because of it, the whole simulation runs in Node (`tests/harness.mjs`), and could later move into a Web Worker or onto a server.
+**The rule:** nothing in `core`, `data`, `world` or `sim` touches the DOM, reads the wall clock (`Date.now`, `performance.now`, `new Date`) or calls `Math.random`. `tools/check.mjs` enforces both. Randomness comes from the seeded `GW.RNG` or `GW.hashRandom`. Diagnostics timings and save timestamps go through `GW.Clock`, which `src/main.js` connects to the real clock and which reads zero headless. Because of it, the whole simulation runs in Node (`tests/harness.mjs`), and could later move into a Web Worker or onto a server.
 
 The simulation reports changes to the interface through `GW.Events` (`notify`, `inventory:changed`, `container:opened`, `expedition:transit`, `game:defeat`, …). The UI listens to these events and never mutates state behind the simulation's back. Player commands go through simulation APIs (`GW.Orders`, `GW.Construction`, `GW.Fabrication`, `GW.Expedition.action`).
 
@@ -86,7 +86,7 @@ The debug catalog (DEBUG button) lists every registered structure, item, unit an
 | Route search | A* with typed arrays reused through generation stamps, an allocation-free index heap, a node budget with partial paths, and line-of-sight smoothing. |
 | Many requests | `PathService.request()` queues searches; `paths` serves them within `PATH_NODE_BUDGET` A* expansions / `PATH_MAX_PER_TICK` per tick. A newer request replaces an older one for the same unit. |
 | Swarms | `ai: 'swarm'` units share one `TargetField` toward Vance: a Dijkstra field over the swarm's bounding window, built `buildTiles` tiles per tick and refreshed periodically with a small per-unit crowd cost. Units steer straight at the farthest field point in line of sight a few tiles ahead, and engage anything within `aggroTiles`. Tuning lives in `GW.SWARM_RULES`. |
-| Determinism | Per-tick budgets count work, not milliseconds, so the same inputs give the same game on any machine (covered by a test). Keep it that way: never branch simulation logic on wall-clock time. |
+| Determinism | Per-tick budgets count work, not milliseconds, so the same inputs give the same game on any machine (covered by a test). Keep it that way: never branch simulation logic on wall-clock time. `tools/check.mjs` rejects wall-clock and `Math.random` calls in the simulation layers. |
 | Group orders | Groups of `FLOWFIELD_MIN_GROUP` or more share one windowed Dijkstra field. Units smooth their paths incrementally while moving. |
 | Neighbour queries | Dense typed-array grids (per-cell linked lists, rebuilt every tick): tile-sized cells for collision and picking, plus coarser per-team grids for target acquisition. Every unit object has the same fields in the same order (`GW.Units.blank()`), which keeps hot loops fast. |
 | Lookups | Units are indexed by id (`GW.Units.get`). |
@@ -96,6 +96,28 @@ Browser benchmarks (tick budget is 33 ms): 5,000 enemies swarming Vance take abo
 
 ## Saves
 
-`GW.Save.serialize()` writes schema 2. `validate()` rejects malformed data before anything changes. `migrate()` upgrades schema 1 (v0.5) saves: unit types, cargo and storage fields, queues, and the old solid-chest bug. When you change the save format, bump `GW.SAVE_SCHEMA` and add a migration step.
+AI contributors: the binding rules are under "Save format rules" in [`CLAUDE.md`](../CLAUDE.md) (the same text is in [`AGENTS.md`](../AGENTS.md)).
+
+`GW.Save.serialize()` writes schema `GW.SAVE_SCHEMA` (currently 2). `migrate()` upgrades older saves one step at a time through named functions in `src/sim/save.js` (`migrate_1_to_2`, then `migrate_2_to_3`, and so on), registered in `MIGRATIONS` by the schema they start from. `validate()` then rejects malformed data before anything changes. If rebuilding the world still fails part way, `restore()` rolls back to the game that was running.
 
 Terrain is regenerated from the seed, and `terrainEdits` replays any changes made after generation. The map generator must keep its RNG call order: a terrain fingerprint test fails if generation changes.
+
+`tests/save.test.mjs` guards the format:
+
+- **Shape fingerprint.** The keys and value types of a representative game's save (`tests/save-support.mjs`), recursively, with array elements merged and optional keys marked, must match `tests/save-shapes/schema-N.json`. Otherwise it fails with "Save format changed. Bump GW.SAVE_SCHEMA and add a migration." and lists the changed paths.
+- **Fixtures.** `tests/fixtures/save-schema-N.json` holds one save per schema. Extra saves can sit alongside as `save-schema-N-label.json`, like the early-v0.6 schema 2 save. Every fixture must migrate, validate, load and play 5 seconds. Each older schema must have its fixture and its migration step.
+- **Round trip.** Serialize, load and serialize again must give an identical JSON string.
+- **Backups.** Before a browser slot holding an older save is migrated, the untouched text is stored under `ad-ezp-v01-slot-<n>-backup-schema-<old>` (`GW.Save.backup(slot, schema)`). A slot that fails to load is kept the same way. The current game stays loaded, a message says why, and the menus mark the slot as unreadable instead of empty.
+
+### Changing the save format
+
+Any change to what `serialize()` writes counts: a new, removed, renamed or retyped field, or a field that becomes optional.
+
+1. Make the change, then run `npm test`. The fingerprint test fails and lists the changed paths. If it doesn't fail, extend `representativeGame()` in `tests/save-support.mjs` so the new data appears in the save, and run it again.
+2. Bump `GW.SAVE_SCHEMA` in `src/core/namespace.js` (N → N+1). Never edit `tests/save-shapes/schema-N.json` to make the test pass; that file describes saves players already have.
+3. Write `migrate_N_to_N+1(d)` in `src/sim/save.js` and add it to `MIGRATIONS` as `{ N: migrate_N_to_N+1 }`. It must return a new object with `schema: N + 1`, copying rather than mutating its input (start with `G.copy(d)`), and fill every new field with a sensible default. Leave the earlier steps alone.
+4. Update `validate()` for the new shape, and `restore()` / `adopt()` if the field needs rebuilding on load.
+5. Run `npm run save:snapshot`. It writes `tests/save-shapes/schema-N+1.json` and `tests/fixtures/save-schema-N+1.json`. The existing `save-schema-N.json` fixture stays: it is the proof that schema N saves still load.
+6. Run `npm test` until it passes: fingerprint, migration chain, every fixture, round trip. Add a test for any behaviour the migration has to preserve.
+7. Keep the simulation deterministic. Use `GW.RNG` / `GW.hashRandom`, never `Math.random`, and never read the wall clock in `src/core`, `src/data`, `src/world` or `src/sim`.
+8. Mention the migration in the README's changelog.

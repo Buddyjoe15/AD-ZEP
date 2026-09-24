@@ -1,5 +1,6 @@
-/* Save files: serialisation, strict validation, migration from schema 1 (v0.5), restore,
-   and a storage adapter that falls back to memory when localStorage is unavailable. */
+/* Save files: serialisation, strict validation, a chain of schema migrations, restore,
+   and a storage adapter that falls back to memory when localStorage is unavailable.
+   Before changing the save format, read "Changing the save format" in docs/ARCHITECTURE.md. */
 (function(){
   'use strict';
   const G = GW;
@@ -18,7 +19,10 @@
     };
   })();
 
-  // ---- Schema 1 (v0.5) → schema 2 ----
+  // ---- Migrations: one named step per schema bump. Each takes a save of schema N and
+  // returns a new object of schema N + 1 without mutating its input. ----
+
+  // Schema 1 (v0.5) → schema 2 (v0.6).
   const ROLE_TO_TYPE = { Survey: 'survey_drone', Security: 'security_drone', Utility: 'utility_spider', Mining: 'utility_spider', Cargo: 'utility_spider', Construction: 'utility_spider' };
   const ROLE_TO_RECIPE = ROLE_TO_TYPE;
   function migrateItem(it){
@@ -28,7 +32,7 @@
     if (it.durability != null){ out.durability = it.durability; out.maxDurability = it.maxDurability; }
     return out;
   }
-  function migrateV1(d){
+  function migrate_1_to_2(d){
     const v = G.copy(d), T = 48;
     v.schema = 2;
     v.units = (v.units || []).map(u => {
@@ -96,11 +100,23 @@
     return v;
   }
 
+  // Keyed by the schema each step upgrades from; add { 2: migrate_2_to_3 } and so on.
+  const MIGRATIONS = { 1: migrate_1_to_2 };
+
+  // Applies the steps in order until the save reaches G.SAVE_SCHEMA. A current save is
+  // returned as is; anything newer or unknown is rejected.
   function migrate(d){
     if (!d || typeof d !== 'object' || d.project !== G.PROJECT) throw new Error('Not an Earth Zero Protocol expedition file');
-    if (d.schema === 1) return migrateV1(d);
-    if (d.schema === G.SAVE_SCHEMA) return d;
-    throw new Error('Unsupported save schema ' + d.schema);
+    if (!int(d.schema) || d.schema < 1) throw new Error('Unsupported save schema ' + d.schema);
+    if (d.schema > G.SAVE_SCHEMA) throw new Error('Save schema ' + d.schema + ' is newer than this version of the game (schema ' + G.SAVE_SCHEMA + ')');
+    let v = d;
+    while (v.schema < G.SAVE_SCHEMA){
+      const from = v.schema, step = MIGRATIONS[from];
+      if (!step) throw new Error('No migration from save schema ' + from);
+      v = step(v);
+      if (!v || v.schema !== from + 1) throw new Error('Migration from schema ' + from + ' did not produce schema ' + (from + 1));
+    }
+    return v;
   }
 
   // ---- Validation (schema 2). Throws with a specific message on the first problem. ----
@@ -167,15 +183,44 @@
     return d;
   }
 
+  // Builds a fresh world from validated save data.
+  function apply(d, slot){
+    G.setWorldSize(d.worldSize);
+    const S = G.Scenario.createWorld(d.seed, { slot });
+    for (const e of d.terrainEdits){ S.grid.fill(e.x, e.y, e.w, e.h, e.t); S.terrainEdits.push({ ...e }); }
+    Object.assign(S, {
+      time: d.time, nextId: d.nextId, heroId: d.heroId, shipId: d.shipId,
+      formation: G.FORMATIONS.includes(d.formation) ? d.formation : 'square', formationAngle: num(d.formationAngle) ? d.formationAngle : 0,
+      resources: G.copy(d.resources), inventory: { items: G.copy(d.inventory.items), equipment: { ...G.emptyEquipment(), ...G.copy(d.inventory.equipment) } },
+      containers: G.copy(d.containers), constructionSites: G.copy(d.constructionSites), resourceNodes: G.copy(d.resourceNodes),
+      expedition: G.copy(d.expedition)
+    });
+    Object.assign(S.camera, d.camera);
+    for (const u of G.copy(d.units)){
+      // Capacity upgrades in the unit definitions apply to existing units.
+      const def = G.Defs.units.get(u.type);
+      if (u.storage && def.storageSlots > u.storage.capacity) u.storage.capacity = def.storageSlots;
+      G.Units.adopt(u);
+    }
+    for (const b of G.copy(d.buildings)) G.Buildings.adopt(b);
+    S.selected = new Set([d.heroId]); S.selectionAnchorId = d.heroId;
+    G.rebuildSpatial();
+    G.Events.emit('game:restored', S);
+    return S;
+  }
+
   G.Save = {
     prefix: 'ad-ezp-v01-slot-',
     keyFor(slot){ return this.prefix + slot; },
-    migrate, validate,
+    backupKey(slot, schema){ return this.prefix + slot + '-backup-schema-' + schema; },
+    // The untouched original of an older save, stored before it was first migrated.
+    backup(slot, schema){ return G.Storage.get(this.backupKey(slot, schema)); },
+    migrate, validate, migrations: MIGRATIONS,
     serialize(){
       const S = G.State;
       const units = S.units.filter(u => u.hp > 0).map(u => { const o = G.copy(u); o.pathPending = false; return o; });
       return {
-        project: G.PROJECT, schema: G.SAVE_SCHEMA, version: G.VERSION, savedAt: new Date().toISOString(),
+        project: G.PROJECT, schema: G.SAVE_SCHEMA, version: G.VERSION, savedAt: G.Clock.stamp(),
         seed: S.seed, worldSize: G.CONFIG.WORLD_TILES, time: S.time, nextId: S.nextId, heroId: S.heroId, shipId: S.shipId,
         camera: { x: S.camera.x, y: S.camera.y, z: S.camera.z }, formation: S.formation, formationAngle: S.formationAngle,
         resources: G.copy(S.resources), inventory: G.copy(S.inventory), units,
@@ -183,32 +228,17 @@
         resourceNodes: G.copy(S.resourceNodes), terrainEdits: G.copy(S.terrainEdits || []), expedition: G.copy(S.expedition)
       };
     },
-    // Rebuilds the world from save data. Throws (leaving the current game untouched) if
-    // the data is invalid.
+    // Rebuilds the world from save data. Throws, leaving the current game as it was, if
+    // the data cannot be migrated or is invalid, or if rebuilding fails part way.
     restore(raw, slot = G.State.activeSaveSlot){
       const d = validate(migrate(raw));
-      G.setWorldSize(d.worldSize);
-      const S = G.Scenario.createWorld(d.seed, { slot });
-      for (const e of d.terrainEdits){ S.grid.fill(e.x, e.y, e.w, e.h, e.t); S.terrainEdits.push({ ...e }); }
-      Object.assign(S, {
-        time: d.time, nextId: d.nextId, heroId: d.heroId, shipId: d.shipId,
-        formation: G.FORMATIONS.includes(d.formation) ? d.formation : 'square', formationAngle: num(d.formationAngle) ? d.formationAngle : 0,
-        resources: G.copy(d.resources), inventory: { items: G.copy(d.inventory.items), equipment: { ...G.emptyEquipment(), ...G.copy(d.inventory.equipment) } },
-        containers: G.copy(d.containers), constructionSites: G.copy(d.constructionSites), resourceNodes: G.copy(d.resourceNodes),
-        expedition: G.copy(d.expedition)
-      });
-      Object.assign(S.camera, d.camera);
-      for (const u of G.copy(d.units)){
-        // Capacity upgrades in the unit definitions apply to existing units.
-        const def = G.Defs.units.get(u.type);
-        if (u.storage && def.storageSlots > u.storage.capacity) u.storage.capacity = def.storageSlots;
-        G.Units.adopt(u);
+      const S0 = G.State, prevSlot = S0.activeSaveSlot;
+      const rollback = S0.grid && S0.expedition && S0.units.some(u => u.isHero) ? this.serialize() : null;
+      try { return apply(d, slot); }
+      catch (e){
+        if (rollback){ try { apply(rollback, prevSlot); } catch (e2){ /* report the first error */ } }
+        throw new Error('Could not rebuild the expedition: ' + e.message);
       }
-      for (const b of G.copy(d.buildings)) G.Buildings.adopt(b);
-      S.selected = new Set([d.heroId]); S.selectionAnchorId = d.heroId;
-      G.rebuildSpatial();
-      G.Events.emit('game:restored', S);
-      return S;
     },
     save(slot = G.State.activeSaveSlot){
       slot = G.clamp(slot | 0, 1, G.CONFIG.SAVE_SLOTS);
@@ -224,30 +254,53 @@
         return false;
       }
     },
+    // Loads a browser slot. An older save is first copied, untouched, to a backup key,
+    // because the next autosave replaces the slot with the migrated version. On any
+    // failure the current game stays loaded and a message says what happened.
     load(slot){
+      let backedUp = false, raw = null, data = null;
       try {
-        const raw = G.Storage.get(this.keyFor(slot));
+        raw = G.Storage.get(this.keyFor(slot));
         if (!raw){ G.notify('Save Slot ' + slot + ' is empty'); return false; }
-        this.restore(JSON.parse(raw), slot);
+        data = JSON.parse(raw);
+        const old = data && data.project === G.PROJECT && int(data.schema) && data.schema < G.SAVE_SCHEMA;
+        if (old){
+          const key = this.backupKey(slot, data.schema);
+          if (G.Storage.get(key) === null){
+            try { G.Storage.set(key, raw); }
+            catch (e){ throw new Error('it is from an older version and there is no room to back it up before upgrading. Free some browser storage and try again'); }
+          }
+          backedUp = G.Storage.get(key) !== null;
+        }
+        this.restore(data, slot);
+        if (old) G.notify('Save Slot ' + slot + ' was upgraded from an older version. The original is kept as a backup.');
         return true;
       } catch (e){
-        G.notify('Save rejected: ' + e.message);
+        // Keep a copy of a save that failed to load too, so a later save to this slot
+        // cannot destroy the only copy.
+        if (raw && !backedUp){
+          const key = this.backupKey(slot, data && int(data.schema) ? data.schema : 'unknown');
+          try { if (G.Storage.get(key) === null) G.Storage.set(key, raw); backedUp = G.Storage.get(key) !== null; } catch (e2){ /* storage full */ }
+        }
+        G.notify('Save Slot ' + slot + ' could not be loaded: ' + e.message + '.' + (backedUp ? ' The original save is kept as a backup.' : '') + ' Your current game was not changed.');
+        G.Events.emit('save:rejected', { slot, error: e.message, backedUp });
         return false;
       }
     },
+    // Slot summary for menus: null when empty, { slot, error } when it cannot be loaded.
     info(slot){
+      const raw = G.Storage.get(this.keyFor(slot));
+      if (!raw) return null;
       try {
-        const raw = G.Storage.get(this.keyFor(slot));
-        if (!raw) return null;
         const d = validate(migrate(JSON.parse(raw)));
         return { slot, savedAt: d.savedAt || null, time: d.time, world: d.expedition.world, units: d.units.length };
-      } catch (e){ return null; }
+      } catch (e){ return { slot, error: e.message }; }
     },
     newestSlot(){
       let best = null;
       for (let n = 1; n <= G.CONFIG.SAVE_SLOTS; n++){
         const i = this.info(n);
-        if (!i) continue;
+        if (!i || i.error) continue;
         const t = i.savedAt ? Date.parse(i.savedAt) : 0;
         if (!best || t > best.t) best = { slot: n, t };
       }

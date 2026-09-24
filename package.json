@@ -6,9 +6,10 @@
   "engines": { "node": ">=18" },
   "scripts": {
     "check": "node tools/check.mjs",
-    "test": "node tools/check.mjs && node --test tests/sim.test.mjs",
+    "test": "node tools/check.mjs && node --test tests/sim.test.mjs tests/save.test.mjs",
     "test:browser": "node --test tests/browser.test.mjs",
     "test:all": "npm test && npm run test:browser",
-    "build": "node tools/build.mjs"
+    "build": "node tools/build.mjs",
+    "save:snapshot": "node tools/save-snapshot.mjs"
   }
 }
