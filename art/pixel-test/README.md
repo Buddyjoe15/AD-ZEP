@@ -35,7 +35,7 @@ npm run sprites:preview  # also previews/ (needs Playwright + Chromium)
 
 ## Rules
 
-- **Scale.** One art pixel is 2 world px, so a 48 px tile is 24 art px. Draw at whole multiples of the art pixel where possible, and use nearest-neighbour sampling.
+- **Scale.** One art pixel is 2 world px, so a 48 px tile is 24 art px. This scale is confirmed for the game; draw new art to it. Draw at whole multiples of the art pixel where possible, and use nearest-neighbour sampling.
 - **Palette.** Only the 37 colours in `palette.json`. `team0`–`team2` (magenta) are placeholders, replaced per team at load.
 - **Alpha.** Every pixel is fully opaque or fully transparent.
 - **Shadows are drawn by the engine, never baked into sprites.** The engine stamps the sprite's silhouette at the `shadow.offset` in its metadata and darkens whatever is underneath by 55%. It merges all shadows into one mask first, so overlapping shadows don't double up. Ground units get a small offset. Hovering and flying units get larger ones.
@@ -54,7 +54,7 @@ npm run sprites:preview  # also previews/ (needs Playwright + Chromium)
   The v2 comparison in the sheets view and the ⅓ scenes show the difference.
 - **Shadow rule clarified** (above). They're drawn by the engine, not baked in, which keeps sprites within the opaque-or-transparent rule.
 - **Diagonal Spiders.** Rotating the leg layout made the up-right Spider look like a plus sign. Here the up-right frame is drawn at 45° directly, and the legs splay radially, so the diagonal keeps an X of legs.
-- **In the game** the pixel units are smaller than the old Canvas art. A Spider is about one tile across, where the old one spanned almost two. This test set keeps the planned scale, but the scale needs a decision.
+- **Scale confirmed in play.** The pixel units are smaller than the old Canvas art: a Spider is about one tile across, where the old one spanned almost two. After testing the build, this scale was kept.
 - **Still open.**
   - The drone's diagonal facing is busy: its rotors and arms blur together at ⅓.
   - Vance reads slightly smaller than a Spider. He may need a 27×27 frame or larger shoulders.
