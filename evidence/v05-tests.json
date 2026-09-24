@@ -1,0 +1,134 @@
+[
+  {
+    "name": "Desktop: Objectives system absent",
+    "pass": true
+  },
+  {
+    "name": "Desktop: Procedural Element P, chests and ground items removed",
+    "pass": true
+  },
+  {
+    "name": "Desktop: Generated world buildings removed",
+    "pass": true
+  },
+  {
+    "name": "Desktop: Every item and building is represented once left of ship",
+    "pass": true
+  },
+  {
+    "name": "Desktop: Selecting ship opens fabrication immediately",
+    "pass": true
+  },
+  {
+    "name": "Desktop: Fabrication stays next to ship",
+    "pass": true
+  },
+  {
+    "name": "Desktop: Ship excluded from movement commands",
+    "pass": true
+  },
+  {
+    "name": "Desktop: Available builds and costs displayed",
+    "pass": true
+  },
+  {
+    "name": "Desktop: Build deducts cost and enters queue",
+    "pass": true
+  },
+  {
+    "name": "Desktop: Affordability reflected in options",
+    "pass": true
+  },
+  {
+    "name": "Desktop: Fabrication deploys new Utility Spider",
+    "pass": true
+  },
+  {
+    "name": "Desktop: Close button dismisses window",
+    "pass": true
+  },
+  {
+    "name": "Desktop: Can reopen by selecting ship",
+    "pass": true
+  },
+  {
+    "name": "Desktop: Clearing selection closes window",
+    "pass": true
+  },
+  {
+    "name": "Desktop: Log excludes fabrication and construction controls",
+    "pass": true
+  },
+  {
+    "name": "Desktop: No runtime errors",
+    "pass": true
+  },
+  {
+    "name": "Touch: Objectives system absent",
+    "pass": true
+  },
+  {
+    "name": "Touch: Procedural Element P, chests and ground items removed",
+    "pass": true
+  },
+  {
+    "name": "Touch: Generated world buildings removed",
+    "pass": true
+  },
+  {
+    "name": "Touch: Every item and building is represented once left of ship",
+    "pass": true
+  },
+  {
+    "name": "Touch: Selecting ship opens fabrication immediately",
+    "pass": true
+  },
+  {
+    "name": "Touch: Fabrication stays next to ship",
+    "pass": true
+  },
+  {
+    "name": "Touch: Ship excluded from movement commands",
+    "pass": true
+  },
+  {
+    "name": "Touch: Available builds and costs displayed",
+    "pass": true
+  },
+  {
+    "name": "Touch: Build deducts cost and enters queue",
+    "pass": true
+  },
+  {
+    "name": "Touch: Affordability reflected in options",
+    "pass": true
+  },
+  {
+    "name": "Touch: Fabrication deploys new Utility Spider",
+    "pass": true
+  },
+  {
+    "name": "Touch: Close button dismisses window",
+    "pass": true
+  },
+  {
+    "name": "Touch: Can reopen by selecting ship",
+    "pass": true
+  },
+  {
+    "name": "Touch: Clearing selection closes window",
+    "pass": true
+  },
+  {
+    "name": "Touch: Log excludes fabrication and construction controls",
+    "pass": true
+  },
+  {
+    "name": "Touch: Selecting top of ship does not purchase from opening window",
+    "pass": true
+  },
+  {
+    "name": "Touch: No runtime errors",
+    "pass": true
+  }
+]

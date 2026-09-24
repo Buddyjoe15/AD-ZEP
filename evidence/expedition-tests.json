@@ -1,0 +1,397 @@
+[
+  {
+    "name": "New game through menu launches Vance, two specialist drones and one Utility Spider",
+    "pass": true
+  },
+  {
+    "name": "Vance physically explores a signal",
+    "pass": true,
+    "detail": {
+      "world": 1,
+      "progress": {
+        "delivered": 0,
+        "built": 0
+      },
+      "metal": 320,
+      "ready": 156.00000000000477,
+      "depart": {
+        "ready": false,
+        "reasons": [
+          "Repair the drive · 100 metal",
+          "Stabilization · 157s remaining"
+        ],
+        "away": 0,
+        "crew": 4,
+        "cargo": 0
+      },
+      "scene": "gameplay",
+      "units": [
+        {
+          "role": "ship",
+          "hp": 5000,
+          "x": 12288,
+          "y": 12288,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "hero",
+          "hp": 300,
+          "x": 12640.695757817173,
+          "y": 12600.670058988502,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "Survey",
+          "hp": 260,
+          "x": 12341.149851981769,
+          "y": 12671.817197661503,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "Security",
+          "hp": 100,
+          "x": 12606.84297727299,
+          "y": 12603.830636376802,
+          "command": "follow",
+          "path": 0
+        },
+        {
+          "role": "Utility",
+          "hp": 520,
+          "x": 12311.635788587988,
+          "y": 12700.239390329996,
+          "command": "idle",
+          "path": 0,
+          "cargo": {
+            "metal": 0
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "Utility Spider physically mines, returns and unloads",
+    "pass": true,
+    "detail": {
+      "world": 1,
+      "progress": {
+        "delivered": 600,
+        "built": 0
+      },
+      "metal": 920,
+      "ready": 102.00000000000628,
+      "depart": {
+        "ready": false,
+        "reasons": [
+          "Repair the drive · 100 metal",
+          "Stabilization · 103s remaining",
+          "Recall to unload · 141 metal aboard drones"
+        ],
+        "away": 0,
+        "crew": 4,
+        "cargo": 140.00000000000017
+      },
+      "scene": "gameplay",
+      "units": [
+        {
+          "role": "ship",
+          "hp": 5000,
+          "x": 12288,
+          "y": 12288,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "hero",
+          "hp": 300,
+          "x": 12640.695757817173,
+          "y": 12600.670058988502,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "Survey",
+          "hp": 260,
+          "x": 12341.149851981769,
+          "y": 12671.817197661503,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "Security",
+          "hp": 100,
+          "x": 12606.84297727299,
+          "y": 12603.830636376802,
+          "command": "follow",
+          "path": 0
+        },
+        {
+          "role": "Utility",
+          "hp": 520,
+          "x": 11932.240244780125,
+          "y": 12669.118056631003,
+          "command": "scavenge",
+          "path": 0,
+          "cargo": {
+            "metal": 140.00000000000017
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "Field generator built with the same Utility Spider",
+    "pass": true,
+    "detail": {
+      "world": 1,
+      "progress": {
+        "delivered": 600,
+        "built": 1
+      },
+      "metal": 820,
+      "ready": 79.26000000000394,
+      "depart": {
+        "ready": false,
+        "reasons": [
+          "Repair the drive · 100 metal",
+          "Stabilization · 80s remaining",
+          "Recall to unload · 141 metal aboard drones"
+        ],
+        "away": 0,
+        "crew": 4,
+        "cargo": 140.00000000000017
+      },
+      "scene": "gameplay",
+      "units": [
+        {
+          "role": "ship",
+          "hp": 5000,
+          "x": 12288,
+          "y": 12288,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "hero",
+          "hp": 300,
+          "x": 12640.695757817173,
+          "y": 12600.670058988502,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "Survey",
+          "hp": 260,
+          "x": 12352.079387581918,
+          "y": 12660.645988413333,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "Security",
+          "hp": 100,
+          "x": 12606.84297727299,
+          "y": 12603.830636376802,
+          "command": "follow",
+          "path": 0
+        },
+        {
+          "role": "Utility",
+          "hp": 520,
+          "x": 12492.858482911233,
+          "y": 12696.194051427536,
+          "command": "idle",
+          "path": 0,
+          "cargo": {
+            "metal": 140.00000000000017
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "Drive repaired through expedition log",
+    "pass": true
+  },
+  {
+    "name": "Live hostile encounter and timer complete",
+    "pass": true,
+    "detail": {
+      "world": 1,
+      "progress": {
+        "delivered": 600,
+        "built": 1
+      },
+      "metal": 720,
+      "ready": 0,
+      "depart": {
+        "ready": false,
+        "reasons": [
+          "Recall to unload · 141 metal aboard drones"
+        ],
+        "away": 0,
+        "crew": 4,
+        "cargo": 140.00000000000017
+      },
+      "scene": "gameplay",
+      "units": [
+        {
+          "role": "ship",
+          "hp": 5000,
+          "x": 12288,
+          "y": 12288,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "hero",
+          "hp": 300,
+          "x": 12640.695757817173,
+          "y": 12600.670058988502,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "Survey",
+          "hp": 86,
+          "x": 12513.04054544055,
+          "y": 12528.410602607042,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "Security",
+          "hp": 100,
+          "x": 12606.84297727299,
+          "y": 12603.830636376802,
+          "command": "follow",
+          "path": 0
+        },
+        {
+          "role": "Utility",
+          "hp": 520,
+          "x": 12492.858482911233,
+          "y": 12696.194051427536,
+          "command": "idle",
+          "path": 0,
+          "cargo": {
+            "metal": 140.00000000000017
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "Hostile encounter causes real combat damage",
+    "pass": true
+  },
+  {
+    "name": "Versioned expedition save validates",
+    "pass": true
+  },
+  {
+    "name": "Save/load preserves current expedition",
+    "pass": true
+  },
+  {
+    "name": "Recall reaches ship through navigation and unloads all cargo",
+    "pass": true,
+    "detail": {
+      "world": 1,
+      "progress": {
+        "delivered": 740,
+        "built": 1
+      },
+      "metal": 860,
+      "ready": 0,
+      "depart": {
+        "ready": true,
+        "reasons": [],
+        "away": 0,
+        "crew": 4,
+        "cargo": 0
+      },
+      "scene": "gameplay",
+      "units": [
+        {
+          "role": "ship",
+          "hp": 5000,
+          "x": 12288,
+          "y": 12288,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "hero",
+          "hp": 300,
+          "x": 12127.398040219467,
+          "y": 12556.290226090216,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "Survey",
+          "hp": 86,
+          "x": 12161.078442717117,
+          "y": 12530.74036298893,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "Security",
+          "hp": 100,
+          "x": 12202.177445381922,
+          "y": 12539.244126359397,
+          "command": "idle",
+          "path": 0
+        },
+        {
+          "role": "Utility",
+          "hp": 520,
+          "x": 12236.706740227353,
+          "y": 12527.631498526918,
+          "command": "idle",
+          "path": 0,
+          "cargo": {
+            "metal": 0
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "Full expedition completes without teleport/resource/timer fixtures",
+    "pass": true,
+    "detail": {
+      "world": 1,
+      "seed": 72491,
+      "seconds": 209.99999999999065,
+      "metal": 740,
+      "discoveries": 2,
+      "built": 1,
+      "crew": 4,
+      "retainedMetal": 300,
+      "leftMetal": 560
+    }
+  },
+  {
+    "name": "Transit changes seed and retains health, IDs, inventory and Element P",
+    "pass": true
+  },
+  {
+    "name": "Previous Earth structures removed; testing zone regenerated and metal cap applied",
+    "pass": true
+  },
+  {
+    "name": "Second Earth playable and save/load succeeds",
+    "pass": true
+  },
+  {
+    "name": "No browser runtime errors",
+    "pass": true,
+    "detail": []
+  }
+]

@@ -1,0 +1,23 @@
+{
+  "pass": true,
+  "first": {
+    "BUILD_MANIFEST.json": {
+      "bytes": 392,
+      "sha256": "d16756e3835d1e4a83b3a777e031e676f9aa74adfd1811dbf3b0f8ceedaa2201"
+    },
+    "Groundfall_Master_v0_7_0.html": {
+      "bytes": 184358,
+      "sha256": "5b05ff60123caa372ce05625c0716ebe90bfcfe4a7cfece9ac829d67317f299f"
+    }
+  },
+  "second": {
+    "BUILD_MANIFEST.json": {
+      "bytes": 392,
+      "sha256": "d16756e3835d1e4a83b3a777e031e676f9aa74adfd1811dbf3b0f8ceedaa2201"
+    },
+    "Groundfall_Master_v0_7_0.html": {
+      "bytes": 184358,
+      "sha256": "5b05ff60123caa372ce05625c0716ebe90bfcfe4a7cfece9ac829d67317f299f"
+    }
+  }
+}

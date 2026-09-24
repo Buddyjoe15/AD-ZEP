@@ -1,0 +1,12 @@
+{
+  "build": "AD-EZP 0.2.0",
+  "date": "2026-09-23",
+  "html_sha256": "f73af84712ddef2db4ff42894e64667c7bc445255875d1ad7a85a3352da8a383",
+  "base_sha256": "5b05ff60123caa372ce05625c0716ebe90bfcfe4a7cfece9ac829d67317f299f",
+  "original_v01_sha256": "bb8a39711a35576d3433eabaff4985bb51e18bc62769bbb2a9cfa7c0fae08d9d",
+  "tests_passed": 48,
+  "reproducible_build": true,
+  "browser": "Headless Chromium 143 (@sparticuz/chromium 143.0.4)",
+  "automation": "Playwright 1.62.1; Node 24.19.0",
+  "test_scope": "UI actions plus accelerated 30Hz simulation, deliberate guard fixtures, Chromium touch emulation. No physical-device certification."
+}

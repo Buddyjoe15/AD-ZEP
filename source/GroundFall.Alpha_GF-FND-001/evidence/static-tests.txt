@@ -1,0 +1,108 @@
+RESULT_REVISION=124c9c02273570d295fa4356b421d50046f76ea1
+ENVIRONMENT: Linux c45e3fd2b4b4 6.18.44 #1 SMP Sat Sep 12 15:35:21 UTC 2026 x86_64 GNU/Linux
+NODE=v22.16.0 NPM=10.9.2 GIT=git version 2.47.3
+COMMAND: npm test
+
+> groundfall-alpha-foundation@0.0.0-foundation test
+> npm run verify:baseline && npm run check:static && npm run check:boundaries && node --test tests/contracts/*.test.mjs tests/static/*.test.mjs
+
+
+> groundfall-alpha-foundation@0.0.0-foundation verify:baseline
+> node scripts/verify-baseline.mjs
+
+{
+  "projectId": "GroundFall.Alpha",
+  "taskId": "GF-FND-001",
+  "baselineId": "GF-A-P01-R2",
+  "artifact": "baseline/Groundfall_Master_v0_7_0.html",
+  "expectedSha256": "5b05ff60123caa372ce05625c0716ebe90bfcfe4a7cfece9ac829d67317f299f",
+  "actualSha256": "5b05ff60123caa372ce05625c0716ebe90bfcfe4a7cfece9ac829d67317f299f",
+  "expectedBytes": 184358,
+  "actualBytes": 184358,
+  "pass": true
+}
+
+> groundfall-alpha-foundation@0.0.0-foundation check:static
+> node scripts/static-check.mjs
+
+{
+  "pass": true,
+  "source": "src/Groundfall_Master_v0_7_0.html",
+  "inlineScriptsParsed": 40,
+  "harnessModulesChecked": 9
+}
+
+> groundfall-alpha-foundation@0.0.0-foundation check:boundaries
+> node scripts/check-boundaries.mjs
+
+{
+  "pass": true,
+  "scanned": [
+    "contracts/platform-foundation.mjs"
+  ],
+  "violations": []
+}
+TAP version 13
+# Subtest: foundation fake provider conforms without implementation imports
+ok 1 - foundation fake provider conforms without implementation imports
+  ---
+  duration_ms: 0.706429
+  type: 'test'
+  ...
+# Subtest: coordinate conversions preserve explicit spaces
+ok 2 - coordinate conversions preserve explicit spaces
+  ---
+  duration_ms: 0.684285
+  type: 'test'
+  ...
+# Subtest: documented update order is the existing v0.7.0 order
+ok 3 - documented update order is the existing v0.7.0 order
+  ---
+  duration_ms: 0.150087
+  type: 'test'
+  ...
+# Subtest: GF-FND-001 canonical source remains byte-identical to approved baseline
+ok 4 - GF-FND-001 canonical source remains byte-identical to approved baseline
+  ---
+  duration_ms: 1.306926
+  type: 'test'
+  ...
+# Subtest: 512x512 world at 48 world pixels per tile is intact
+ok 5 - 512x512 world at 48 world pixels per tile is intact
+  ---
+  duration_ms: 0.206712
+  type: 'test'
+  ...
+# Subtest: fixed-step scheduler and four-step cap remain present
+ok 6 - fixed-step scheduler and four-step cap remain present
+  ---
+  duration_ms: 0.181104
+  type: 'test'
+  ...
+# Subtest: gameplay update order is unchanged
+ok 7 - gameplay update order is unchanged
+  ---
+  duration_ms: 0.173673
+  type: 'test'
+  ...
+# Subtest: existing save key prefixes and v0.7.0 save version remain intact
+ok 8 - existing save key prefixes and v0.7.0 save version remain intact
+  ---
+  duration_ms: 0.214394
+  type: 'test'
+  ...
+# Subtest: main menu and gameplay scene wiring remain present
+ok 9 - main menu and gameplay scene wiring remain present
+  ---
+  duration_ms: 0.19843
+  type: 'test'
+  ...
+1..9
+# tests 9
+# suites 0
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 59.103025

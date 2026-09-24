@@ -1,0 +1,19 @@
+{
+  "contractRoots": ["contracts/"],
+  "platformRoots": ["src/platform/", "src/ui/", "src/input/", "src/persistence/"],
+  "specialistPrivateRoots": [
+    "src/world/private/",
+    "src/navigation/private/",
+    "src/movement/private/",
+    "src/actors/private/",
+    "src/ai/private/",
+    "src/combat/private/",
+    "src/gameplay/private/",
+    "src/economy/private/"
+  ],
+  "rules": [
+    "Public contract modules must not import any src implementation path.",
+    "Platform-owned modules must not import specialist private implementation paths.",
+    "Subsystem integration is through public contracts; current v0.7.0 remains monolithic until an approved extraction task changes that fact."
+  ]
+}

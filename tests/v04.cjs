@@ -1,0 +1,18 @@
+const ROOT=require('path').resolve(__dirname,'..');process.chdir(ROOT);
+const fs=require('fs'),path=require('path'),{chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+(async()=>{const b=await chromium.launch({executablePath:process.env.CHROMIUM_PATH,headless:true,args:['--no-sandbox','--disable-gpu','--disable-dev-shm-usage','--no-zygote']}),out=[];
+for(const touch of [false,true]){const p=await b.newPage({viewport:touch?{width:390,height:844}:{width:1365,height:900},hasTouch:touch,isMobile:touch}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.addInitScript(()=>window.requestAnimationFrame=()=>0);await p.goto('file://'+path.resolve('output/Abyssal_Dawn_Earth_Zero_Protocol_v0_5.html'));
+const check=(name,pass)=>{out.push({name:(touch?'Touch: ':'Desktop: ')+name,pass:!!pass});console.log(pass?'PASS':'FAIL',out.at(-1).name)};
+for(const sel of ['[data-home="new"]','[data-new-slot="1"]','#launchVance','#introSkipBtn'])await p.locator(sel)[touch?'tap':'click']();await p.waitForTimeout(100);
+await p.evaluate(()=>{for(let i=0;i<150;i++)GW.SceneManager.update(1/30);GW.EZP.action('focus','ship');GW.SceneManager.render(performance.now()+3000)});
+check('Objectives system absent',await p.evaluate(()=>!document.querySelector('#ezObjective,#ezObjectiveTab')&&!GW.EZP.objective));
+const select=async()=>{await p.evaluate(()=>{GW.Input.clearSelection();GW.EZP.action('focus','ship');GW.SceneManager.render(performance.now()+3000)});let q=await p.evaluate(()=>{let s=GW.State.units.find(u=>u.isShip);return GW.screenFromWorld(s.x,s.y)});if(touch)await p.touchscreen.tap(q.x,q.y);else await p.mouse.click(q.x,q.y);await p.locator("#ezFabrication").waitFor({state:"visible"})};
+await select();check('Selecting ship opens fabrication',await p.locator('#ezFabrication').isVisible());check('Ship excluded from movement commands',await p.evaluate(()=>GW.State.selected.has(GW.State.shipId)&&GW.Input.selectedUnits().length===0));
+check('Available builds and costs displayed',await p.locator('#ezFabBody [data-ez="fabricate"]').count()===3&&await p.locator('#ezFabBody').innerText().then(t=>t.includes('160 metal')&&t.includes('Utility Spider')));
+await p.screenshot({path:`evidence/v04-fabrication-${touch?'touch':'desktop'}.png`});await p.locator('#ezFabBody [data-arg="Utility"]')[touch?'tap':'click']();check('Build deducts cost and enters queue',await p.evaluate(()=>GW.State.resources.metal===20&&GW.EZP.state.queue.length===1));
+check('Unaffordable builds disabled',await p.locator('#ezFabBody [data-ez="fabricate"]:disabled').count()===3);
+await p.evaluate(()=>{for(let i=0;i<390;i++)GW.SceneManager.update(1/30)});check('Fabrication deploys new Utility Spider',await p.evaluate(()=>GW.EZP.state.queue.length===0&&GW.State.units.filter(u=>u.droneRole==='Utility').length===2));
+await p.locator('#ezFabClose')[touch?'tap':'click']();check('Close button dismisses window',!await p.locator('#ezFabrication').isVisible());await select();check('Can reopen by selecting ship',await p.locator('#ezFabrication').isVisible());await p.evaluate(()=>GW.Input.clearSelection());check('Clearing selection closes window',!await p.locator('#ezFabrication').isVisible());
+await p.locator('#ezToggle')[touch?'tap':'click']();check('Log excludes fabrication and construction controls',await p.locator('#ezPanel [data-ez="fabricate"],#ezPanel [data-ez="build"]').count()===0&&await p.locator('#ezPanel h3').allTextContents().then(t=>!t.includes('Fabrication')&&!t.includes('Field construction')));
+check('No runtime errors',errors.length===0);await p.close()}
+fs.writeFileSync('evidence/v04-tests.json',JSON.stringify(out,null,2));await b.close();if(out.some(c=>!c.pass))process.exitCode=1})().catch(e=>{console.error(e);process.exit(1)});

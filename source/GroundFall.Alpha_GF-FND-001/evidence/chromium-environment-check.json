@@ -1,0 +1,1 @@
+{"command":"chromium headless dump-dom on trivial data URL","exitCode":124,"stdoutBytes":0,"interpretation":"The installed Chromium did not complete even a trivial non-GroundFall DOM dump within 5 seconds; GroundFall browser smoke is therefore classified unavailable in this execution environment, not a verified game failure."}

@@ -1,0 +1,14 @@
+RESULT_REVISION=124c9c02273570d295fa4356b421d50046f76ea1
+HEAD is now at 124c9c0 GF-FND-001: add reproducible platform foundation harness
+task_id=GF-FND-ISO-CHECK
+branch=task/GF-FND-ISO-CHECK
+base_revision=124c9c02273570d295fa4356b421d50046f76ea1
+worktree=/mnt/data/GroundFall.Alpha-worktrees/GF-FND-ISO-CHECK
+secondary_status_after_local_edit= M README.md
+primary_status_before=
+primary_status_after=
+primary_readme_sha_before=0b5d611b3ec9554f7aecd186797e0e5f011b873cb6441580e94a049df57a8939
+primary_readme_sha_after=0b5d611b3ec9554f7aecd186797e0e5f011b873cb6441580e94a049df57a8939
+primary_game_sha_before=5b05ff60123caa372ce05625c0716ebe90bfcfe4a7cfece9ac829d67317f299f
+primary_game_sha_after=5b05ff60123caa372ce05625c0716ebe90bfcfe4a7cfece9ac829d67317f299f
+PASS: isolated worktree edit did not modify primary task files

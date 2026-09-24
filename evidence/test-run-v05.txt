@@ -1,0 +1,182 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> abyssal-dawn-earth-zero-protocol@0.5.0 test
+> node tests/expedition.cjs && node tests/guards.cjs && node tests/mobile.cjs && node tests/v03.cjs && node tests/v05.cjs
+
+PASS New game through menu launches Vance, two specialist drones and one Utility Spider 
+PASS Vance physically explores a signal 
+PASS Utility Spider physically mines, returns and unloads 
+PASS Field generator built with the same Utility Spider 
+PASS Drive repaired through expedition log 
+PASS Live hostile encounter and timer complete 
+PASS Hostile encounter causes real combat damage 
+PASS Versioned expedition save validates 
+PASS Save/load preserves current expedition 
+PASS Recall reaches ship through navigation and unloads all cargo 
+PASS Full expedition completes without teleport/resource/timer fixtures 
+PASS Transit changes seed and retains health, IDs, inventory and Element P 
+PASS Previous Earth structures removed; testing zone regenerated and metal cap applied 
+PASS Second Earth playable and save/load succeeds 
+PASS No browser runtime errors 
+[
+  {
+    "name": "Unrepaired drive blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Unfinished readiness blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Absent Vance blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Absent drone blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Undelivered cargo blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Fabrication queue blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Unfinished construction blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Paused game blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Pause freezes timer",
+    "pass": true
+  },
+  {
+    "name": "Import rejects invalid queue without replacing match",
+    "pass": true
+  },
+  {
+    "name": "Import rejects negative cargo without replacing match",
+    "pass": true
+  },
+  {
+    "name": "Import rejects duplicate ID without replacing match",
+    "pass": true
+  },
+  {
+    "name": "Import rejects bad progress without replacing match",
+    "pass": true
+  },
+  {
+    "name": "Import rejects unknown schema without replacing match",
+    "pass": true
+  },
+  {
+    "name": "Import rejects negative resources without replacing match",
+    "pass": true
+  },
+  {
+    "name": "v0.1 schema-1 saves migrate with progress defaults",
+    "pass": true
+  },
+  {
+    "name": "Failed generation rolls back the whole expedition",
+    "pass": true
+  },
+  {
+    "name": "Same seed reproduces terrain; different seeds change terrain",
+    "pass": true
+  },
+  {
+    "name": "Initial deposits and first three signals reachable across 12 seed cases",
+    "pass": true
+  },
+  {
+    "name": "Busy builder rejects a second job without charge",
+    "pass": true
+  },
+  {
+    "name": "Recall cancels and refunds unfinished construction exactly once",
+    "pass": true
+  },
+  {
+    "name": "Repeated recall cannot duplicate refund",
+    "pass": true
+  },
+  {
+    "name": "Unreachable build rejected before spending",
+    "pass": true
+  },
+  {
+    "name": "No browser runtime errors",
+    "pass": true,
+    "detail": []
+  }
+]
+[
+  {
+    name: 'Touch focus-Vance button selects and centers Vance',
+    pass: true
+  },
+  {
+    name: 'Touch pan moves camera without issuing movement',
+    pass: true
+  },
+  { name: 'Pinch changes zoom without issuing movement', pass: true },
+  { name: 'Touch cancellation clears pending gestures', pass: true },
+  { name: 'Expedition panel fits portrait viewport', pass: true },
+  { name: 'Primary touch controls are at least 44px high', pass: true },
+  { name: 'Rotation preserves world center', pass: true },
+  { name: 'No runtime errors in mobile emulation', pass: true }
+]
+PASS New game has exactly one combined Utility Spider
+PASS Earth information removed from battlefield HUD
+PASS Expedition toggle is small and top center
+PASS Earth and climate are inside the Expedition log
+PASS Log is compact and centered
+PASS Same Utility Spider mines with active laser and finite deposit
+PASS Laser stops when a movement order interrupts mining
+PASS Combined unit carries and delivers metal
+PASS Same unit switches to construction and uses building laser
+PASS Construction completes and its laser stops
+PASS Utility Spider saves and restores as combined role
+PASS Hover engine and spider rendering do not mutate simulation state
+PASS Old specialist saves convert without losing IDs, health, cargo or inventory
+PASS No browser runtime errors
+PASS Desktop: Objectives system absent
+PASS Desktop: Procedural Element P, chests and ground items removed
+PASS Desktop: Generated world buildings removed
+PASS Desktop: Every item and building is represented once left of ship
+PASS Desktop: Selecting ship opens fabrication immediately
+PASS Desktop: Fabrication stays next to ship
+PASS Desktop: Ship excluded from movement commands
+PASS Desktop: Available builds and costs displayed
+PASS Desktop: Build deducts cost and enters queue
+PASS Desktop: Affordability reflected in options
+PASS Desktop: Fabrication deploys new Utility Spider
+PASS Desktop: Close button dismisses window
+PASS Desktop: Can reopen by selecting ship
+PASS Desktop: Clearing selection closes window
+PASS Desktop: Log excludes fabrication and construction controls
+PASS Desktop: No runtime errors
+PASS Touch: Objectives system absent
+PASS Touch: Procedural Element P, chests and ground items removed
+PASS Touch: Generated world buildings removed
+PASS Touch: Every item and building is represented once left of ship
+PASS Touch: Selecting ship opens fabrication immediately
+PASS Touch: Fabrication stays next to ship
+PASS Touch: Ship excluded from movement commands
+PASS Touch: Available builds and costs displayed
+PASS Touch: Build deducts cost and enters queue
+PASS Touch: Affordability reflected in options
+PASS Touch: Fabrication deploys new Utility Spider
+PASS Touch: Close button dismisses window
+PASS Touch: Can reopen by selecting ship
+PASS Touch: Clearing selection closes window
+PASS Touch: Log excludes fabrication and construction controls
+PASS Touch: Selecting top of ship does not purchase from opening window
+PASS Touch: No runtime errors

@@ -1,0 +1,23 @@
+{
+  "project_id": "GroundFall.Alpha",
+  "task_id": "GF-FND-001",
+  "task_revision": "P09 assignment received 2026-09-22; no separate revision identifier supplied",
+  "baseline_id": "GF-A-P01-R2",
+  "source_artifact": "Groundfall_Master_v0_7_0.html",
+  "source_version": "0.7.0",
+  "source_sha256": "5b05ff60123caa372ce05625c0716ebe90bfcfe4a7cfece9ac829d67317f299f",
+  "source_bytes": 184358,
+  "game_bible_release": "GB-0.1",
+  "technical_bible_release": "TB-0.1",
+  "api_contract_release": "AC-0.1",
+  "executable_contract_release": "EC-0.1 foundation baseline",
+  "prompt_version": "Six_Agent_Game_Development_Prompt_Manual_v1 / P00 + Platform role + P09",
+  "availability_note": "GB-0.1, TB-0.1, AC-0.1 and EC-0.1 source documents were not found on accessible file surfaces during GF-FND-001. Release IDs are pinned from the approved task packet, not claimed as reviewed content.",
+  "world": {
+    "columns": 512,
+    "rows": 512,
+    "tile_world_pixels": 48,
+    "width_world_pixels": 24576,
+    "height_world_pixels": 24576
+  }
+}

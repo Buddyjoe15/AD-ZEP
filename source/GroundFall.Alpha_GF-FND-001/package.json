@@ -1,0 +1,20 @@
+{
+  "name": "groundfall-alpha-foundation",
+  "version": "0.0.0-foundation",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": "22.16.0"
+  },
+  "scripts": {
+    "verify:baseline": "node scripts/verify-baseline.mjs",
+    "check:static": "node scripts/static-check.mjs",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "test": "npm run verify:baseline && npm run check:static && npm run check:boundaries && node --test tests/contracts/*.test.mjs tests/static/*.test.mjs",
+    "build": "node scripts/build.mjs",
+    "check:repro": "node scripts/reproducible-build.mjs evidence/reproducible-build.json",
+    "smoke:dev": "node scripts/browser-smoke.mjs src/Groundfall_Master_v0_7_0.html evidence/browser-smoke-dev.json",
+    "smoke:dist": "npm run build && node scripts/browser-smoke.mjs dist/Groundfall_Master_v0_7_0.html evidence/browser-smoke-dist.json"
+  }
+}

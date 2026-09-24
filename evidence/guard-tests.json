@@ -1,0 +1,99 @@
+[
+  {
+    "name": "Unrepaired drive blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Unfinished readiness blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Absent Vance blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Absent drone blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Undelivered cargo blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Fabrication queue blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Unfinished construction blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Paused game blocks departure without changing world/cargo/crew",
+    "pass": true
+  },
+  {
+    "name": "Pause freezes timer",
+    "pass": true
+  },
+  {
+    "name": "Import rejects invalid queue without replacing match",
+    "pass": true
+  },
+  {
+    "name": "Import rejects negative cargo without replacing match",
+    "pass": true
+  },
+  {
+    "name": "Import rejects duplicate ID without replacing match",
+    "pass": true
+  },
+  {
+    "name": "Import rejects bad progress without replacing match",
+    "pass": true
+  },
+  {
+    "name": "Import rejects unknown schema without replacing match",
+    "pass": true
+  },
+  {
+    "name": "Import rejects negative resources without replacing match",
+    "pass": true
+  },
+  {
+    "name": "v0.1 schema-1 saves migrate with progress defaults",
+    "pass": true
+  },
+  {
+    "name": "Failed generation rolls back the whole expedition",
+    "pass": true
+  },
+  {
+    "name": "Same seed reproduces terrain; different seeds change terrain",
+    "pass": true
+  },
+  {
+    "name": "Initial deposits and first three signals reachable across 12 seed cases",
+    "pass": true
+  },
+  {
+    "name": "Busy builder rejects a second job without charge",
+    "pass": true
+  },
+  {
+    "name": "Recall cancels and refunds unfinished construction exactly once",
+    "pass": true
+  },
+  {
+    "name": "Repeated recall cannot duplicate refund",
+    "pass": true
+  },
+  {
+    "name": "Unreachable build rejected before spending",
+    "pass": true
+  },
+  {
+    "name": "No browser runtime errors",
+    "pass": true,
+    "detail": []
+  }
+]

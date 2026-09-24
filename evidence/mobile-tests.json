@@ -1,0 +1,34 @@
+[
+  {
+    "name": "Touch focus-Vance button selects and centers Vance",
+    "pass": true
+  },
+  {
+    "name": "Touch pan moves camera without issuing movement",
+    "pass": true
+  },
+  {
+    "name": "Pinch changes zoom without issuing movement",
+    "pass": true
+  },
+  {
+    "name": "Touch cancellation clears pending gestures",
+    "pass": true
+  },
+  {
+    "name": "Expedition panel fits portrait viewport",
+    "pass": true
+  },
+  {
+    "name": "Primary touch controls are at least 44px high",
+    "pass": true
+  },
+  {
+    "name": "Rotation preserves world center",
+    "pass": true
+  },
+  {
+    "name": "No runtime errors in mobile emulation",
+    "pass": true
+  }
+]

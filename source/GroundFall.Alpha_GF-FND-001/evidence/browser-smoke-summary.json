@@ -1,0 +1,1 @@
+{"resultRevision":"124c9c02273570d295fa4356b421d50046f76ea1","devSmokeExit":1,"distSmokeExit":1,"note":"Non-zero smoke exit means browser verification did not complete; inspect browser-smoke-*.json/log. Static/build evidence remains independent."}
