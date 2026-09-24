@@ -67,18 +67,25 @@
       this.head = new Int32Array(this.cols * this.rows).fill(-1);
       this.next = new Int32Array(1024);
       this.items = [];
+      this.occupied = [];   // indices of non-empty cells, in first-insert order
       this.count = 0;
     }
     cellOf(x, y){
       const cx = Math.min(this.cols - 1, Math.max(0, (x * this.inv) | 0)), cy = Math.min(this.rows - 1, Math.max(0, (y * this.inv) | 0));
       return cy * this.cols + cx;
     }
-    clear(){ this.head.fill(-1); this.items.length = 0; this.count = 0; }
+    clear(){
+      // Reset only the cells in use (a full fill of a map-sized grid each tick is wasteful).
+      const head = this.head, occ = this.occupied;
+      for (let i = 0; i < occ.length; i++) head[occ[i]] = -1;
+      occ.length = 0; this.items.length = 0; this.count = 0;
+    }
     insert(o){
       const i = this.items.length;
       if (i >= this.next.length){ const n = new Int32Array(this.next.length * 2); n.set(this.next); this.next = n; }
       this.items.push(o);
       const c = this.cellOf(o.x, o.y);
+      if (this.head[c] === -1) this.occupied.push(c);
       this.next[i] = this.head[c]; this.head[c] = i;
       this.count++;
     }

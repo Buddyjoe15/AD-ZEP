@@ -9,6 +9,12 @@
   G.Visuals = {
     units: {},
     buildings: {},
+    // Animation frames baked into the GPU sprite atlas per visual: frames while idle and
+    // while moving, spread over `period` seconds. Visuals not listed get one frame each.
+    frames: {
+      hero: { idle: 8, move: 8, period: 2 * Math.PI / 3.5 },
+      utility: { idle: 1, move: 8, period: 2 * Math.PI / 9 }
+    },
     registerUnit(key, fn){ this.units[key] = fn; },
     registerBuilding(key, fn){ this.buildings[key] = fn; },
     // Draws a unit in its local frame (origin at the unit, rotated to its heading unless

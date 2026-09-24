@@ -14,8 +14,10 @@ jobs:
         run: npm test
       - name: Install Playwright
         run: npm install --no-save playwright && npx playwright install --with-deps chromium
-      - name: Browser tests
+      - name: Browser tests (Canvas 2D renderer)
         run: npm run test:browser
+      - name: Browser tests (WebGL2 renderer, forced onto the runner's software GPU)
+        run: RENDERER=gpu npm run test:browser
       - name: Build
         run: npm run build
       - uses: actions/upload-artifact@v4

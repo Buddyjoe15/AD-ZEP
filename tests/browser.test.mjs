@@ -25,14 +25,18 @@ const skip = pw ? false : 'Playwright is not installed';
 async function launch(){
   return pw.chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || undefined });
 }
+// Messages from Chromium's software GPU emulator (only used when forced in tests) are
+// driver notices, not game errors.
+const EMULATOR_NOISE = /GL Driver Message|swiftshader|GroupMarkerNotSet/i;
 function track(page){
   const errors = [];
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
-  page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.type() + ': ' + m.text()); });
+  page.on('console', m => { if ((m.type() === 'error' || m.type() === 'warning') && !EMULATOR_NOISE.test(m.text())) errors.push(m.type() + ': ' + m.text()); });
   return errors;
 }
 const screen = (page, x, y) => page.evaluate(([x, y]) => GW.screenFromWorld(x, y), [x, y]);
 async function startGame(page, url){
+  if (process.env.RENDERER && !url.includes('?')) url += '?renderer=' + process.env.RENDERER;
   await page.goto(url);
   await page.waitForFunction(() => GW.SceneManager.currentName === 'mainMenu');
   await page.click('[data-home="new"]');
@@ -256,9 +260,37 @@ test('5,000 enemies swarm Vance at an interactive frame rate', { skip, timeout: 
     });
     console.log(`    swarm: ${r.fps.toFixed(1)} fps (worst frame ${r.worst.toFixed(0)} ms), update ${r.update.toFixed(1)} ms, draw ${r.draw.toFixed(1)} ms, field built in ${r.fieldMs.toFixed(0)} ms, closed ${r.d0.toFixed(0)} → ${r.d1.toFixed(0)} px, path queue ${r.queue}`);
     await page.screenshot({ path: path.join(OUT, 'swarm.png') });
-    assert.ok(r.fps > 20, 'frame rate ' + r.fps.toFixed(1));
+    // A frame-rate floor is only meaningful on the renderer the game picks by itself; a
+    // forced WebGL run in CI uses a CPU-emulated GPU that fills every pixel in software.
+    if (process.env.RENDERER !== 'gpu') assert.ok(r.fps > 20, 'frame rate ' + r.fps.toFixed(1));
     assert.ok(r.d1 < r.d0 - 250, 'the swarm advanced on Vance');
     assert.ok(r.queue < 200, 'no route-search backlog');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('GPU renderer draws every visible unit in one instanced pass', { skip, timeout: 60000 }, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    // Headless Chromium only has a software GPU, which the game normally refuses; force it.
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href + '?renderer=gpu');
+    const r = await page.evaluate(() => {
+      const G = GW, S = G.State, h = G.Units.hero();
+      S.paused = true;
+      for (let i = 0; i < 400; i++){ const u = G.Units.spawn('hostile_machine', h.x - 300 + (i % 20) * 30, h.y - 400 + Math.floor(i / 20) * 30); u.heading = i; u.hp = 40; }
+      G.rebuildSpatial(); G.centerCamera(h.x, h.y - 200, 0.6);
+      G.Renderer.draw();
+      const gl = G.GPU.gl, w = gl.drawingBufferWidth, hgt = gl.drawingBufferHeight, px = new Uint8Array(w * hgt * 4);
+      gl.readPixels(0, 0, w, hgt, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      let opaque = 0; for (let i = 3; i < px.length; i += 4) if (px[i] > 200) opaque++;
+      return { ok: G.GPU.ok, sprites: S.metrics.gpuSprites, visible: S.metrics.visible, opaque, area: w * hgt };
+    });
+    assert.ok(r.ok, 'WebGL2 renderer active');
+    assert.equal(r.sprites, r.visible - 1, 'every visible unit except the ship (drawn on the map layer) is a GPU sprite');
+    assert.ok(r.opaque > r.sprites * 40, `units are visible on the GPU layer (${r.opaque} opaque px)`);
+    await page.screenshot({ path: path.join(OUT, 'gpu.png') });
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

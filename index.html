@@ -14,6 +14,8 @@
 <body>
   <div id="app">
     <canvas id="game" aria-label="Expedition map"></canvas>
+    <canvas id="gpu" aria-hidden="true"></canvas>
+    <canvas id="overlay" aria-hidden="true"></canvas>
 
     <div id="mainMenuOverlay">
       <div class="space-art">
@@ -119,6 +121,8 @@
   <!-- Presentation layer: canvas rendering, DOM interface and input. -->
   <script src="src/render/visuals.js"></script>
   <script src="src/render/terrain.js"></script>
+  <script src="src/render/sprites.js"></script>
+  <script src="src/render/gpu.js"></script>
   <script src="src/render/renderer.js"></script>
   <script src="src/ui/hud.js"></script>
   <script src="src/ui/inventory.js"></script>

@@ -33,36 +33,63 @@
     u.x = nx; u.y = ny; u.heading = Math.atan2(dy, dx);
   }
 
-  // Pushes overlapping units apart. Each pair is resolved once (lower id handles it).
-  // Walks the dense collision grid's cell lists directly: this is the hottest loop in a swarm.
+  // Resolves one overlapping pair (already known to overlap by `min - d`).
+  function push(u, v, dx, dy, d2, min, grid, T){
+    u.crowd++; v.crowd++;
+    let d = Math.sqrt(d2);
+    if (d === 0){ dx = (u.id % 2) ? 1 : -1; dy = (v.id % 2) ? 1 : -1; d = Math.SQRT2; }
+    const p = (min - d) * 0.5, nx = dx / d, ny = dy / d;
+    const ux = u.x + nx * p, uy = u.y + ny * p, vx = v.x - nx * p, vy = v.y - ny * p;
+    // passable() is false outside the map, so an accepted push always stays in bounds.
+    if (grid.passable(Math.floor(ux / T), Math.floor(uy / T))){ u.x = ux; u.y = uy; }
+    if (grid.passable(Math.floor(vx / T), Math.floor(vy / T))){ v.x = vx; v.y = vy; }
+  }
+
+  // Pushes overlapping units apart. Walks the occupied cells of the dense collision grid,
+  // comparing each cell with itself and its four "forward" neighbours, so every nearby
+  // pair is examined exactly once (the hottest loop in a swarm). The ship is not in the
+  // collision grid and dead units never are, so the inner loops need no liveness checks.
+  // Valid while a cell is at least as wide as the largest interaction distance.
   function separate(S, maxRadius){
     const grid = S.grid, T = G.CONFIG.TILE, sp = S.spatial;
-    const head = sp.head, next = sp.next, items = sp.items, cols = sp.cols, rows = sp.rows, inv = sp.inv;
-    for (const u of S.units){
-      if (u.hp <= 0 || u.isShip) continue;
-      const r = u.radius + maxRadius + 6;
-      const x0 = Math.max(0, ((u.x - r) * inv) | 0), x1 = Math.min(cols - 1, ((u.x + r) * inv) | 0);
-      const y0 = Math.max(0, ((u.y - r) * inv) | 0), y1 = Math.min(rows - 1, ((u.y + r) * inv) | 0);
-      for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) for (let k = head[cy * cols + cx]; k !== -1; k = next[k]){
-        const v = items[k];
-        if (v.id <= u.id || v.hp <= 0 || v.isShip) continue;
-        let dx = u.x - v.x, dy = u.y - v.y;
-        const min = u.radius + v.radius + 6, d2 = dx * dx + dy * dy;
-        if (d2 >= min * min) continue;
-        u.crowd++; v.crowd++;
-        let d = Math.sqrt(d2);
-        if (d === 0){ dx = (u.id % 2) ? 1 : -1; dy = (v.id % 2) ? 1 : -1; d = Math.SQRT2; }
-        const push = (min - d) * 0.5, nx = dx / d, ny = dy / d;
-        const ux = u.x + nx * push, uy = u.y + ny * push, vx = v.x - nx * push, vy = v.y - ny * push;
-        // passable() is false outside the map, so an accepted push always stays in bounds.
-        if (grid.passable(Math.floor(ux / T), Math.floor(uy / T))){ u.x = ux; u.y = uy; }
-        if (grid.passable(Math.floor(vx / T), Math.floor(vy / T))){ v.x = vx; v.y = vy; }
+    if (sp.size < 2 * maxRadius + 6) return separateSlow(S, maxRadius);
+    const head = sp.head, next = sp.next, items = sp.items, cols = sp.cols, rows = sp.rows, occ = sp.occupied;
+    const pair = (u, j) => {
+      for (; j !== -1; j = next[j]){
+        const v = items[j], dx = u.x - v.x, dy = u.y - v.y, min = u.radius + v.radius + 6, d2 = dx * dx + dy * dy;
+        if (d2 < min * min) push(u, v, dx, dy, d2, min, grid, T);
+      }
+    };
+    for (let k = 0; k < occ.length; k++){
+      const c = occ[k], cx = c % cols, cy = (c / cols) | 0, south = cy + 1 < rows;
+      for (let i = head[c]; i !== -1; i = next[i]){
+        const u = items[i];
+        pair(u, next[i]);                                   // rest of this cell
+        if (cx + 1 < cols) pair(u, head[c + 1]);            // east
+        if (south){
+          if (cx > 0) pair(u, head[c + cols - 1]);          // south-west
+          pair(u, head[c + cols]);                          // south
+          if (cx + 1 < cols) pair(u, head[c + cols + 1]);   // south-east
+        }
       }
     }
   }
+  // General version for unusually large units: searches around each unit.
+  function separateSlow(S, maxRadius){
+    const grid = S.grid, T = G.CONFIG.TILE, sp = S.spatial;
+    for (const u of S.units){
+      if (u.hp <= 0 || u.isShip) continue;
+      sp.each(u.x, u.y, u.radius + maxRadius + 6, v => {
+        if (v.id <= u.id) return;
+        const dx = u.x - v.x, dy = u.y - v.y, min = u.radius + v.radius + 6, d2 = dx * dx + dy * dy;
+        if (d2 < min * min) push(u, v, dx, dy, d2, min, grid, T);
+      });
+    }
+  }
 
+  const notShip = u => !u.isShip;
   function rebuildSpatial(S){
-    S.spatial.rebuild(S.units);
+    S.spatial.rebuild(S.units, notShip);   // the ship's footprint already blocks the grid
     for (const hash of Object.values(S.teamSpatial)) hash.clear();
     for (const u of S.units){
       if (u.hp <= 0) continue;
