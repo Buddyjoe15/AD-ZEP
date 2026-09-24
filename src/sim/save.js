@@ -113,6 +113,7 @@
     const item = i => i && typeof i.id === 'string' && D.items.has(i.key) &&
       (D.items.get(i.key).stackable ? int(i.count) && i.count > 0 && i.count <= D.items.get(i.key).maxStack : num(i.durability) && num(i.maxDurability) && i.durability >= 0);
     const cost = o => o && typeof o === 'object' && Object.entries(o).every(([k, v]) => D.resources.has(k) && num(v) && v >= 0);
+    const spawner = s => typeof s.running === 'boolean' && typeof s.hold === 'boolean' && ['rate', 'amount', 'spawned', 'acc'].every(k => num(s[k]) && s[k] >= 0);
     const queue = q => list(q, 64) && q.every(e => D.recipes.has(e.recipe) && num(e.left) && e.left >= -1);
 
     if (!d || d.project !== G.PROJECT || d.schema !== G.SAVE_SCHEMA) fail('project or schema');
@@ -146,7 +147,7 @@
     if (!d.camera || !point(d.camera) || !num(d.camera.z) || d.camera.z < C.ZOOM_MIN || d.camera.z > C.ZOOM_MAX) fail('camera');
     for (const k of ['containers', 'buildings', 'constructionSites', 'resourceNodes', 'terrainEdits']) if (!list(d[k])) fail(k);
     if (!d.containers.every(c => point(c) && typeof c.id === 'string' && list(c.items, 1000) && c.items.every(item) && num(c.capacity))) fail('container');
-    if (!d.buildings.every(b => point(b) && D.buildables.has(b.type) && num(b.hp) && num(b.maxHp) && [b.gx, b.gy, b.w, b.h].every(int) && (!b.fabQueue || queue(b.fabQueue)))) fail('building');
+    if (!d.buildings.every(b => point(b) && D.buildables.has(b.type) && num(b.hp) && num(b.maxHp) && [b.gx, b.gy, b.w, b.h].every(int) && (!b.fabQueue || queue(b.fabQueue)) && (!b.spawner || spawner(b.spawner)))) fail('building');
     if (!d.constructionSites.every(s => point(s) && D.buildables.has(s.type) && num(s.remaining) && num(s.buildTime) && [s.gx, s.gy, s.w, s.h].every(int))) fail('construction site');
     if (!d.resourceNodes.every(n => point(n) && D.nodes.has(n.type) && num(n.remaining) && n.remaining >= 0)) fail('resource node');
     if (!d.terrainEdits.every(e => [e.x, e.y, e.w, e.h, e.t].every(int) && e.w >= 0 && e.h >= 0 && e.w * e.h <= 1 << 20)) fail('terrain edit');

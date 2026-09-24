@@ -385,3 +385,44 @@ test('new units, recipes, structures and behaviours work from data alone (docs e
   assert.ok(G.Economy.get('metal') >= metal + 10);
   G.Save.validate(G.Save.serialize());
 });
+
+test('Hostile Fabricator spawns at the chosen speed up to the chosen count', () => {
+  const G = newGame();
+  const S = G.State, b = S.buildings.find(b => b.type === 'hostile_fabricator');
+  assert.ok(b, 'testing zone includes the Hostile Fabricator');
+  assert.equal(b.team, 'red');
+  assert.equal(G.Spawner.state(b).running, false, 'idle until started');
+  G.Sim.run(2);
+  assert.equal(S.units.filter(u => u.team === 'red').length, 0);
+  G.Spawner.configure(b, { rate: 20, amount: 50 });
+  G.Spawner.start(b);
+  G.Sim.run(1);
+  const afterOne = G.Spawner.spawnedBy(b).length;
+  assert.ok(afterOne >= 18 && afterOne <= 22, `~20 spawned in 1 s, got ${afterOne}`);
+  G.Sim.run(3);
+  assert.equal(G.Spawner.spawnedBy(b).length, 50);
+  assert.equal(G.Spawner.state(b).running, false, 'stops at the requested count');
+  // Held units do not hunt; switching to hunt sends them after the crew.
+  assert.ok(G.Spawner.spawnedBy(b).every(u => u.aiHold && !u.path.length));
+  G.Spawner.configure(b, { hold: false });
+  G.Sim.run(2);
+  assert.ok(G.Spawner.spawnedBy(b).some(u => u.path.length || u.pathPending), 'hunters plan routes');
+  // Settings survive a save; removing clears only this spawner's units.
+  const d = G.Save.serialize();
+  G.Save.validate(d);
+  G.Save.restore(d, 1);
+  S.paused = false;   // gameplay resumes after a load (the UI does this when it enters the scene)
+  const b2 = S.buildings.find(x => x.id === b.id);
+  assert.equal(G.Spawner.state(b2).amount, 50);
+  assert.equal(G.Spawner.clear(b2), 50);
+  assert.equal(S.units.filter(u => u.team === 'red').length, 0);
+  // Very fast rates are spread over ticks, and the whole run still completes.
+  G.Spawner.configure(b2, { rate: 1000, amount: 1200, hold: true });
+  G.Spawner.start(b2);
+  G.Sim.step();
+  assert.ok(G.Spawner.spawnedBy(b2).length <= G.Spawner.MAX_PER_TICK);
+  G.Sim.run(3);
+  assert.equal(G.Spawner.state(b2).spawned, 1200, 'counted as spawned (nearby crew may already be shooting some)');
+  assert.equal(G.Spawner.state(b2).running, false);
+  assert.equal(G.Defs.buildables.get('hostile_fabricator').debugOnly, true, 'not in the Spider build menu');
+});

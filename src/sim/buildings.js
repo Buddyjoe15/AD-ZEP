@@ -23,7 +23,7 @@
         return c;
       }
       const b = {
-        id: opts.id || 'building-' + G.newId(), type, team: opts.team || 'blue',
+        id: opts.id || 'building-' + G.newId(), type, team: opts.team || d.team,
         gx, gy, w: d.w, h: d.h, x: (gx + d.w / 2) * T, y: (gy + d.h / 2) * T,
         hp: opts.hp != null ? opts.hp : d.hp, maxHp: d.hp, ...(opts.extra || {})
       };

@@ -19,6 +19,7 @@ Choose **New Game → Save Slot → Launch expedition**. The same seed always ge
 | Fabricate | Click the ship (or a Fabricator) | Tap the ship |
 | Build | Select a Utility Spider → Build | Same |
 | Inspect | Long-press anything | Long-press anything |
+| Load test | Click the red **HF** Hostile Fabricator in the testing zone (or place one from DEBUG): set spawn speed and count, choose hold or hunt, press Start | Same |
 | Other | H: centre on ship · I: inventory · Space: pause · Esc: cancel · F3: diagnostics | — |
 
 Saves go to three browser slots (autosave every 60 s and on each transit). You can also export and import them as JSON from the Expedition log. Saves from v0.5 load and are migrated automatically.
@@ -54,6 +55,7 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
   - The testing-zone Sensor Station no longer collects a generated signal for free.
   - Removing a backpack can no longer strand items beyond your capacity.
   - Minimap colours now match the terrain.
+- **Hostile Fabricator** (test tool): a spawner structure that produces Hostile Autonomous Machines at 1–1,000 per second, up to 20,000 in total. Spawned units hold position or hunt the crew. Its window shows live unit counts, on-screen count, fps and frame times. It is hidden from the Spider's build menu.
 - **Now working:** the Repair Station heals nearby units, and the Sensor Station studies signals in range (its description already claimed this).
 - **Removed dead features:** the XP/skill tree and coin currency. The v0.5 expedition layer had disabled both, and they no longer appear in the interface.
 

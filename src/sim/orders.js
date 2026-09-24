@@ -108,7 +108,7 @@
   const AI = {
     hunter(u){
       const S = G.State;
-      if (!G.Units.navIdle(u) || S.time < u.aiNextPath) return;
+      if (u.aiHold || !G.Units.navIdle(u) || S.time < u.aiNextPath) return;
       u.aiNextPath = S.time + 1.35 + (u.id % 8) * 0.11;
       let best = null, bd = Infinity;
       // Local search first; the full scan only runs when nothing is within 2000 px.

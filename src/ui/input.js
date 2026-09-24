@@ -192,6 +192,7 @@
         const b = this.buildingAt(q.x, q.y);
         if (b && !this.unitAt(q.x, q.y)){
           if (b.fabQueue) G.ExpeditionUI.openFabrication(b.id);
+          else if (G.Spawner.def(b)) G.SpawnerUI.open(b.id);
           else G.DebugUI.showTip(G.DebugUI.buildingDetails(G.Defs.buildables.get(b.type), b), e.clientX, e.clientY, true);
           this.box = null; finish(); return;
         }
@@ -255,7 +256,7 @@
     },
     // Keyboard camera pan, driven by real frame time.
     update(dt){
-      if (G.State.paused || !this.keys.size) return;
+      if (G.State.paused || !this.keys.size || !(dt > 0)) return;
       const k = this.keys, c = G.State.camera, s = 700 / c.z;
       if (k.has('a') || k.has('arrowleft')) c.x -= s * dt;
       if (k.has('d') || k.has('arrowright')) c.x += s * dt;

@@ -28,7 +28,7 @@
         } catch (err){ G.UI.toast('Import rejected: ' + err.message); }
         e.target.value = '';
       });
-      document.addEventListener('pointerdown', e => { if (e.target.closest('#ezPanel,#ezFabrication')) pointerDown = true; });
+      document.addEventListener('pointerdown', e => { if (e.target.closest('#ezPanel,#ezFabrication,#spawnerPanel')) pointerDown = true; });
       document.addEventListener('pointerup', () => { pointerDown = false; });
       document.addEventListener('pointercancel', () => { pointerDown = false; });
       G.Events.on('expedition:transit', () => { G.Save.save(G.State.activeSaveSlot); this.showReport(); });
@@ -115,10 +115,10 @@
       $('ezFabClose').onclick = () => this.closeFabrication();
       this.positionFabrication();
     },
-    // Keeps the window beside its owner; on narrow screens it sits above or below.
-    positionFabrication(){
-      const panel = $('ezFabrication'), o = this.owner();
-      if (!o || panel.classList.contains('hidden')) return;
+    positionFabrication(){ G.ExpeditionUI.placeNear($('ezFabrication'), this.owner()); },
+    // Keeps a floating window beside an entity; on narrow screens it sits above or below.
+    placeNear(panel, o){
+      if (!o || !panel || panel.classList.contains('hidden')) return;
       const T = G.CONFIG.TILE, q = G.screenFromWorld(o.x, o.y), rect = panel.getBoundingClientRect();
       const width = rect.width || 264, height = rect.height || 350, edge = Math.max(o.isShip ? 28 : 14, ((o.w || 2) * T / 2) * G.State.camera.z), pad = 8;
       const right = q.x + edge + pad, left = q.x - edge - pad - width;

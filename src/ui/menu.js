@@ -172,6 +172,7 @@
       G.Renderer.draw();
       G.UI.update();
       G.ExpeditionUI.tick();
+      if (G.SpawnerUI.isOpen()) G.SpawnerUI.refresh();
     }
   });
 })();

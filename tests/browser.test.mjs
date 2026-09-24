@@ -117,6 +117,32 @@ for (const target of ['index.html', 'dist/ad-ezp.html']){
       assert.equal(await page.evaluate(() => GW.State.buildings.length), before + 1);
       await page.click('#dbgClose');
 
+      // Holding a pan key moves the camera and keeps it valid (regression: NaN camera).
+      const cam0 = await page.evaluate(() => ({ ...GW.State.camera }));
+      await page.keyboard.down('d'); await page.waitForTimeout(400); await page.keyboard.up('d');
+      await page.keyboard.down('s'); await page.waitForTimeout(300); await page.keyboard.up('s');
+      const cam1 = await page.evaluate(() => ({ ...GW.State.camera }));
+      assert.ok(Number.isFinite(cam1.x) && Number.isFinite(cam1.y), 'camera stays finite');
+      assert.ok(cam1.x - cam0.x > 100 && cam1.y - cam0.y > 50, `camera panned right and down (${cam1.x - cam0.x}, ${cam1.y - cam0.y})`);
+
+      // Hostile Fabricator: click it, choose speed and amount, spawn.
+      const hf = await page.evaluate(() => { const b = GW.State.buildings.find(b => b.type === 'hostile_fabricator'); GW.centerCamera(b.x, b.y, 0.72); return { x: b.x, y: b.y }; });
+      p = await screen(page, hf.x, hf.y);
+      await page.mouse.click(p.x, p.y);
+      await page.waitForSelector('#spawnerPanel:not(.hidden) #spStart');
+      await page.waitForTimeout(120);
+      await page.click('#spawnerPanel [data-rate="250"]');
+      await page.fill('#spAmount', '300'); await page.press('#spAmount', 'Enter'); await page.click('#spawnerPanel h2');
+      await page.click('#spStart');
+      await page.waitForFunction(() => GW.State.units.filter(u => u.spawnerId).length >= 300, null, { timeout: 15000 });
+      await page.waitForTimeout(400);
+      assert.equal(await page.evaluate(() => GW.State.units.filter(u => u.spawnerId).length), 300);
+      assert.match(await page.textContent('#spLive'), /Complete · 300 \/ 300/);
+      await page.screenshot({ path: path.join(OUT, `${tag}-spawner.png`) });
+      await page.click('#spClear');
+      assert.equal(await page.evaluate(() => GW.State.units.filter(u => u.spawnerId).length), 0);
+      await page.click('#spClose');
+
       // Save and load through the game menu.
       await page.click('#menuBtn');
       await page.click('[data-menu-tab="saves"]');

@@ -62,7 +62,7 @@
       if (!this.active()){ this.cancel(); return; }
       p.innerHTML = `<div class="catalog-header"><b>Utility Spider — Build</b><button id="cancelBuildBtn">×</button></div>
         <div class="catalog-help">${m.key ? 'Tap a grid cell to place. Hold and drag across the map to refine the cell.' : 'Choose a structure.'}</div>
-        <div class="catalog-grid">${G.Defs.buildables.all().map(d => `<button class="catalog-entry build-pick ${m.key === d.key ? 'active' : ''}" data-build-pick="${d.key}">
+        <div class="catalog-grid">${G.Defs.buildables.all().filter(d => !d.debugOnly).map(d => `<button class="catalog-entry build-pick ${m.key === d.key ? 'active' : ''}" data-build-pick="${d.key}">
           ${this.icon(d.key)}<div class="catalog-name">${esc(d.name)}</div><div class="catalog-desc">${esc(d.description)}<br><b>${esc(G.Economy.describe(d.cost))}</b></div></button>`).join('')}</div>`;
       $('cancelBuildBtn').addEventListener('click', () => this.cancel());
       p.querySelectorAll('[data-build-pick]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); this.choose(b.dataset.buildPick); }));

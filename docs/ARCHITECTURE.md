@@ -55,7 +55,7 @@ GW.Defs.recipes.define('heavy_drone', { name: 'Heavy Drone', unit: 'heavy_drone'
 
 **An item** (`src/data/items.js`). Equipment has a `slot` and `effects` (`damageReduction`, `inventoryBonus`, …). Materials set `maxStack` and stack automatically.
 
-**A structure** (`src/data/buildables.js`). Its function comes from `behaviors`, each handled by `GW.Behaviors.register(type, { update(building, cfg, dt) })`. Built-in behaviours are `defenseAura`, `repairAura` and `studySignals`. Add `fabricator: { queueMax }` to give it a production queue, or `container: { capacity }` to make it storage.
+**A structure** (`src/data/buildables.js`). Its function comes from `behaviors`, each handled by `GW.Behaviors.register(type, { update(building, cfg, dt) })`. Built-in behaviours are `defenseAura`, `repairAura`, `studySignals` and `spawner` (with `spawner: { unit, rate, amount, hold }`; see the Hostile Fabricator). `debugOnly: true` keeps a structure out of the Spider's build menu. Add `fabricator: { queueMax }` to give it a production queue, or `container: { capacity }` to make it storage.
 
 ```js
 GW.Behaviors.register('produce', {

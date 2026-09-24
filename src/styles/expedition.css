@@ -51,23 +51,38 @@ body.in-game #ezToggle, body.in-game #status, body.in-game #dbgBtn { display: bl
 .ezTransit:disabled { background: #253944 !important; color: #8ca5ae !important; cursor: not-allowed; }
 
 /* Fabrication window */
-#ezFabrication {
+#ezFabrication, #spawnerPanel {
   position: fixed; left: 8px; top: 76px; width: min(264px, calc(100vw - 16px)); z-index: 46;
   background: #101e27f7; border: 1px solid #51818d; border-radius: 12px; color: #dce9ee;
   box-shadow: 0 12px 80px #0009; font: 12px/1.5 system-ui;
 }
-#ezFabrication.ezOpening { pointer-events: none; }
-#ezFabBody { box-sizing: border-box; max-height: min(320px, calc(100vh - 94px)); overflow: auto; touch-action: pan-y; padding: 10px; }
-#ezFabBody h3 { margin: 12px 0 4px; color: #8ed6d3; font-size: 11px; text-transform: uppercase; letter-spacing: 1.6px; }
+#ezFabrication.ezOpening, #spawnerPanel.ezOpening { pointer-events: none; }
+#ezFabBody, #spawnerBody { box-sizing: border-box; max-height: min(320px, calc(100vh - 94px)); overflow: auto; touch-action: pan-y; padding: 10px; }
+#ezFabBody h3, #spawnerBody h3 { margin: 12px 0 4px; color: #8ed6d3; font-size: 11px; text-transform: uppercase; letter-spacing: 1.6px; }
 .ezFabHeader { display: flex; justify-content: space-between; align-items: center; }
 .ezFabHeader h2 { margin: 0; font-size: 22px; }
 .ezFabOptions { display: grid; gap: 5px; }
-#ezFabrication button { min-height: 44px; border: 1px solid #46616d; border-radius: 6px; padding: 6px 8px; background: #203743; color: #e6f6ff; text-align: left; }
-#ezFabrication button:disabled { opacity: .45; cursor: not-allowed; }
+#ezFabrication button, #spawnerPanel button { min-height: 44px; border: 1px solid #46616d; border-radius: 6px; padding: 6px 8px; background: #203743; color: #e6f6ff; text-align: left; }
+#ezFabrication button:disabled, #spawnerPanel button:disabled { opacity: .45; cursor: not-allowed; }
 .ezFabOptions b, .ezFabOptions span, .ezFabOptions small { display: block; }
 .ezFabOptions span { color: #9ed6d4; }
 .ezFabOptions small { color: #9bb3be; }
-#ezFabClose { min-width: 44px; font-size: 22px; text-align: center !important; }
+#ezFabClose, #spClose { min-width: 44px; font-size: 22px; text-align: center !important; }
+
+/* Spawner window */
+#spawnerPanel { width: min(300px, calc(100vw - 16px)); }
+#spawnerBody { max-height: min(520px, calc(100vh - 94px)); }
+#spawnerBody h3 small { text-transform: none; letter-spacing: 0; color: #87a9b4; }
+.spChips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+#spawnerPanel .spChip { min-height: 32px; min-width: 40px; padding: 4px 8px; text-align: center; }
+#spawnerPanel .spChip.active { background: #8bc9bf; color: #0c2024; border-color: #8bc9bf; }
+.spChips input { width: 72px; min-height: 32px; padding: 4px 6px; background: #10222c; color: #e7f1f1; border: 1px solid #4a727b; border-radius: 6px; font: 12px system-ui; user-select: text; touch-action: auto; }
+.spActions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 12px; }
+#spawnerPanel .spPrimary { grid-column: 1 / -1; text-align: center; background: #e0685f; color: #1b0a08; border-color: #e0685f; font-weight: 700; }
+.spProgress { height: 5px; background: #0b1a20; border-radius: 3px; margin: 10px 0 8px; overflow: hidden; }
+.spProgress i { display: block; height: 100%; width: 0; background: #e0685f; }
+.spLive div { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; border-bottom: 1px solid #1d3540; }
+.spLive span { color: #87a9b4; }
 
 /* Arrival report */
 #ezArrival:not(.hidden) { position: fixed; inset: 0; z-index: 120; background: #071016db; display: grid; place-items: center; padding: 18px; backdrop-filter: blur(7px); }

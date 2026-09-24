@@ -36,6 +36,7 @@
       if (b?.fabQueue?.length) rows.push(['Queue', b.fabQueue.length + ' in production']);
       rows.push(['Build time', d.buildTime + 's'], ['Cost', G.Economy.describe(d.cost)]);
       if (d.container) rows.push(['Capacity', d.container.capacity + ' slots']);
+      if (d.spawner){ const s = b ? G.Spawner.state(b) : d.spawner; rows.push(['Spawns', G.Defs.units.get(d.spawner.unit)?.name]); if (b) rows.push(['Progress', `${s.spawned} / ${s.amount} at ${s.rate}/s${s.running ? ' (running)' : ''}`]); }
       return { title: d.name, sub: 'Building', rows, desc: d.description };
     },
     unitDetails(d, u){

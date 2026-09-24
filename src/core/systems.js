@@ -40,6 +40,6 @@
       G.Events.emit('scene:changed', { name, data });
     },
     update(dt){ if (this.current && this.current.update) this.current.update(dt); },
-    render(t){ if (this.current && this.current.render) this.current.render(t); }
+    render(t, realDt){ if (this.current && this.current.render) this.current.render(t, realDt); }
   };
 })();

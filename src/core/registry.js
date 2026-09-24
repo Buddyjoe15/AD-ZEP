@@ -69,7 +69,8 @@
       costOk(d, 'Buildable');
       return {
         hp: 500, buildTime: 2, cost: {}, description: '', behaviors: [], symbol: null, color: '#9bbcf0',
-        container: null, fabricator: null, blocksMovement: !d.container, ...d
+        container: null, fabricator: null, spawner: null, team: 'blue', debugOnly: false,
+        blocksMovement: !d.container, ...d
       };
     }),
     nodes: new Registry('resource node', d => {
@@ -100,6 +101,7 @@
     for (const b of D.buildables.all()){
       for (const k of Object.keys(b.cost)) if (!D.resources.has(k)) problems.push(`buildable ${b.key}: unknown resource ${k}`);
       for (const beh of b.behaviors) if (!beh.type) problems.push(`buildable ${b.key}: behavior without type`);
+      if (b.spawner && !D.units.has(b.spawner.unit)) problems.push(`buildable ${b.key}: spawner unit ${b.spawner.unit} unknown`);
     }
     for (const n of D.nodes.all()) if (!D.resources.has(n.resource)) problems.push(`node ${n.key}: unknown resource ${n.resource}`);
     if (problems.length) throw new Error('Content definitions are inconsistent:\n' + problems.join('\n'));

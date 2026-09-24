@@ -9,6 +9,10 @@
   G.screenFromWorld = (x, y) => { const c = G.State.camera; return { x: (x - c.x) * c.z, y: (y - c.y) * c.z }; };
   G.clampCamera = function(){
     const c = G.State.camera, C = G.CONFIG, R = G.Renderer;
+    // Never let a bad value (NaN / Infinity) stick: fall back to the world centre.
+    if (!Number.isFinite(c.z) || c.z <= 0) c.z = 0.72;
+    if (!Number.isFinite(c.x)) c.x = C.WORLD_W / 2 - R.w / c.z / 2;
+    if (!Number.isFinite(c.y)) c.y = C.WORLD_H / 2 - R.h / c.z / 2;
     c.x = G.clamp(c.x, 0, Math.max(0, C.WORLD_W - R.w / c.z));
     c.y = G.clamp(c.y, 0, Math.max(0, C.WORLD_H - R.h / c.z));
   };
