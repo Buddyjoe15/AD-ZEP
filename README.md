@@ -52,6 +52,21 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
 
 ## What changed in v0.7
 
+- **Defences.** The Wall is replaced by a set of defensive structures. All of them are in the Utility Spider's build menu and the testing zone; testing-zone turrets hold fire.
+
+  | Structure | Size | Cost | What it does |
+  |---|---|---|---|
+  | Defensive Wall | 1×1 | 60 metal | Blocks enemies and channels them into controlled approaches. 600 HP; friendly units beside it take 20% less damage (as the old Wall). Sections join up visually. |
+  | Reinforced Wall | 1×1 | 40 metal + 12 steel | 1,600 HP and takes 35% less damage. 25% cover for friendly units beside it. |
+  | Gate | 2×1 | 80 metal | Always closed. Opens when a friendly unit is within 2 tiles, and shuts while hostiles are within 6. Enemies can never pass. |
+  | Sentry Turret | 1×1 | 120 metal | Early perimeter defence: 9 damage twice a second at ground targets within 260. |
+  | Heavy Turret | 2×2 | 200 metal + 20 steel | 70 damage every 3 s with a small blast, at ground targets within 340. |
+  | Anti-Air Turret | 1×1 | 100 metal + 2 electronics | Fast fire at flying targets within 400 only. |
+  | Missile Battery | 2×2 | 180 metal + 15 steel + 4 electronics | 50 damage with a wide blast every 4 s, ground or air, from 160 out to 720. Uses one **Missile** per shot. |
+
+  - **Missiles** are made at a Fabricator: 2 steel + 1 electronics → 4 missiles in 10 s.
+  - **Flying units:** Survey and Security Drones are now flying units, and a new **Hostile Drone** (a flying enemy, placeable from DEBUG) is only hit by anti-air and missiles. Flying units still move along the ground paths for now.
+  - **Save format: schema 6.** `migrate_5_to_6` turns Walls and wall construction sites into Defensive Walls, with the same health, size and cover. Gate states and turret cooldowns are recalculated, never saved.
 - **Fog of war.** Friendly units reveal a circle of their sight, structures 5 tiles and construction sites 3. Ground you've seen stays dimmed with its terrain and structures; ground you haven't seen is dark. Enemies show only inside your crew's sight, and hidden enemies can't be clicked. The minimap follows the fog. It's display only: enemies still fight as before, and the explored area isn't saved but rebuilds from what the crew can see after loading. `?fog=0` turns it off.
 - **Debug panel additions.**
   - *Display → Fog of war* turns fog on or off.

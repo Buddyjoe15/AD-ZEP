@@ -217,3 +217,28 @@ test('migrate_4_to_5: fabricators in older saves get no rally point, so units st
   bad.units.find(u => u.isShip).rally = { x: -5, y: 3 };
   assert.throws(() => G.Save.validate(bad), /rally point/);
 });
+
+test('migrate_5_to_6: Walls in older saves become Defensive Walls with the same health and cover', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(5));
+  const walls = raw.buildings.filter(b => b.type === 'wall');
+  assert.ok(walls.length > 0, 'the schema 5 fixture has walls');
+  // A wall still under construction migrates too.
+  raw.constructionSites.push({ id: 'site-legacy-wall', type: 'wall', team: 'blue', gx: walls[0].gx + 2, gy: walls[0].gy, w: 1, h: 1,
+    x: (walls[0].gx + 2.5) * 48, y: (walls[0].gy + 0.5) * 48, buildTime: 5, remaining: 3, builderId: null });
+  const before = JSON.stringify(raw);
+  const up = G.Save.migrate(raw);
+  assert.equal(JSON.stringify(raw), before, 'the input is not modified');
+  assert.equal(up.schema, 6);
+  assert.ok(!JSON.stringify(up.buildings).includes('"type":"wall"'));
+  assert.equal(up.constructionSites.find(s => s.id === 'site-legacy-wall').type, 'defensive_wall');
+  const S = G.Save.restore(raw, 1);
+  for (const w of walls){
+    const b = S.buildings.find(x => x.id === w.id);
+    assert.equal(b.type, 'defensive_wall');
+    assert.equal(b.hp, w.hp); assert.equal(b.maxHp, 600);
+    assert.equal(S.grid.passable(b.gx, b.gy), false, 'still blocks its tile');
+  }
+  assert.equal(G.Defs.buildables.get('defensive_wall').behaviors[0].reduction, 0.2, 'same cover aura as the old Wall');
+  assert.equal(G.Defs.buildables.has('wall'), false);
+});

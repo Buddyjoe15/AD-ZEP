@@ -131,8 +131,19 @@
     return v;
   }
 
-  // Keyed by the schema each step upgrades from; add { 5: migrate_5_to_6 } and so on.
-  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5 };
+  // Schema 5 → schema 6 (Building Additions): the Wall structure is replaced by the Defensive
+  // Wall, which has the same size, health, cost and cover aura. Walls and wall construction
+  // sites in older saves become Defensive Walls.
+  function migrate_5_to_6(d){
+    const v = G.copy(d);
+    v.schema = 6;
+    for (const b of v.buildings || []) if (b && b.type === 'wall') b.type = 'defensive_wall';
+    for (const s of v.constructionSites || []) if (s && s.type === 'wall') s.type = 'defensive_wall';
+    return v;
+  }
+
+  // Keyed by the schema each step upgrades from; add { 6: migrate_6_to_7 } and so on.
+  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6 };
 
   // Applies the steps in order until the save reaches G.SAVE_SCHEMA. A current save is
   // returned as is; anything newer or unknown is rejected.

@@ -54,7 +54,7 @@
       need(d, 'Unit', ['name', 'hp', 'speed', 'radius']);
       return {
         team: 'blue', range: 0, damage: 0, reload: 999, sight: 600, capabilities: [],
-        visual: d.key, cargoCapacity: 0, storageSlots: 0, footprint: null, fabricator: null, power: null,
+        visual: d.key, cargoCapacity: 0, storageSlots: 0, footprint: null, fabricator: null, power: null, flying: false,
         ai: null, selectable: true, ...d,
         capabilities: [...(d.capabilities || [])]
       };
@@ -70,6 +70,7 @@
       return {
         hp: 500, buildTime: 2, cost: {}, description: '', behaviors: [], symbol: null, color: '#9bbcf0',
         container: null, fabricator: null, spawner: null, team: 'blue', debugOnly: false, placeOnNode: null, power: null,
+        armor: 0, gate: null, sight: 0,
         blocksMovement: !d.container, ...d
       };
     }),
@@ -105,6 +106,12 @@
       for (const beh of b.behaviors) if (!beh.type) problems.push(`buildable ${b.key}: behavior without type`);
       if (b.spawner && !D.units.has(b.spawner.unit)) problems.push(`buildable ${b.key}: spawner unit ${b.spawner.unit} unknown`);
       for (const k of (b.fabricator && b.fabricator.recipes) || []) if (!D.recipes.has(k)) problems.push(`buildable ${b.key}: unknown recipe ${k}`);
+      if (!(b.armor >= 0 && b.armor < 1)) problems.push(`buildable ${b.key}: armor must be 0–1`);
+      if (b.gate && b.blocksMovement) problems.push(`buildable ${b.key}: a gate must not block movement (it blocks by itself)`);
+      for (const t of b.behaviors.filter(x => x.type === 'turret')){
+        if (!(t.range > 0 && t.damage > 0 && t.reload > 0) || !['ground', 'air', 'any'].includes(t.targets)) problems.push(`buildable ${b.key}: turret needs range, damage, reload and targets`);
+        if (t.ammo && !D.resources.has(t.ammo)) problems.push(`buildable ${b.key}: unknown ammo ${t.ammo}`);
+      }
     }
     for (const b of D.buildables.all()) if (D.units.has(b.key)) problems.push(`buildable ${b.key}: key also used by a unit`);
     for (const d of [...D.units.all(), ...D.buildables.all()]){

@@ -88,7 +88,7 @@ for (const target of ['index.html', 'dist/ad-ezp.html']){
       p = await screen(page, spider.x, spider.y);
       await page.mouse.click(p.x, p.y);
       await page.click('#truckBuildBtn');
-      await page.click('[data-build-pick="wall"]');
+      await page.click('[data-build-pick="defensive_wall"]');
       const tile = await page.evaluate(() => { const u = GW.State.units.find(u => u.type === 'utility_spider'), T = 48, g = GW.State.grid;
         for (let r = 3; r < 9; r++) for (let dx = -r; dx <= r; dx++){ const x = Math.floor(u.x / T) + dx, y = Math.floor(u.y / T) + r; if (GW.Buildings.canPlace(x, y, 1, 1)) return { x: (x + 0.5) * T, y: (y + 0.5) * T }; } });
       p = await screen(page, tile.x, tile.y);
@@ -372,11 +372,11 @@ test('debug cheats and the Map Editor work from the interface', { skip, timeout:
     await page.screenshot({ path: path.join(OUT, 'map-editor.png') });
     // Objects: place a wall; Erase: remove it.
     await page.click('#mapEdPanel [data-tab="objects"]');
-    const wallIndex = await page.evaluate(() => GW.MapEditorUI.objects().findIndex(e => e.key === 'wall'));
+    const wallIndex = await page.evaluate(() => GW.MapEditorUI.objects().findIndex(e => e.key === 'defensive_wall'));
     await page.click(`#mapEdPanel [data-obj="${wallIndex}"]`);
     const w = await screen(page, (tiles.gx + 0.5) * tiles.T, (tiles.gy + 4.5) * tiles.T);
     await page.mouse.click(w.x, w.y);
-    assert.equal(await page.evaluate(({ gx, gy }) => GW.Buildings.at(gx, gy + 4)?.type, tiles), 'wall');
+    assert.equal(await page.evaluate(({ gx, gy }) => GW.Buildings.at(gx, gy + 4)?.type, tiles), 'defensive_wall');
     await page.click('#mapEdPanel [data-tab="erase"]');
     await page.mouse.click(w.x, w.y);
     assert.equal(await page.evaluate(({ gx, gy }) => GW.Buildings.at(gx, gy + 4), tiles), null);

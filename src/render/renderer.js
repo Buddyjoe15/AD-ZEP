@@ -289,8 +289,17 @@
         g.lineWidth = 2 / z;
         for (const [team, col] of [['blue', '#b9e2ff'], ['red', '#ffb08b']]){
           g.strokeStyle = col; g.beginPath();
-          for (const s of S.shots) if ((s.team === 'blue') === (team === 'blue') && inView(s.x1, s.y1, 700) && (s.team === 'blue' || G.Fog.visibleAt(s.x1, s.y1))){ g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); }
+          for (const s of S.shots) if (!s.kind && (s.team === 'blue') === (team === 'blue') && inView(s.x1, s.y1, 700) && (s.team === 'blue' || G.Fog.visibleAt(s.x1, s.y1))){ g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); }
           g.stroke();
+        }
+        // Heavy cannon shells and missiles: a thick trail and a blast at the target.
+        for (const s of S.shots){
+          if (!s.kind || !inView(s.x2, s.y2, 700)) continue;
+          const missile = s.kind === 'missile';
+          g.strokeStyle = missile ? '#ffc27a' : '#fff0b0'; g.lineWidth = (missile ? 3 : 5) / z;
+          g.beginPath(); g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); g.stroke();
+          g.fillStyle = missile ? 'rgba(255,140,60,.45)' : 'rgba(255,230,160,.45)';
+          g.beginPath(); g.arc(s.x2, s.y2, missile ? 70 : 40, 0, TAU); g.fill();
         }
       }
       if (S.buildPreview){

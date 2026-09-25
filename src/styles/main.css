@@ -776,6 +776,7 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
   .resource-pill{min-width:0;height:23px;padding:2px 6px;gap:4px}
 }
 .catalog-art.catalog-wall{background:repeating-linear-gradient(90deg,#666 0 8px,#7b817b 8px 13px);border:2px solid #333;color:#eef0ed}
+.catalog-art.catalog-wall.reinforced{background:repeating-linear-gradient(90deg,#3e4a52 0 8px,#5b6a73 8px 13px);border-color:#1c2328}
 @media (orientation:landscape) and (max-height:420px){
   #economyBar{gap:2px}.resource-pill{height:23px;min-width:58px;padding:2px 5px;font-size:8px}.resource-pill b{font-size:8px}.resource-pill .resource-icon{font-size:10px}
   #squadBar{top:31px}
