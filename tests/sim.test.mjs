@@ -463,6 +463,35 @@ test('Hostile Fabricator spawns waves at one point, waits for it to clear, and g
   assert.equal(G.Defs.buildables.get('hostile_fabricator').debugOnly, true, 'not in the Spider build menu');
 });
 
+test('crowded units slide along a wall instead of pinning each other against it', () => {
+  // Regression: a push was all-or-nothing, so a unit resting on a wall's edge, nudged a hair
+  // into the wall by every push, could never move, and a unit squeezing past it stayed stuck
+  // (a Hostile Fabricator's spawn point next to the Shield Projector never cleared).
+  const G = newGame();
+  const S = G.State, grid = S.grid, b = S.buildings.find(b => b.type === 'shield_projector');
+  const gx = Math.floor(b.x / T), gy = Math.floor((b.y - b.h * T / 2) / T);   // top row of its footprint
+  assert.ok(!grid.passable(gx, gy) && grid.passable(gx, gy - 1) && grid.passable(gx + 1, gy - 1), 'open ground along the top edge');
+  const put = (x, y) => { const u = G.Units.spawn('hostile_machine', x, y, { team: 'red' }); u.aiHold = true; u.path = []; return u; };
+  const x0 = (gx + 0.5) * T, y0 = gy * T - 0.05;
+  const a = put(x0, y0), c = put(x0 - 18, y0 - 1.45);   // overlapping, pushing a east and a hair south
+  G.SystemManager.registry.get('movement').update(1 / 30);
+  assert.ok(a.x > x0 + 2, `pushed along the wall (moved ${(a.x - x0).toFixed(2)} px)`);
+  assert.ok(grid.passableWorld(a.x, a.y) && grid.passableWorld(c.x, c.y), 'both stay on open ground');
+});
+
+test('a unit pushed onto a wall with its next waypoint straight through it drops the route to re-plan', () => {
+  // Regression: sliding along the open axis moved it ~0 px each tick, so it kept a route it
+  // could never follow (and a spawner waiting for it to leave never spawned again).
+  const G = newGame();
+  const S = G.State, b = S.buildings.find(b => b.type === 'shield_projector');
+  const gx = Math.floor(b.x / T), gy = Math.floor((b.y - b.h * T / 2) / T);
+  const x0 = (gx + 0.5) * T, u = G.Units.spawn('hostile_machine', x0, gy * T - 0.05, { team: 'red' });
+  u.aiHold = true; u.path = [{ x: x0 + 0.01, y: (gy + 4) * T }]; u.pathIndex = 0;
+  G.SystemManager.registry.get('movement').update(1 / 30);
+  assert.equal(u.path.length, 0, 'route dropped');
+  assert.ok(S.grid.passableWorld(u.x, u.y));
+});
+
 test('metal mines need a centred 3×3 Mine Building, then extract slowly into a stockpile Spiders haul', () => {
   const G = newGame();
   const S = G.State, spider = find(G, 'utility_spider');

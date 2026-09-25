@@ -27,9 +27,11 @@
     const Gt = G.Gates, ok = Gt.count ? (x, y) => grid.passableWorld(x, y) && !Gt.blocksWorld(u, x, y) : (x, y) => grid.passableWorld(x, y);
     if (!ok(nx, ny)){
       // Slide along the obstacle on whichever axis is still open (units nudged against a
-      // wall by the crowd keep moving); only a dead end drops the route so the owner re-plans.
-      if (ok(nx, u.y)) ny = u.y;
-      else if (ok(u.x, ny)) nx = u.x;
+      // wall by the crowd keep moving). A dead end, or heading almost straight into the wall
+      // (the slide would barely move), drops the route so the owner re-plans.
+      const min = step * 0.2;
+      if (ok(nx, u.y) && Math.abs(nx - u.x) > min) ny = u.y;
+      else if (ok(u.x, ny) && Math.abs(ny - u.y) > min) nx = u.x;
       else { u.path = []; u.pathIndex = 0; return; }
     }
     u.x = nx; u.y = ny; u.heading = Math.atan2(dy, dx);
@@ -44,9 +46,18 @@
     const ux = u.x + nx * p, uy = u.y + ny * p, vx = v.x - nx * p, vy = v.y - ny * p;
     // passable() is false outside the map, so an accepted push always stays in bounds.
     // Crowds can't push a unit through a gate it may not pass.
-    const Gt = G.Gates, ux0 = Math.floor(ux / T), uy0 = Math.floor(uy / T), vx0 = Math.floor(vx / T), vy0 = Math.floor(vy / T);
-    if (grid.passable(ux0, uy0) && !(Gt.count && Gt.blocks(u, ux0, uy0))){ u.x = ux; u.y = uy; }
-    if (grid.passable(vx0, vy0) && !(Gt.count && Gt.blocks(v, vx0, vy0))){ v.x = vx; v.y = vy; }
+    // A unit against a wall slides along it on whichever axis is still open, so it can
+    // still be pushed aside (all-or-nothing, a unit on a wall's edge could never move).
+    shove(u, ux, uy, grid, T); shove(v, vx, vy, grid, T);
+  }
+  function shove(u, x, y, grid, T){
+    if (open(u, x, y, grid, T)){ u.x = x; u.y = y; }
+    else if (open(u, x, u.y, grid, T)) u.x = x;
+    else if (open(u, u.x, y, grid, T)) u.y = y;
+  }
+  function open(u, x, y, grid, T){
+    const Gt = G.Gates, gx = Math.floor(x / T), gy = Math.floor(y / T);
+    return grid.passable(gx, gy) && !(Gt.count && Gt.blocks(u, gx, gy));
   }
 
   // Pushes overlapping units apart. Walks the occupied cells of the dense collision grid,
