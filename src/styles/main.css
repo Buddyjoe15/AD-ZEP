@@ -767,6 +767,12 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
 .resource-pill .resource-icon{font-size:13px}.resource-pill.coins .resource-icon{color:#e4c65a}.resource-pill.metal .resource-icon{color:#aebbc3}
 .resource-pill b{font-size:10px}
 #squadBar{top:38px}
+/* Narrow screens: resource pills shrink and wrap before they reach the centred DEBUG
+   button; the squad bar moves below them (hud.js). */
+@media (max-width:560px){
+  #economyBar{flex-wrap:wrap;max-width:calc(50vw - 52px)}
+  .resource-pill{min-width:0;height:23px;padding:2px 6px;gap:4px}
+}
 .catalog-art.catalog-wall{background:repeating-linear-gradient(90deg,#666 0 8px,#7b817b 8px 13px);border:2px solid #333;color:#eef0ed}
 @media (orientation:landscape) and (max-height:420px){
   #economyBar{gap:2px}.resource-pill{height:23px;min-width:58px;padding:2px 5px;font-size:8px}.resource-pill b{font-size:8px}.resource-pill .resource-icon{font-size:10px}

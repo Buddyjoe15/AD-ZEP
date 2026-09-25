@@ -551,3 +551,38 @@ test('pixel-art sprites: eight facings, engine shadows, structure states, dust t
     } finally { await browser.close(); }
   }
 });
+
+test('Ore Processor window lists its three products and queues them; the top bar shows resources as they arrive', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    assert.equal(await page.$$eval('#economyBar .resource-pill', els => els.length), 1, 'only metal before anything else is stocked');
+    const pr = await page.evaluate(() => {
+      Object.assign(GW.State.resources, { metal: 100, copper: 12 });
+      const b = GW.State.buildings.find(b => b.type === 'ore_processor'); GW.centerCamera(b.x, b.y + 150, 0.8); return { x: b.x, y: b.y };
+    });
+    const p = await screen(page, pr.x, pr.y);
+    await page.touchscreen.tap(p.x, p.y);
+    await page.waitForSelector('#ezFabrication:not(.hidden)');
+    await page.waitForTimeout(120);
+    const opts = await page.$$eval('#ezFabrication [data-ez="fabricate"]', els => els.map(e => e.dataset.arg));
+    assert.deepEqual(opts, ['steel', 'electronics', 'fuel_rods']);
+    assert.equal(await page.$('#ezRally'), null, 'no rally point for a processor');
+    assert.ok(await page.$eval('#ezFabrication [data-arg="fuel_rods"]', e => e.disabled), 'no uranium yet');
+    await page.click('#ezFabrication [data-arg="steel"]');
+    await page.click('#ezFabrication [data-arg="electronics"]');
+    assert.equal(await page.evaluate(() => GW.State.buildings.find(b => b.type === 'ore_processor').fabQueue.length), 2);
+    assert.equal(await page.$$eval('#economyBar .resource-pill', els => els.length), 2, 'metal and copper');
+    await page.screenshot({ path: path.join(OUT, 'ore-processor.png') });
+    // The pills never reach the centred DEBUG button, even with all six resources.
+    await page.evaluate(() => Object.assign(GW.State.resources, { uranium: 5, steel: 5, electronics: 5, fuel_rods: 5 }));
+    await page.waitForTimeout(200);
+    const [bar, dbg, squad] = await page.evaluate(() => ['economyBar', 'dbgBtn', 'squadBar'].map(id => document.getElementById(id).getBoundingClientRect().toJSON()));
+    assert.ok(bar.right <= dbg.left, `pills end at ${bar.right}, DEBUG starts at ${dbg.left}`);
+    assert.ok(squad.top >= bar.bottom, 'squad bar sits below the pills');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});

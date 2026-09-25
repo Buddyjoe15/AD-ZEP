@@ -219,7 +219,7 @@
       const forms = us.length > 1 ? `<div class="formation-row"><span>Formation:</span>${G.FORMATIONS.map(f => `<button class="${S.formation === f ? 'active' : ''}" data-formation="${f}">${f === 'v' ? 'V' : f[0].toUpperCase() + f.slice(1)}</button>`).join('')}</div>` : '';
       const squads = crew.length ? `<div class="squad-assign-row"><span>Add to squad:</span>${[1, 2, 3, 4].map(n => `<button data-assign-squad="${n}">${n}</button>`).join('')}<button data-assign-squad="0">None</button></div>` : '';
       const builder = us.find(u => G.Units.can(u, 'build'));
-      const buildRow = builder ? `<div class="builder-row"><button id="truckBuildBtn">Build</button>${builder.storage ? '<button id="truckStorageBtn">Storage</button>' : ''}<span class="muted">Storage <b>${builder.storage ? builder.storage.items.length : 0} / ${builder.storage ? builder.storage.capacity : 0}</b> · Cargo ${Math.floor(G.Units.cargoTotal(builder))} / ${builder.cargoCapacity || 0} metal</span></div>` : '';
+      const buildRow = builder ? `<div class="builder-row"><button id="truckBuildBtn">Build</button>${builder.storage ? '<button id="truckStorageBtn">Storage</button>' : ''}<span class="muted">Storage <b>${builder.storage ? builder.storage.items.length : 0} / ${builder.storage ? builder.storage.capacity : 0}</b> · Cargo ${Math.floor(G.Units.cargoTotal(builder))} / ${builder.cargoCapacity || 0}</span></div>` : '';
       const task = us.length === 1 ? '<br>' + this.orderLine(us[0]) : '';
       p.innerHTML = `${head}${us.length > 1 ? `<br>Average health: ${hp}%` : ''}<br>${parts}${task}${cmds}${forms}${squads}${buildRow}`;
       this.bindCommands(p, us);
@@ -256,11 +256,16 @@
       }));
     },
     renderEconomy(){
-      const res = G.Defs.resources.all().filter(r => !r.hidden);
-      const sig = res.map(r => Math.floor(G.Economy.get(r.key))).join(',');
+      if (!this.economyResize){ this.economyResize = true; addEventListener('resize', () => { this.economySig = null; }); }
+      // Always-shown resources, plus any other the stockpile holds (keeps the phone bar short).
+      const res = G.Defs.resources.all().filter(r => !r.hidden && (r.always || G.Economy.get(r.key) >= 1));
+      const sig = res.map(r => r.key + Math.floor(G.Economy.get(r.key))).join(',');
       if (sig === this.economySig) return;
       this.economySig = sig;
-      $('economyBar').innerHTML = res.map(r => `<div class="resource-pill ${esc(r.key)}" title="${esc(r.name)}"><span class="resource-icon">${esc(r.icon)}</span><b>${Math.floor(G.Economy.get(r.key))}</b></div>`).join('');
+      $('economyBar').innerHTML = res.map(r => `<div class="resource-pill ${esc(r.key)}" title="${esc(r.name)}"><span class="resource-icon" style="color:${esc(r.color)}">${esc(r.icon)}</span><b>${Math.floor(G.Economy.get(r.key))}</b></div>`).join('');
+      // When the pills wrap onto more rows, keep the squad bar clear of them.
+      const bar = $('economyBar'), squad = $('squadBar');
+      if (squad) squad.style.top = bar.offsetHeight > 34 ? (bar.offsetTop + bar.offsetHeight + 4) + 'px' : '';
     },
     // Called every rendered frame; heavier refreshes are throttled.
     update(){

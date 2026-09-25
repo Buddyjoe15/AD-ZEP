@@ -84,13 +84,15 @@
     unload(u){
       if (!u.cargo) return 0;
       let total = 0;
+      const parts = [];
       for (const [k, v] of Object.entries(u.cargo)){
         if (!(v > 0)) continue;
         G.Economy.add(k, v, 'delivery');
         total += v; u.cargo[k] = 0;
+        parts.push(Math.floor(v) + ' ' + (G.Defs.resources.get(k)?.name || k).toLowerCase());
       }
       if (total > 0){
-        G.notify(`${u.name} delivered ${Math.floor(total)} metal to the ship`);
+        G.notify(`${u.name} delivered ${parts.join(' + ')} to the ship`);
         G.Events.emit('cargo:delivered', { unit: u, amount: total });
       }
       return total;

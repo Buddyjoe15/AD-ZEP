@@ -9,7 +9,7 @@
   let pointerDown = false, openTimer = null;
 
   G.ExpeditionUI = {
-    fabOwnerId: null,   // unit id of the ship or id of a Fabricator building
+    fabOwnerId: null,   // unit id of the ship, or id of a producing building (Fabricator, Ore Processor)
     init(){
       $('ezToggle').addEventListener('click', () => {
         this.closeFabrication();
@@ -104,22 +104,29 @@
       const owner = this.owner();
       if (!owner){ this.closeFabrication(); return; }
       const S = G.State, E = S.expedition, R = G.EXPEDITION_RULES, el = $('ezFabBody'), scroll = el.scrollTop, Q = owner.fabQueue, max = G.Fabrication.queueMax(owner);
-      const recipes = G.Defs.recipes.all().map(r => {
+      const units = G.Fabrication.makesUnits(owner), def = G.Fabrication.defOf(owner);
+      const recipes = G.Fabrication.recipesFor(owner).map(r => {
         const why = S.paused ? 'Paused' : G.Fabrication.blocker(owner, r.key);
         return `<button data-ez="fabricate" data-arg="${r.key}" ${why ? 'disabled' : ''} title="${esc(why)}"><b>${esc(r.name)}</b><span>${esc(G.Economy.describe(r.cost))} · ${r.time}s</span><small>${esc(r.blurb)}</small></button>`;
       }).join('');
       const upgrade = owner.isShip ? `<button data-ez="upgrade" ${S.paused || E.upgrades >= R.upgradeMax || !G.Economy.canAfford({ metal: R.upgradeCost }) ? 'disabled' : ''}><b>Vance frame upgrade</b><span>${E.upgrades >= R.upgradeMax ? 'Fully upgraded' : R.upgradeCost + ' metal · +' + R.upgradeHp + ' HP'}</span><small>Upgrade ${E.upgrades}/${R.upgradeMax} · improves transit readiness</small></button>` : '';
-      const queue = Q.map((q, i) => (i ? 'Waiting: ' : 'Building: ') + esc(G.Defs.recipes.get(q.recipe)?.name || q.recipe) + ' · ' + Math.ceil(q.left) + 's').join('<br>') || 'Fabricator idle';
-      el.innerHTML = `<div class="ezFabHeader"><div><div class="ezEyebrow">${owner.isShip ? esc(owner.name.toUpperCase()) : 'FABRICATOR · LEVEL ' + (owner.level || 1)}</div><h2>Fabrication</h2></div><button id="ezFabClose" aria-label="Close fabrication">×</button></div>
-        <p class="ezHint">${Math.floor(G.Economy.get('metal'))} metal available · ${Q.length}/${max} queued · crew ${G.Fabrication.population()}/${G.CONFIG.POPULATION_CAP}</p>
+      const queue = Q.map((q, i) => (i ? 'Waiting: ' : units ? 'Building: ' : 'Processing: ') + esc(G.Defs.recipes.get(q.recipe)?.name || q.recipe) + ' · ' + Math.ceil(q.left) + 's').join('<br>') || (units ? 'Fabricator idle' : 'Processor idle');
+      const eyebrow = owner.isShip ? owner.name.toUpperCase() : def.name.toUpperCase() + (owner.level ? ' · LEVEL ' + owner.level : '');
+      // Processing shows the stock of every input and product it uses.
+      const stock = units ? `${Math.floor(G.Economy.get('metal'))} metal available · ${Q.length}/${max} queued · crew ${G.Fabrication.population()}/${G.CONFIG.POPULATION_CAP}`
+        : [...new Set(G.Fabrication.recipesFor(owner).flatMap(r => [...Object.keys(r.cost), ...Object.keys(r.produces)]))]
+          .map(k => `${esc(G.Defs.resources.get(k).name)} ${Math.floor(G.Economy.get(k))}`).join(' · ') + ` · ${Q.length}/${max} queued`;
+      const rally = units ? `<h3>Rally point</h3><p class="ezHint">${owner.rally ? 'New units walk to the flag.' : 'None: new units wait beside the fabricator.'}</p>
+        <div class="ezGrid"><button id="ezRally" class="${G.Input.commandMode === 'rally' && G.Input.rallyFor === owner.id ? 'active' : ''}">${G.Input.commandMode === 'rally' && G.Input.rallyFor === owner.id ? 'Tap the map… (Esc cancels)' : owner.rally ? 'Move rally point' : 'Set rally point'}</button>${owner.rally ? '<button id="ezRallyClear">Clear rally point</button>' : ''}</div>` : '';
+      el.innerHTML = `<div class="ezFabHeader"><div><div class="ezEyebrow">${esc(eyebrow)}</div><h2>${units ? 'Fabrication' : 'Processing'}</h2></div><button id="ezFabClose" aria-label="Close fabrication">×</button></div>
+        <p class="ezHint">${stock}</p>
         <div class="ezFabOptions">${recipes}${upgrade}</div>
-        <h3>Rally point</h3><p class="ezHint">${owner.rally ? 'New units walk to the flag.' : 'None: new units wait beside the fabricator.'}</p>
-        <div class="ezGrid"><button id="ezRally" class="${G.Input.commandMode === 'rally' && G.Input.rallyFor === owner.id ? 'active' : ''}">${G.Input.commandMode === 'rally' && G.Input.rallyFor === owner.id ? 'Tap the map… (Esc cancels)' : owner.rally ? 'Move rally point' : 'Set rally point'}</button>${owner.rally ? '<button id="ezRallyClear">Clear rally point</button>' : ''}</div>
-        <h3>Production queue</h3><p class="ezHint">${queue}</p>${S.paused ? '<p class="ezHint">Resume to fabricate.</p>' : ''}`;
+        ${rally}
+        <h3>Production queue</h3><p class="ezHint">${queue}</p>${S.paused ? `<p class="ezHint">Resume to ${units ? 'fabricate' : 'process'}.</p>` : ''}`;
       el.scrollTop = scroll;
       el.querySelectorAll('[data-ez]').forEach(b => { b.onclick = () => this.act(b.dataset.ez, b.dataset.arg); });
       $('ezFabClose').onclick = () => this.closeFabrication();
-      $('ezRally').onclick = () => {
+      if ($('ezRally')) $('ezRally').onclick = () => {
         if (G.Input.commandMode === 'rally' && G.Input.rallyFor === owner.id){ G.Input.commandMode = null; G.Input.rallyFor = null; }
         else { G.Input.commandMode = 'rally'; G.Input.rallyFor = owner.id; G.UI.toast('Tap the map to place the rally point'); }
         this.renderFabrication();

@@ -12,15 +12,30 @@ GW.Defs.nodes.defineAll({
     description: 'Loose salvage. A Utility Spider collects it quickly until it runs out.'
   },
   metal_mine: {
-    name: 'Metal Mine', kind: 'deposit', resource: 'metal', capacity: 1000000, rate: 2, range: 0, building: 'mine_building',
+    name: 'Metal Mine', kind: 'deposit', resource: 'metal', capacity: 1000000, rate: 2, range: 0, building: 'mine_building', ore: '#c9d4dc',
     description: 'A near-endless metal seam. Build a Mine Building over it; extraction is slow but never runs dry.'
+  },
+  copper_mine: {
+    name: 'Copper Deposit', kind: 'deposit', resource: 'copper', capacity: 1000000, rate: 2, range: 0, building: 'mine_building', ore: '#d98a4e',
+    description: 'A near-endless copper seam. Build a Mine Building over it. Copper becomes Electronics in an Ore Processor.'
+  },
+  uranium_mine: {
+    name: 'Uranium Deposit', kind: 'deposit', resource: 'uranium', capacity: 1000000, rate: 1, range: 0, building: 'mine_building', ore: '#8fe36a',
+    description: 'A near-endless uranium seam. Build a Mine Building over it; extraction is slower than metal. Uranium becomes Fuel Rods in an Ore Processor.'
   }
 });
 
+/* Recipes make either a unit (`unit`) or construction resources (`produces`, added to
+   the stockpile). Costs are paid when queued. The ship and Fabricators build unit
+   recipes; a structure whose `fabricator.recipes` lists keys builds only those. */
 GW.Defs.recipes.defineAll({
   survey_drone:   { name: 'Survey Drone',   unit: 'survey_drone',   cost: { metal: 100 }, time: 8,  blurb: 'Investigate signals and discoveries' },
   security_drone: { name: 'Security Drone', unit: 'security_drone', cost: { metal: 140 }, time: 10, blurb: 'Protect the expedition' },
-  utility_spider: { name: 'Utility Spider', unit: 'utility_spider', cost: { metal: 160 }, time: 12, blurb: 'Mine, carry cargo and build with a laser' }
+  utility_spider: { name: 'Utility Spider', unit: 'utility_spider', cost: { metal: 160 }, time: 12, blurb: 'Mine, carry cargo and build with a laser' },
+  // Ore Processor
+  steel:       { name: 'Steel',       produces: { steel: 1 },       cost: { metal: 2 },   time: 5,  blurb: '2 metal → 1 steel' },
+  electronics: { name: 'Electronics', produces: { electronics: 1 }, cost: { copper: 6 },  time: 12, blurb: '6 copper → 1 electronics' },
+  fuel_rods:   { name: 'Fuel Rods',   produces: { fuel_rods: 6 },   cost: { uranium: 6 }, time: 30, blurb: '6 uranium → 6 fuel rods' }
 });
 
 // Order matters: Earth n uses climate (n-1) % count.
@@ -38,6 +53,8 @@ GW.EXPEDITION_RULES = {
   repairCost: 100, upgradeCost: 180, upgradeHp: 40, upgradeMax: 5,
   boostSeconds: 90, elementPMax: 10,
   metalMines: [[620, -260], [-240, 780]],   // metal deposits placed near the ship on each Earth
+  copperMines: [[1000, 420]],                // copper and uranium deposits, further out
+  uraniumMines: [[-760, -620]],
   signalCount: 6, signalStudySeconds: 4, archiveReward: { metal: 70 }, signalRange: 100,
   firstWave: 110, waveInterval: 100, waveBase: 2, waveMax: 5,
   hazardSafeRadius: 700, crewRadius: 620,

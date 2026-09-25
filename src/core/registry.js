@@ -78,9 +78,10 @@
       return { description: '', kind: 'scavenge', building: null, ...d };
     }),
     recipes: new Registry('fabrication recipe', d => {
-      need(d, 'Recipe', ['name', 'unit', 'time']);
+      need(d, 'Recipe', ['name', 'time']);
       costOk(d, 'Recipe');
-      return { cost: {}, blurb: '', ...d };
+      if (!d.unit === !d.produces) throw new Error(`Recipe ${d.name} needs either unit or produces`);
+      return { cost: {}, blurb: '', unit: null, produces: null, ...d };
     }),
     climates: new Registry('climate', d => {
       need(d, 'Climate', ['name', 'air']);
@@ -95,13 +96,15 @@
       if (u.fabricator && !(u.fabricator.queueMax > 0)) problems.push(`unit ${u.key}: fabricator.queueMax`);
     }
     for (const r of D.recipes.all()){
-      if (!D.units.has(r.unit)) problems.push(`recipe ${r.key}: unknown unit ${r.unit}`);
+      if (r.unit && !D.units.has(r.unit)) problems.push(`recipe ${r.key}: unknown unit ${r.unit}`);
+      for (const [k, v] of Object.entries(r.produces || {})) if (!D.resources.has(k) || !(v > 0)) problems.push(`recipe ${r.key}: bad product ${k}`);
       for (const k of Object.keys(r.cost)) if (!D.resources.has(k)) problems.push(`recipe ${r.key}: unknown resource ${k}`);
     }
     for (const b of D.buildables.all()){
       for (const k of Object.keys(b.cost)) if (!D.resources.has(k)) problems.push(`buildable ${b.key}: unknown resource ${k}`);
       for (const beh of b.behaviors) if (!beh.type) problems.push(`buildable ${b.key}: behavior without type`);
       if (b.spawner && !D.units.has(b.spawner.unit)) problems.push(`buildable ${b.key}: spawner unit ${b.spawner.unit} unknown`);
+      for (const k of (b.fabricator && b.fabricator.recipes) || []) if (!D.recipes.has(k)) problems.push(`buildable ${b.key}: unknown recipe ${k}`);
     }
     for (const n of D.nodes.all()){
       if (!D.resources.has(n.resource)) problems.push(`node ${n.key}: unknown resource ${n.resource}`);

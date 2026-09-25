@@ -18,7 +18,8 @@ Choose **New Game → Save Slot → Launch expedition**. The same seed always ge
 | Camera | WASD / arrows, mouse wheel, minimap | Drag empty ground, pinch |
 | Fabricate | Click the ship (or a Fabricator) · **Set rally point** in its window, then tap the map, sends new units there | Tap the ship |
 | Build | Select a Utility Spider → Build | Same |
-| Mine | Build a **Mine Building** on a Metal Mine deposit (it snaps on), then right-click the building with a Spider selected | Tap the building with a Spider selected |
+| Mine | Build a **Mine Building** on a Metal Mine, Copper Deposit or Uranium Deposit (it snaps on), then right-click the building with a Spider selected | Tap the building with a Spider selected |
+| Process | Click the **Ore Processor** and pick Steel, Electronics or Fuel Rods | Tap the Ore Processor |
 | Follow | Select any friendly unit(s) → **Follow** → click the unit to follow · **Stop** cancels | Same, with taps |
 | Inspect | Long-press anything | Long-press anything |
 | Debug & Map Editor | **DEBUG** (top bar): add metal, godmode, instant build, and place anything. **MAP EDITOR** (shown in debug mode): paint terrain with a 1–9 tile brush, place structures, deposits and signals, erase objects, reset the map to grass | Same; two fingers still pan and zoom while editing |
@@ -51,6 +52,12 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
 
 ## What changed in v0.7
 
+- **Ore Processor and new resources.** Copper Deposits and Uranium Deposits are mined like Metal Mines: build a Mine Building on one and haul with Spiders. Uranium extracts at half the rate. Each Earth has one of each, further from the ship than the metal. A new 3×3 structure, the **Ore Processor** (250 metal), turns raw material into construction resources. Tap it and pick what to make:
+  - **Steel**: 2 metal → 1 steel, 5 s.
+  - **Electronics**: 6 copper → 1 electronics, 12 s.
+  - **Fuel Rods**: 6 uranium → 6 fuel rods, 30 s.
+
+  Inputs come from the stockpile when queued (up to 10), and products go back to it. The top bar shows each resource once you have some. Transit carries up to 300 copper, 150 uranium, 150 steel, 50 electronics and 60 fuel rods. Saves are unchanged. Existing saves get the new deposits on their next Earth.
 - **Pixel art (test).** Spiders, drones, Vance, the Repair Station and the grass terrain now use top-down pixel sprites with 8 facings and shadows drawn by the engine. `?art=classic` or the Debug panel switches back to the original art. This is presentation only; saves are unchanged.
 - **Renamed** to *Abyssal Dawn: Zero Earth Protocol* (AD-ZEP). Saves keep their internal `AD-EZP` identifier, so existing saves still load.
 - **Test map.** New games start on open grass with no terrain at all. The testing zone, ship, deposits and signals are placed as before. Add water, trees, mountains, paths and ruins with the Map Editor.

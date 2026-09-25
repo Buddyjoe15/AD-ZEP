@@ -4,7 +4,8 @@
      repairAura   { radiusTiles, rate }       – heals nearby friendly units (hp per second)
      studySignals { radiusTiles }             – studies expedition signals in range
    `container` makes the structure an item container instead of a solid building.
-   `fabricator` gives the building a production queue for recipes in fabrication.js.
+   `fabricator` gives the building a production queue for recipes in src/data/world.js
+   (unit recipes, or only the keys in `fabricator.recipes`).
    `spawner` + the `spawner` behaviour produce units continuously (see src/sim/spawner.js).
    `placeOnNode: 'deposit'` structures must be centred on a deposit resource node (mines).
    `debugOnly` structures are hidden from the Utility Spider's build menu. */
@@ -36,6 +37,11 @@ GW.Defs.buildables.defineAll({
     name: 'Fabricator', w: 2, h: 2, hp: 800, buildTime: 10, cost: { metal: 200 }, symbol: 'FAB', color: '#c9a0e8',
     fabricator: { queueMax: 5 }, level: 1,
     description: 'Level 1 fabricator. Builds everything the ship can fabricate.'
+  },
+  ore_processor: {
+    name: 'Ore Processor', w: 3, h: 3, hp: 1200, buildTime: 15, cost: { metal: 250 }, symbol: 'ORE', color: '#d9a066',
+    fabricator: { queueMax: 10, recipes: ['steel', 'electronics', 'fuel_rods'] },
+    description: 'Turns raw material into usable construction resources. Choose Steel (2 metal), Electronics (6 copper) or Fuel Rods (6 uranium); inputs come from the stockpile when queued and the product goes back to it.'
   },
   mine_building: {
     name: 'Mine Building', w: 3, h: 3, hp: 1200, buildTime: 15, cost: { metal: 150 }, symbol: 'MINE', color: '#b8a16a',

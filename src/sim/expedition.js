@@ -62,9 +62,11 @@
         const p = G.openPoint(sh.x + dx, sh.y + dy, region);
         G.Gather.addNode('scrap_mine', p.x, p.y);
       }
-      for (const [dx, dy] of rules.metalMines){
-        const site = this.mineSite(sh.x + dx, sh.y + dy, region);
-        if (site) G.Gather.addNode('metal_mine', (site.x + 0.5) * T, (site.y + 0.5) * T);
+      for (const [type, spots] of [['metal_mine', rules.metalMines], ['copper_mine', rules.copperMines || []], ['uranium_mine', rules.uraniumMines || []]]){
+        for (const [dx, dy] of spots){
+          const site = this.mineSite(sh.x + dx, sh.y + dy, region);
+          if (site) G.Gather.addNode(type, (site.x + 0.5) * T, (site.y + 0.5) * T);
+        }
       }
       E.waveAt = rules.firstWave;
     },
@@ -84,11 +86,12 @@
       return null;
     },
     // One of every buildable and item, left of the ship, for testing, plus a metal deposit
-    // with a working Mine Building beneath the grid.
+    // with a working Mine Building beneath the grid. The grid has 3-tile cells, so
+    // structures larger than 2×2 go in the bottom row beside the mine instead.
     testingZone(){
-      const S = G.State, sh = G.Units.ship(), T = G.CONFIG.TILE;
+      const S = G.State, sh = G.Units.ship(), T = G.CONFIG.TILE, small = d => d.w <= 2 && d.h <= 2;
       const entries = [
-        ...G.Defs.buildables.all().filter(d => !d.placeOnNode).map(d => ({ kind: 'building', key: d.key })),
+        ...G.Defs.buildables.all().filter(d => !d.placeOnNode && small(d)).map(d => ({ kind: 'building', key: d.key })),
         ...G.Defs.items.keys().map(key => ({ kind: 'item', key }))
       ];
       const cols = 4, x0 = sh.gx - 16, y0 = sh.gy + 1, rows = Math.ceil(entries.length / cols);
@@ -108,6 +111,9 @@
         G.Buildings.add(d.key, gx, gy, { id: 'test-' + G.newId(), extra: { testZone: true } });
         break;
       }
+      G.Defs.buildables.all().filter(d => !d.placeOnNode && !small(d)).forEach((d, i) => {
+        G.Buildings.add(d.key, x0 + 4 * (i + 1), y0 + rows * 3, { id: 'test-' + G.newId(), extra: { testZone: true } });
+      });
     },
 
     departure(){

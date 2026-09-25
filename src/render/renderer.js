@@ -84,7 +84,7 @@
           const px = n.gx * T, py = n.gy * T;
           g.fillStyle = '#3f3a33'; g.fillRect(px + 1, py + 1, T - 2, T - 2);
           g.fillStyle = '#6f6453'; g.beginPath(); g.moveTo(px + 6, py + T - 8); g.lineTo(px + 16, py + 10); g.lineTo(px + 28, py + 20); g.lineTo(px + 40, py + 8); g.lineTo(px + T - 5, py + T - 6); g.closePath(); g.fill();
-          g.fillStyle = '#c9d4dc';
+          g.fillStyle = G.Gather.def(n).ore || '#c9d4dc';   // ore colour tells deposits apart
           for (const [ox, oy, r] of [[15, 27, 4], [27, 33, 3.2], [33, 21, 3.6], [21, 16, 2.6]]){ g.beginPath(); g.arc(px + ox, py + oy, r, 0, TAU); g.fill(); }
           g.strokeStyle = '#d0a65b'; g.lineWidth = 2 / z; g.setLineDash([5 / z, 4 / z]); g.strokeRect(px + 1, py + 1, T - 2, T - 2); g.setLineDash([]);
           if (!far){ g.fillStyle = '#e8d9b4'; g.font = (10 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(n.name, n.x, py - 5); }
@@ -313,7 +313,7 @@
       const base = this.miniBase, W = base.width = m.width, H = base.height = m.height;
       const g = base.getContext('2d'), sx = W / C.WORLD_W, sy = H / C.WORLD_H;
       g.drawImage(G.TerrainCache.getOverview(), 0, 0, W, H);
-      for (const n of S.resourceNodes) if (n.remaining > 0){ g.fillStyle = G.Gather.isDeposit(n) ? '#c9d4dc' : '#d0a65b'; g.fillRect(n.x * sx - 1, n.y * sy - 1, 3, 3); }
+      for (const n of S.resourceNodes) if (n.remaining > 0){ g.fillStyle = G.Gather.isDeposit(n) ? G.Gather.def(n).ore || '#c9d4dc' : '#d0a65b'; g.fillRect(n.x * sx - 1, n.y * sy - 1, 3, 3); }
       for (const b of S.buildings){ g.fillStyle = '#adb5ad'; g.fillRect(b.x * sx - 1, b.y * sy - 1, 3, 3); }
       for (const s of S.constructionSites){ g.fillStyle = '#d4b96b'; g.fillRect(s.x * sx - 1, s.y * sy - 1, 3, 3); }
       // Ordinary units batched per team; ship and Vance on top.
