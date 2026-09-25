@@ -767,6 +767,8 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
 .resource-pill .resource-icon{font-size:13px}.resource-pill.coins .resource-icon{color:#e4c65a}.resource-pill.metal .resource-icon{color:#aebbc3}
 .resource-pill b{font-size:10px}
 #squadBar{top:38px}
+.resource-pill.power .resource-icon{color:#f2c66a;font-weight:700}
+.resource-pill.power.short{border-color:#e85e55}.resource-pill.power.short b,.resource-pill.power.short .resource-icon{color:#ff8a7a}
 /* Narrow screens: resource pills shrink and wrap before they reach the centred DEBUG
    button; the squad bar moves below them (hud.js). */
 @media (max-width:560px){

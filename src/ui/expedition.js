@@ -78,8 +78,9 @@
       const S = G.State, d = G.Expedition.departure(), R = G.EXPEDITION_RULES, climate = G.Expedition.climate(), h = G.Units.hero(), sh = G.Units.ship();
       const metal = Math.floor(G.Economy.get('metal')), rate = G.Economy.rate('metal'), scroll = el.scrollTop, cap = G.Defs.resources.get('metal').transitCap;
       el.innerHTML = `<div class="ezEyebrow">${esc(sh ? sh.name.toUpperCase() : 'SHIP LOST')} / EXPEDITION ${String(E.world).padStart(4, '0')}</div>
-        <div class="ezEarthDetails"><b>EARTH ${String(E.world).padStart(3, '0')} · ${esc(climate.name)}</b><span>${esc(climate.air)} · ${d.ready ? 'DEPARTURE READY' : E.repairs < 100 ? 'DRIVE OFFLINE' : E.readiness > 0 ? 'STABILIZING ' + Math.ceil(E.readiness) + 's' : 'CREW CHECK'}</span></div>
+        <div class="ezEarthDetails"><b>EARTH ${String(E.world).padStart(3, '0')} · ${esc(climate.name)}</b><span>${esc(climate.air)} · Solar ${Math.round(climate.solar * 100)}%${climate.solarNote ? ' (' + esc(climate.solarNote.toLowerCase()) + ')' : ''} · ${d.ready ? 'DEPARTURE READY' : E.repairs < 100 ? 'DRIVE OFFLINE' : E.readiness > 0 ? 'STABILIZING ' + Math.ceil(E.readiness) + 's' : 'CREW CHECK'}</span></div>
         <div class="ezStats"><div><small>SHIP CARGO</small><b>${metal} <em>metal</em></b><small>+${Math.round(rate.income)} / −${Math.round(rate.expense)} per min</small></div><div><small>CONTAINMENT</small><b>${E.elementP}<em> / ${R.elementPMax} P</em></b></div>
+        <div><small>POWER</small><b>${Math.round(G.Power.grid.supply)}<em> / ${Math.round(G.Power.grid.demand)} in use</em></b><small>${G.Power.grid.ratio < 1 ? 'Short: production at ' + Math.round(G.Power.grid.ratio * 100) + '%' : 'Warp Drive 25 + solar'}</small></div>
         <div><small>VANCE</small><b>${Math.ceil(h ? h.hp : 0)}<em> / ${h ? h.maxHp : 0} HP</em></b></div><div><small>SHIP HULL</small><b>${Math.ceil(sh ? sh.hp : 0)}<em> HP</em></b></div></div>
         <h3>Departure checklist</h3><ul class="ezChecklist">
           <li>${E.repairs === 100 ? '✓' : '○'} Drive repaired</li><li>${E.readiness <= 0 ? '✓' : '○'} Stabilization ${E.readiness <= 0 ? 'complete' : Math.ceil(E.readiness) + 's'}</li>
@@ -118,8 +119,11 @@
           .map(k => `${esc(G.Defs.resources.get(k).name)} ${Math.floor(G.Economy.get(k))}`).join(' · ') + ` · ${Q.length}/${max} queued`;
       const rally = units ? `<h3>Rally point</h3><p class="ezHint">${owner.rally ? 'New units walk to the flag.' : 'None: new units wait beside the fabricator.'}</p>
         <div class="ezGrid"><button id="ezRally" class="${G.Input.commandMode === 'rally' && G.Input.rallyFor === owner.id ? 'active' : ''}">${G.Input.commandMode === 'rally' && G.Input.rallyFor === owner.id ? 'Tap the map… (Esc cancels)' : owner.rally ? 'Move rally point' : 'Set rally point'}</button>${owner.rally ? '<button id="ezRallyClear">Clear rally point</button>' : ''}</div>` : '';
+      // Power note for structures on the grid.
+      const pdef = def && def.power && def.power.demand ? def.power : null, ratio = G.Power.grid.ratio;
+      const powerNote = pdef ? `<p class="ezHint">${ratio < 1 && Q.length ? `<b>Power short: ${units ? 'production' : 'processing'} at ${Math.round(ratio * 100)}%.</b> Build Solar Arrays.` : `Uses ${pdef.demand} power while ${units ? 'producing' : 'processing'}.`}</p>` : '';
       el.innerHTML = `<div class="ezFabHeader"><div><div class="ezEyebrow">${esc(eyebrow)}</div><h2>${units ? 'Fabrication' : 'Processing'}</h2></div><button id="ezFabClose" aria-label="Close fabrication">×</button></div>
-        <p class="ezHint">${stock}</p>
+        <p class="ezHint">${stock}</p>${powerNote}
         <div class="ezFabOptions">${recipes}${upgrade}</div>
         ${rally}
         <h3>Production queue</h3><p class="ezHint">${queue}</p>${S.paused ? `<p class="ezHint">Resume to ${units ? 'fabricate' : 'process'}.</p>` : ''}`;

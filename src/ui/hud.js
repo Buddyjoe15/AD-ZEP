@@ -259,10 +259,13 @@
       if (!this.economyResize){ this.economyResize = true; addEventListener('resize', () => { this.economySig = null; }); }
       // Always-shown resources, plus any other the stockpile holds (keeps the phone bar short).
       const res = G.Defs.resources.all().filter(r => !r.hidden && (r.always || G.Economy.get(r.key) >= 1));
-      const sig = res.map(r => r.key + Math.floor(G.Economy.get(r.key))).join(',');
+      // Power: supply / demand, red while the grid is short.
+      const P = G.Power.grid, pw = `${Math.round(P.supply)}/${Math.round(P.demand)}`;
+      const sig = res.map(r => r.key + Math.floor(G.Economy.get(r.key))).join(',') + '|' + pw;
       if (sig === this.economySig) return;
       this.economySig = sig;
-      $('economyBar').innerHTML = res.map(r => `<div class="resource-pill ${esc(r.key)}" title="${esc(r.name)}"><span class="resource-icon" style="color:${esc(r.color)}">${esc(r.icon)}</span><b>${Math.floor(G.Economy.get(r.key))}</b></div>`).join('');
+      $('economyBar').innerHTML = res.map(r => `<div class="resource-pill ${esc(r.key)}" title="${esc(r.name)}"><span class="resource-icon" style="color:${esc(r.color)}">${esc(r.icon)}</span><b>${Math.floor(G.Economy.get(r.key))}</b></div>`).join('')
+        + `<div class="resource-pill power${P.ratio < 1 ? ' short' : ''}" title="Power: ${Math.round(P.supply)} supplied, ${Math.round(P.demand)} in use${P.ratio < 1 ? ' — production slowed to ' + Math.round(P.ratio * 100) + '%' : ''}"><span class="resource-icon">ϟ</span><b>${pw}</b></div>`;
       // When the pills wrap onto more rows, keep the squad bar clear of them.
       const bar = $('economyBar'), squad = $('squadBar');
       if (squad) squad.style.top = bar.offsetHeight > 34 ? (bar.offsetTop + bar.offsetHeight + 4) + 'px' : '';

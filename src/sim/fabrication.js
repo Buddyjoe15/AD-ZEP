@@ -84,7 +84,7 @@
       for (const owner of this.owners()){
         const q = owner.fabQueue[0];
         if (!q) continue;
-        q.left = G.Cheats.instantBuild ? 0 : q.left - dt;
+        q.left = G.Cheats.instantBuild ? 0 : q.left - dt * G.Power.factor(owner);   // slower on a short grid
         if (q.left > 0) continue;
         const r = G.Defs.recipes.get(q.recipe);
         owner.fabQueue.shift();

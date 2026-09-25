@@ -8,7 +8,8 @@
    (unit recipes, or only the keys in `fabricator.recipes`).
    `spawner` + the `spawner` behaviour produce units continuously (see src/sim/spawner.js).
    `placeOnNode: 'deposit'` structures must be centred on a deposit resource node (mines).
-   `debugOnly` structures are hidden from the Utility Spider's build menu. */
+   `debugOnly` structures are hidden from the Utility Spider's build menu.
+   `power` makes it a producer or consumer on the electricity grid (see src/sim/power.js). */
 GW.Defs.buildables.defineAll({
   chest: {
     name: 'Chest', w: 1, h: 1, buildTime: 2, cost: {}, container: { capacity: 24 },
@@ -35,19 +36,24 @@ GW.Defs.buildables.defineAll({
   },
   fabricator: {
     name: 'Fabricator', w: 2, h: 2, hp: 800, buildTime: 10, cost: { metal: 200 }, symbol: 'FAB', color: '#c9a0e8',
-    fabricator: { queueMax: 5 }, level: 1,
-    description: 'Level 1 fabricator. Builds everything the ship can fabricate.'
+    fabricator: { queueMax: 5 }, level: 1, power: { demand: 10, when: 'producing' },
+    description: 'Level 1 fabricator. Builds everything the ship can fabricate. Draws 10 power only while producing.'
+  },
+  solar_array: {
+    name: 'Solar Array', w: 3, h: 2, hp: 300, buildTime: 6, cost: { metal: 60 }, symbol: 'SOL', color: '#e8c547',
+    power: { supply: 8, solar: true },
+    description: 'Basic renewable power generation. Extremely cheap to operate but dependent on sunlight: makes up to 8 power, scaled by this Earth\'s solar efficiency (atmosphere, weather, orbit and environment).'
   },
   ore_processor: {
     name: 'Ore Processor', w: 3, h: 3, hp: 1200, buildTime: 15, cost: { metal: 250 }, symbol: 'ORE', color: '#d9a066',
-    fabricator: { queueMax: 10, recipes: ['steel', 'electronics', 'fuel_rods'] },
-    description: 'Turns raw material into usable construction resources. Choose Steel (2 metal), Electronics (6 copper) or Fuel Rods (6 uranium); inputs come from the stockpile when queued and the product goes back to it.'
+    fabricator: { queueMax: 10, recipes: ['steel', 'electronics', 'fuel_rods'] }, power: { demand: 15, when: 'producing' },
+    description: 'Turns raw material into usable construction resources. Choose Steel (2 metal), Electronics (6 copper) or Fuel Rods (6 uranium); inputs come from the stockpile when queued and the product goes back to it. Draws 15 power only while processing.'
   },
   mine_building: {
     name: 'Mine Building', w: 3, h: 3, hp: 1200, buildTime: 15, cost: { metal: 150 }, symbol: 'MINE', color: '#b8a16a',
     placeOnNode: 'deposit',
-    behaviors: [{ type: 'extractor', stockCap: 300 }],
-    description: 'Built centred over a mine deposit. Slowly extracts its resource into a 300-unit stockpile that Utility Spiders haul to the ship.'
+    behaviors: [{ type: 'extractor', stockCap: 300 }], power: { demand: 5, when: 'extracting' },
+    description: 'Built centred over a mine deposit. Slowly extracts its resource into a 300-unit stockpile that Utility Spiders haul to the ship. Draws 5 power while extracting.'
   },
   hostile_fabricator: {
     name: 'Hostile Fabricator', w: 2, h: 2, hp: 1500, buildTime: 10, cost: {}, symbol: 'HF', color: '#e0685f',

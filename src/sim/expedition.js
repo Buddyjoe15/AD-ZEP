@@ -89,7 +89,8 @@
     // with a working Mine Building beneath the grid. The grid has 3-tile cells, so
     // structures larger than 2×2 go in the bottom row beside the mine instead.
     testingZone(){
-      const S = G.State, sh = G.Units.ship(), T = G.CONFIG.TILE, small = d => d.w <= 2 && d.h <= 2;
+      const S = G.State, sh = G.Units.ship(), T = G.CONFIG.TILE, north = new Set(R().testNorth || []);
+      const small = d => d.w <= 2 && d.h <= 2 && !north.has(d.key), large = d => !small(d) && !north.has(d.key);
       const entries = [
         ...G.Defs.buildables.all().filter(d => !d.placeOnNode && small(d)).map(d => ({ kind: 'building', key: d.key })),
         ...G.Defs.items.keys().map(key => ({ kind: 'item', key }))
@@ -111,9 +112,17 @@
         G.Buildings.add(d.key, gx, gy, { id: 'test-' + G.newId(), extra: { testZone: true } });
         break;
       }
-      G.Defs.buildables.all().filter(d => !d.placeOnNode && !small(d)).forEach((d, i) => {
+      G.Defs.buildables.all().filter(d => !d.placeOnNode && large(d)).forEach((d, i) => {
         G.Buildings.add(d.key, x0 + 4 * (i + 1), y0 + rows * 3, { id: 'test-' + G.newId(), extra: { testZone: true } });
       });
+      // Power structures stand in a row just north of the ship.
+      let nx = sh.gx;
+      for (const key of north){
+        const d = G.Defs.buildables.get(key), gy = sh.gy - d.h - 2;
+        if (G.MapGen.types[S.map].clearLanding) this.editTerrain(nx - 1, gy - 1, d.w + 2, d.h + 2);
+        G.Buildings.add(key, nx, gy, { id: 'test-' + G.newId(), extra: { testZone: true } });
+        nx += d.w + 1;
+      }
     },
 
     departure(){

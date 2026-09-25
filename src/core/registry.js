@@ -54,7 +54,7 @@
       need(d, 'Unit', ['name', 'hp', 'speed', 'radius']);
       return {
         team: 'blue', range: 0, damage: 0, reload: 999, sight: 600, capabilities: [],
-        visual: d.key, cargoCapacity: 0, storageSlots: 0, footprint: null, fabricator: null,
+        visual: d.key, cargoCapacity: 0, storageSlots: 0, footprint: null, fabricator: null, power: null,
         ai: null, selectable: true, ...d,
         capabilities: [...(d.capabilities || [])]
       };
@@ -69,7 +69,7 @@
       costOk(d, 'Buildable');
       return {
         hp: 500, buildTime: 2, cost: {}, description: '', behaviors: [], symbol: null, color: '#9bbcf0',
-        container: null, fabricator: null, spawner: null, team: 'blue', debugOnly: false, placeOnNode: null,
+        container: null, fabricator: null, spawner: null, team: 'blue', debugOnly: false, placeOnNode: null, power: null,
         blocksMovement: !d.container, ...d
       };
     }),
@@ -85,7 +85,7 @@
     }),
     climates: new Registry('climate', d => {
       need(d, 'Climate', ['name', 'air']);
-      return { hazard: 0, hostiles: true, ...d };
+      return { hazard: 0, hostiles: true, solar: 1, solarNote: '', ...d };
     })
   };
 
@@ -105,6 +105,12 @@
       for (const beh of b.behaviors) if (!beh.type) problems.push(`buildable ${b.key}: behavior without type`);
       if (b.spawner && !D.units.has(b.spawner.unit)) problems.push(`buildable ${b.key}: spawner unit ${b.spawner.unit} unknown`);
       for (const k of (b.fabricator && b.fabricator.recipes) || []) if (!D.recipes.has(k)) problems.push(`buildable ${b.key}: unknown recipe ${k}`);
+    }
+    for (const b of D.buildables.all()) if (D.units.has(b.key)) problems.push(`buildable ${b.key}: key also used by a unit`);
+    for (const d of [...D.units.all(), ...D.buildables.all()]){
+      const p = d.power;
+      if (p && !((p.supply > 0) !== (p.demand > 0) && [undefined, 'producing', 'extracting'].includes(p.when))) problems.push(`${d.key}: power needs supply or demand (and a known 'when')`);
+      if (p && p.when === 'producing' && !d.fabricator) problems.push(`${d.key}: power.when 'producing' needs a fabricator`);
     }
     for (const n of D.nodes.all()){
       if (!D.resources.has(n.resource)) problems.push(`node ${n.key}: unknown resource ${n.resource}`);

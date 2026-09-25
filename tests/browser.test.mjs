@@ -559,7 +559,7 @@ test('Ore Processor window lists its three products and queues them; the top bar
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const errors = track(page);
     await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
-    assert.equal(await page.$$eval('#economyBar .resource-pill', els => els.length), 1, 'only metal before anything else is stocked');
+    assert.equal(await page.$$eval('#economyBar .resource-pill:not(.power)', els => els.length), 1, 'only metal before anything else is stocked');
     const pr = await page.evaluate(() => {
       Object.assign(GW.State.resources, { metal: 100, copper: 12 });
       const b = GW.State.buildings.find(b => b.type === 'ore_processor'); GW.centerCamera(b.x, b.y + 150, 0.8); return { x: b.x, y: b.y };
@@ -575,13 +575,17 @@ test('Ore Processor window lists its three products and queues them; the top bar
     await page.click('#ezFabrication [data-arg="steel"]');
     await page.click('#ezFabrication [data-arg="electronics"]');
     assert.equal(await page.evaluate(() => GW.State.buildings.find(b => b.type === 'ore_processor').fabQueue.length), 2);
-    assert.equal(await page.$$eval('#economyBar .resource-pill', els => els.length), 2, 'metal and copper');
+    assert.equal(await page.$$eval('#economyBar .resource-pill:not(.power)', els => els.length), 2, 'metal and copper');
     await page.screenshot({ path: path.join(OUT, 'ore-processor.png') });
     // Finished batches reach the stockpile without errors (regression: the expedition log
     // expected every finished job to be a unit).
     await page.evaluate(() => GW.Cheats.set('instantBuild', true));
     await page.waitForFunction(() => GW.Economy.get('steel') >= 1 && GW.Economy.get('electronics') >= 1, null, { timeout: 8000 });
     await page.evaluate(() => GW.Cheats.set('instantBuild', false));
+    // Power pill: supply / demand, red while the grid is short.
+    assert.match(await page.textContent('#economyBar .resource-pill.power'), /^ϟ\s*33\/\d+$/);
+    await page.evaluate(() => { const G = GW, sh = G.Units.ship(); for (let i = 0; i < 3; i++){ const f = G.Buildings.add('fabricator', sh.gx + 10 + i * 3, sh.gy + 12); G.State.resources.metal += 200; G.Fabrication.enqueue(f, 'survey_drone'); } });
+    await page.waitForSelector('#economyBar .resource-pill.power.short');
     // The pills never reach the centred DEBUG button, even with all six resources.
     await page.evaluate(() => Object.assign(GW.State.resources, { uranium: 5, steel: 5, electronics: 5, fuel_rods: 5 }));
     await page.waitForTimeout(200);

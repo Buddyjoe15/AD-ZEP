@@ -805,3 +805,66 @@ test('copper and uranium deposits are placed on each Earth and mined like metal'
   for (const k of ['copper', 'uranium', 'steel', 'electronics', 'fuel_rods']) assert.equal(S.resources[k], G.Defs.resources.get(k).transitCap, k);
   assert.ok(S.resourceNodes.some(n => n.type === 'copper_mine') && S.resourceNodes.some(n => n.type === 'uranium_mine'), 'new deposits on the next Earth');
 });
+
+test('power: the Warp Drive gives 25, Solar Arrays scale with the Earth, and a short grid slows production', () => {
+  const G = newGame();
+  const S = G.State, P = G.Power, ship = G.Units.ship(), T = G.CONFIG.TILE;
+  G.Sim.run(0.1);
+  // A Solar Array stands north of the ship in the testing zone.
+  const solar = S.buildings.find(b => b.type === 'solar_array');
+  assert.ok(solar, 'solar array placed');
+  assert.equal(solar.w, 3); assert.equal(solar.h, 2);
+  assert.ok(solar.gy + solar.h <= ship.gy, 'north of the ship');
+  assert.equal(P.output(ship), 25);
+  assert.equal(P.output(solar), 8, 'full sun on the first (temperate) Earth');
+  // Idle producers draw nothing; the test-zone mine draws 5 while extracting.
+  const fab = S.buildings.find(b => b.type === 'fabricator'), proc = S.buildings.find(b => b.type === 'ore_processor');
+  const mines = S.buildings.filter(b => b.type === 'mine_building' && b.team === 'blue');
+  assert.equal(P.draw(fab), 0); assert.equal(P.draw(proc), 0);
+  assert.equal(P.grid.supply, 33);
+  assert.equal(P.grid.demand, 5 * mines.filter(b => G.Gather.extracting(b)).length);
+  // Producing draws power.
+  S.resources.metal = 10000;
+  assert.ok(G.Fabrication.enqueue(fab, 'security_drone'));
+  assert.ok(G.Fabrication.enqueue(proc, 'steel'));
+  G.Sim.run(0.1);
+  assert.equal(P.draw(fab), 10); assert.equal(P.draw(proc), 15);
+  assert.equal(P.grid.ratio, 1, '33 supply covers 30 demand');
+  // Lose the Solar Array and add demand: everything slows to supply / demand.
+  S.buildings.splice(S.buildings.indexOf(solar), 1);
+  const extra = G.Buildings.add('fabricator', ship.gx + 12, ship.gy + 10);
+  assert.ok(G.Fabrication.enqueue(extra, 'survey_drone'));
+  G.Sim.run(0.1);
+  const demand = P.grid.demand;
+  assert.equal(P.grid.supply, 25);
+  assert.ok(demand > 25, 'demand ' + demand);
+  const left0 = proc.fabQueue[0].left;
+  G.Sim.run(1);
+  assert.ok(Math.abs((left0 - proc.fabQueue[0].left) - 25 / demand) < 0.05, 'processing runs at ' + (left0 - proc.fabQueue[0].left));
+  // The ship's own fabrication runs on the Warp Drive and never slows.
+  assert.ok(G.Fabrication.enqueue(ship, 'survey_drone'));
+  const s0 = ship.fabQueue[0].left;
+  G.Sim.run(1);
+  assert.ok(Math.abs((s0 - ship.fabQueue[0].left) - 1) < 0.05);
+  // Hostile structures are not on the player's grid.
+  const hf = S.buildings.find(b => b.type === 'hostile_fabricator');
+  assert.equal(P.factor(hf), 1);
+  // Nothing about power is saved: it is rebuilt from structures after loading.
+  const saved = G.Save.serialize();
+  assert.ok(!JSON.stringify(saved).includes('"ratio"'));
+  G.Save.restore(saved, 1);
+  assert.equal(P.grid.demand, demand);
+});
+
+test('power: solar efficiency follows each Earth\'s climate', () => {
+  const G = newGame();
+  const S = G.State, P = G.Power, solar = S.buildings.find(b => b.type === 'solar_array');
+  const expect = { temperate: 8, frozen: 4.8, silent: 10, irradiated: 3.2 };
+  G.Defs.climates.all().forEach((c, i) => {
+    S.expedition.climate = i;
+    assert.ok(Math.abs(P.output(solar) - expect[c.key]) < 1e-9, c.key + ': ' + P.output(solar));
+  });
+  // Pausing or losing the array removes its output.
+  solar.hp = 0;
+  assert.equal(P.output(solar), 0);
+});

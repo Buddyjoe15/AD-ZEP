@@ -52,6 +52,12 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
 
 ## What changed in v0.7
 
+- **Electricity and the Solar Array.** Power is a rate shared by all your structures (no wires). The ship's Warp Drive always supplies 25.
+  - **Solar Array** (3×2, 60 metal): supplies up to 8, scaled by the Earth's solar efficiency. Temperate 100%, Frozen 60%, Silent 125%, Irradiated 40%. The Expedition log shows the current Earth's rating.
+  - **Structures that use power:** the Fabricator draws 10 only while producing, the Ore Processor 15 only while processing, and a Mine Building 5 while extracting.
+  - **When demand exceeds supply,** all of them slow to the same fraction (supply ÷ demand) instead of stopping. The ship's own fabrication runs on the Warp Drive and never slows.
+  - **Top bar:** a ϟ pill shows supply/demand and turns red when short.
+  - A test Solar Array stands north of the ship. Saves are unchanged: power is recalculated from your structures.
 - **Ore Processor and new resources.** Copper Deposits and Uranium Deposits are mined like Metal Mines: build a Mine Building on one and haul with Spiders. Uranium extracts at half the rate. Each Earth has one of each, further from the ship than the metal. A new 3×3 structure, the **Ore Processor** (250 metal), turns raw material into construction resources. Tap it and pick what to make:
   - **Steel**: 2 metal → 1 steel, 5 s.
   - **Electronics**: 6 copper → 1 electronics, 12 s.

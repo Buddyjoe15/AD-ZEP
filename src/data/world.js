@@ -39,11 +39,12 @@ GW.Defs.recipes.defineAll({
 });
 
 // Order matters: Earth n uses climate (n-1) % count.
+// `solar` scales Solar Array output on that Earth (1 = full sun).
 GW.Defs.climates.defineAll({
-  temperate:  { name: 'Temperate ruins',  air: 'Compatible' },
-  frozen:     { name: 'Frozen Earth',     air: 'Cold / sealed suit required', hazard: 0.3 },
-  silent:     { name: 'Silent Earth',     air: 'Compatible', hostiles: false },
-  irradiated: { name: 'Irradiated Earth', air: 'Radiation / sealed suit required', hazard: 0.7 }
+  temperate:  { name: 'Temperate ruins',  air: 'Compatible', solar: 1, solarNote: 'Clear skies' },
+  frozen:     { name: 'Frozen Earth',     air: 'Cold / sealed suit required', hazard: 0.3, solar: 0.6, solarNote: 'Low sun and heavy cloud' },
+  silent:     { name: 'Silent Earth',     air: 'Compatible', hostiles: false, solar: 1.25, solarNote: 'Thin, still atmosphere' },
+  irradiated: { name: 'Irradiated Earth', air: 'Radiation / sealed suit required', hazard: 0.7, solar: 0.4, solarNote: 'Fallout haze' }
 });
 
 // Expedition balance. Provisional working values.
@@ -55,6 +56,7 @@ GW.EXPEDITION_RULES = {
   metalMines: [[620, -260], [-240, 780]],   // metal deposits placed near the ship on each Earth
   copperMines: [[1000, 420]],                // copper and uranium deposits, further out
   uraniumMines: [[-760, -620]],
+  testNorth: ['solar_array'],                // testing-zone structures placed north of the ship
   signalCount: 6, signalStudySeconds: 4, archiveReward: { metal: 70 }, signalRange: 100,
   firstWave: 110, waveInterval: 100, waveBase: 2, waveMax: 5,
   hazardSafeRadius: 700, crewRadius: 620,

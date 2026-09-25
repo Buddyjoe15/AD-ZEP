@@ -46,6 +46,13 @@
     mineOn(n){ return n && n.buildingId ? G.State.buildings.find(b => b.id === n.buildingId && b.hp > 0) || null : null; },
     isMine(b){ return !!b && (G.Defs.buildables.get(b.type)?.behaviors || []).some(x => x.type === 'extractor'); },
     stockTotal,
+    // A Mine Building is extracting while its deposit has ore and its stockpile has room.
+    extracting(b){
+      const cfg = (G.Defs.buildables.get(b.type)?.behaviors || []).find(x => x.type === 'extractor');
+      if (!cfg || b.hp <= 0) return false;
+      const n = b.nodeId ? this.node(b.nodeId) : this.depositAt(b.gx + Math.floor(b.w / 2), b.gy + Math.floor(b.h / 2));
+      return !!n && n.remaining > 0 && stockTotal(b) < (cfg.stockCap || 300);
+    },
 
     // Assigns a gatherer to a scavenge node, a deposit with a mine, or a Mine Building.
     command(u, target){
@@ -193,7 +200,7 @@
       if (!b.stock) b.stock = {};
       const room = cap - stockTotal(b);
       if (room <= 0 || n.remaining <= 0) return;
-      const amount = Math.min(room, n.remaining, d.rate * dt);
+      const amount = Math.min(room, n.remaining, d.rate * dt * G.Power.factor(b));   // slower on a short grid
       n.remaining = G.round6(n.remaining - amount);
       b.stock[d.resource] = G.round6((b.stock[d.resource] || 0) + amount);
     }
