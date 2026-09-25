@@ -31,6 +31,14 @@ test('content registries are consistent', () => {
   assert.throws(() => G.Defs.buildables.define('broken', { name: 'x', w: 1, h: 1, cost: { metal: -5 } }));
 });
 
+test('engine config: zoom limits and level-of-detail thresholds are numbers in order', () => {
+  const C = loadSim().CONFIG;
+  for (const k of ['ZOOM_MIN', 'ZOOM_MAX', 'LOD_ZOOM', 'FAR_CHUNK_ZOOM', 'UNIT_LOD_ZOOM', 'UNIT_LOD_ZOOM_PIXEL', 'MINIMAP_HZ', 'CHUNK_CACHE_MAX', 'FAR_CHUNK_CACHE_MAX', 'FAR_CHUNK_SCALE'])
+    assert.ok(Number.isFinite(C[k]) && C[k] > 0, k + ' is a positive number, got ' + C[k]);
+  assert.ok(C.ZOOM_MIN < C.FAR_CHUNK_ZOOM && C.FAR_CHUNK_ZOOM < C.LOD_ZOOM && C.LOD_ZOOM < C.ZOOM_MAX);
+  assert.ok(C.ZOOM_MIN < C.UNIT_LOD_ZOOM_PIXEL && C.UNIT_LOD_ZOOM < C.ZOOM_MAX);
+});
+
 test('terrain generation is deterministic and unchanged from v0.5', () => {
   const G = loadSim();
   assert.equal(fnv(G.MapGen.forest(72491).tiles), 1434927080);
