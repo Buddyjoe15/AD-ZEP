@@ -12,8 +12,11 @@
       G.UI.syncPauseButton();
       if (!silent) G.Events.emit('game:paused', G.State.paused);
     },
-    start(seed, slot){
-      G.Scenario.newGame({ seed, slot });
+    // `opts`: map type and landing site ({x, y} tiles) for the new world.
+    start(seed, slot, opts = {}){
+      G.Scenario.newGame({ seed, slot, map: opts.map, landing: opts.landing });
+      const want = opts.landing && G.MapGen.landing(opts.landing), L = G.State.landing;
+      if (want && (want.x !== L.x || want.y !== L.y)) setTimeout(() => G.UI.toast(`Landing site moved to dry ground at ${L.x}, ${L.y}`), 2500);
       G.SceneManager.change('wormhole');
     },
     enterGameplay(data = {}){ G.SceneManager.change('gameplay', data); },
@@ -34,7 +37,7 @@
   };
 
   G.MainMenu = {
-    selectedSlot: 1, expeditionSeed: 72491,
+    selectedSlot: 1, expeditionSeed: 72491, mapChoice: 'grass', landingMode: 'centre', landX: 256, landY: 256,
     init(){
       $('mainMenuBackBtn').addEventListener('click', () => this.showHome());
       $('introSkipBtn').addEventListener('click', () => this.finishIntro(true));
@@ -84,22 +87,38 @@
     },
     showLaunch(n){
       this.selectedSlot = n;
+      const m = Math.min(G.MapGen.LANDING_MARGIN, Math.floor(G.CONFIG.WORLD_TILES / 4)), lo = m, hi = G.CONFIG.WORLD_TILES - 1 - m;
       this.panel(`<div class="ezEyebrow">FIRST EXPEDITION / v${esc(G.VERSION)}</div><h2>Beyond your Earth.</h2>
         <p class="main-copy">Commander Elias Vance. UES Aster Vale. One unfamiliar Earth, and one way forward.</p>
         <p class="main-copy">Explore a signal, mine metal, build a field generator, and survive until the drive is ready. Bring the crew home to the ship. Jump again.</p>
         <label class="ezSeed">EARTH SEED <input id="ezSeedInput" type="number" min="1" max="4294967295" step="1" value="${this.expeditionSeed}"></label>
-        <p class="main-copy">Same seed, same terrain. Desktop: select Vance and right-click to move. Touch: select, then tap terrain.</p>
+        <label class="ezSeed">MAP <select id="ezMapInput">${Object.entries({ grass: 'Test map (open grass)', woodlands: 'Woodlands' }).map(([k, n]) => `<option value="${k}"${this.mapChoice === k ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label class="ezSeed">LANDING SITE <select id="ezLandingMode">${Object.entries({ centre: 'Centre of the map', random: 'Random', custom: 'Choose a tile' }).map(([k, n]) => `<option value="${k}"${this.landingMode === k ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
+        <div id="ezLandingXY" class="ezLandXY${this.landingMode === 'custom' ? '' : ' hidden'}">
+          <label class="ezSeed">TILE X <input id="ezLandX" type="number" min="${lo}" max="${hi}" step="1" value="${this.landX}"></label>
+          <label class="ezSeed">TILE Y <input id="ezLandY" type="number" min="${lo}" max="${hi}" step="1" value="${this.landY}"></label>
+        </div>
+        <p class="main-copy">Same seed, same terrain. The ship crash-lands at the landing site (tiles ${lo}–${hi}; on Woodlands, on the nearest dry ground). In a game, Map Editor → Maps → Preview lets you pick the spot on the map. Desktop: select Vance and right-click to move. Touch: select, then tap terrain.</p>
         <button id="launchVance">Launch expedition →</button>`);
+      $('ezLandingMode').onchange = e => { this.landingMode = e.target.value; $('ezLandingXY').classList.toggle('hidden', this.landingMode !== 'custom'); };
+      $('ezMapInput').onchange = e => { this.mapChoice = e.target.value; };
       $('launchVance').onclick = () => {
         const seed = Number($('ezSeedInput').value);
         if (!Number.isInteger(seed) || seed < 1 || seed > 4294967295){ G.UI.toast('Enter a whole seed from 1 to 4294967295'); return; }
-        this.beginNewGame(seed);
+        let landing = null;
+        if (this.landingMode === 'random') landing = { x: lo + Math.floor(Math.random() * (hi - lo + 1)), y: lo + Math.floor(Math.random() * (hi - lo + 1)) };
+        else if (this.landingMode === 'custom'){
+          const x = Number($('ezLandX').value), y = Number($('ezLandY').value);
+          if (![x, y].every(v => Number.isInteger(v) && v >= lo && v <= hi)){ G.UI.toast(`Enter landing tiles from ${lo} to ${hi}`); return; }
+          this.landX = x; this.landY = y; landing = { x, y };
+        }
+        this.beginNewGame(seed, { map: this.mapChoice, landing });
       };
     },
-    beginNewGame(seed = this.expeditionSeed){
+    beginNewGame(seed = this.expeditionSeed, opts = {}){
       this.expeditionSeed = seed;
       G.Save.clear(this.selectedSlot);
-      G.Game.start(seed, this.selectedSlot);
+      G.Game.start(seed, this.selectedSlot, opts);
     },
     finishIntro(skip){ const s = G.SceneManager.current; if (G.SceneManager.currentName === 'wormhole' && s && s.finish) s.finish(skip); },
     showLoadSlots(){

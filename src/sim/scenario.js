@@ -5,7 +5,9 @@
 
   G.Scenario = {
     // Empty world for `seed`: terrain, spatial indexes and navigation, no entities.
-    createWorld(seed, { slot, map } = {}){
+    // `landing` ({x, y} tiles) is where the ship comes down; the centre when not given. A
+    // generator may move it (Woodlands keeps it off water); S.landing is where it ended up.
+    createWorld(seed, { slot, map, landing } = {}){
       const prevSlot = G.State.activeSaveSlot, prevMap = G.State.map;
       map = map || prevMap || G.MapGen.DEFAULT;
       if (!G.MapGen.types[map]) throw new Error('Unknown map type ' + map);
@@ -14,7 +16,9 @@
       S.seed = seed >>> 0;
       S.activeSaveSlot = slot || prevSlot || 1;
       S.map = map;
-      S.grid = G.MapGen.types[map].generate(S.seed);
+      const want = G.MapGen.landing(landing);
+      S.grid = G.MapGen.types[map].generate(S.seed, { landing: want });
+      S.landing = S.grid.art && S.grid.art.landing ? { x: S.grid.art.landing.x, y: S.grid.art.landing.y } : want;
       S.terrainEdits = [];
       S.spatial = new G.DenseGrid(G.CONFIG.WORLD_W, G.CONFIG.WORLD_H, G.CONFIG.SPATIAL_CELL);
       S.teamSpatial = { blue: G.teamGrid(), red: G.teamGrid() };
@@ -24,9 +28,9 @@
       G.Events.emit('world:created', S);
       return S;
     },
-    newGame({ seed = 72491, slot = 1, map = G.MapGen.DEFAULT } = {}){
-      const S = this.createWorld(seed, { slot, map }), C = G.CONFIG, rules = G.EXPEDITION_RULES;
-      const cx = C.WORLD_W / 2, cy = C.WORLD_H / 2;
+    newGame({ seed = 72491, slot = 1, map = G.MapGen.DEFAULT, landing = null } = {}){
+      const S = this.createWorld(seed, { slot, map, landing }), C = G.CONFIG, rules = G.EXPEDITION_RULES;
+      const cx = S.landing.x * C.TILE, cy = S.landing.y * C.TILE;
       const ship = G.Units.spawn('ship', cx, cy);
       ship.isShip = true; S.shipId = ship.id;
       const hero = G.Units.spawn('hero', cx, cy + C.TILE * 3 + 18);

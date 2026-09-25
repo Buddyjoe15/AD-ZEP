@@ -98,6 +98,10 @@ body.in-game #ezToggle, body.in-game #status, body.in-game #dbgBtn { display: bl
 
 /* Launch screen */
 .ezSeed { display: block; font: 11px monospace; letter-spacing: 2px; color: #abd9d6; margin: 22px 0; }
+.ezSeed select { display: block; width: 100%; max-width: 280px; margin-top: 8px; padding: 12px; background: #10222c; color: #e7f1f1; border: 1px solid #4a727b; border-radius: 6px; font: 16px monospace; }
+.ezLandXY { display: flex; gap: 12px; max-width: 280px; }
+.ezLandXY.hidden { display: none; }
+.ezLandXY .ezSeed { flex: 1; margin: 0 0 12px; }
 .ezSeed input { display: block; width: 100%; max-width: 280px; margin-top: 8px; padding: 14px; background: #10222c; color: #e7f1f1; border: 1px solid #4a727b; border-radius: 6px; font: 18px monospace; user-select: text; touch-action: auto; }
 
 /* Stack count badge for stackable items */

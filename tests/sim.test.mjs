@@ -676,6 +676,44 @@ test('a woodlands game starts, plays and survives a save', () => {
   assert.equal(fnv(G.State.grid.art.level), level, 'heights rebuilt from the seed');
 });
 
+test('landing site: new games land where asked; Woodlands keeps it off water; saves keep it', () => {
+  const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
+  // Test map: the ship lands on the chosen tile; out-of-range requests stay 64 tiles from the edge.
+  G.Scenario.newGame({ seed: 7, map: 'grass', landing: { x: 120, y: 400 } });
+  let sh = G.Units.ship();
+  assert.deepEqual({ ...G.State.landing }, { x: 120, y: 400 });
+  assert.equal(sh.x, 120 * T); assert.equal(sh.y, 400 * T);
+  assert.ok(Math.hypot(G.Units.hero().x - sh.x, G.Units.hero().y - sh.y) < 400, 'Vance starts beside the ship');
+  G.Scenario.newGame({ seed: 7, map: 'grass', landing: { x: 3, y: 9999 } });
+  assert.deepEqual({ ...G.State.landing }, { x: 64, y: 511 - 64 });
+  // Woodlands: the clearing is built around the landing site.
+  const g = G.MapGen.woodlands(72491, { landing: { x: 400, y: 150 } }), L = g.art.landing;
+  assert.ok(Math.hypot(L.x - 400, L.y - 150) < 20, 'lands at or near the chosen tile');
+  for (let y = L.y - 20; y <= L.y + 20; y++) for (let x = L.x - 20; x <= L.x + 20; x++)
+    if (Math.hypot(x - L.x, y - L.y) <= 20) assert.equal(g.get(x, y), id('clearing'), `pad at ${x},${y}`);
+  // A landing asked for in a river moves to the nearest dry ground.
+  const river = G.MapGen.woodlands(72491), cols = river.cols;
+  let wet = null;
+  for (let i = 0; i < river.size && !wet; i++){ const x = i % cols, y = (i / cols) | 0; if (river.tiles[i] === id('water') && x > 80 && x < cols - 80 && y > 80 && y < cols - 80) wet = { x, y }; }
+  const moved = G.MapGen.woodlands(72491, { landing: wet }).art.landing;
+  assert.notDeepEqual({ ...moved }, wet);
+  assert.ok(Math.hypot(moved.x - wet.x, moved.y - wet.y) < 60, 'moved to nearby dry ground');
+  const dryGrid = G.MapGen.woodlands(72491, { landing: wet });
+  for (let y = moved.y - 24; y <= moved.y + 24; y++) for (let x = moved.x - 24; x <= moved.x + 24; x++)
+    if (Math.hypot(x - moved.x, y - moved.y) <= 24) assert.ok(dryGrid.terrainPassable(x, y), `open ground at ${x},${y}`);
+  // A Woodlands game with a chosen landing site restores the same terrain and landing.
+  G.Scenario.newGame({ seed: 72491, map: 'woodlands', landing: { x: 400, y: 150 } });
+  sh = G.Units.ship();
+  assert.deepEqual({ ...G.State.landing }, { ...L });
+  assert.equal(sh.x, L.x * T); assert.equal(sh.y, L.y * T);
+  const tiles = Array.from(G.State.grid.tiles);
+  const d = G.Save.serialize();
+  assert.deepEqual({ ...d.landing }, { ...L });
+  G.Save.restore(d, 1);
+  assert.deepEqual({ ...G.State.landing }, { ...L });
+  assert.deepEqual(Array.from(G.State.grid.tiles), tiles);
+});
+
 test('map editor: load woodlands and the test map, and keep named maps', () => {
   const G = newGame();
   const S = G.State, sh = G.Units.ship(), id = k => G.Defs.terrain.get(k).id;

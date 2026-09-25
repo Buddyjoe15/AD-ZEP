@@ -12,7 +12,7 @@
 (function(){
   'use strict';
   const G = GW, Math = globalThis.Math;   // a local binding: global lookups are slow in the headless test sandbox
-  let W = 512, MID = 256, N = W * W;
+  let W = 512, N = W * W;
   const INF = Infinity, TAU = Math.PI * 2;
 
   // Generator-internal tile kinds. `game` is the terrain key each becomes in the grid.
@@ -64,8 +64,9 @@
   let gsc = null, came = null, shut = null;
   const DIRS = [[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[1,1,1.4142],[1,-1,1.4142],[-1,1,1.4142],[-1,-1,1.4142]];
 
-  function woodlands(seed){
-    W = G.CONFIG.COLS; MID = Math.floor(W / 2); N = W * W;
+  // `opts.landing` ({x, y} tiles) is where the ship comes down; the centre when not given.
+  function woodlands(seed, opts = {}){
+    W = G.CONFIG.COLS; N = W * W;
     if (G.CONFIG.ROWS !== W) throw new Error('Woodlands needs a square world');
     if (!gsc || gsc.length !== N){ gsc = new Float32Array(N); came = new Int32Array(N); shut = new Uint8Array(N); }
     const R = G.RNG((seed ^ 0x9e3779b9) >>> 0), s = seed | 0;
@@ -187,6 +188,37 @@
       lastCx = cx;
     }
 
+    // The landing site: the requested tile, or the nearest tile with no river, lake or creek
+    // within 36 tiles. Rivers, the lake and the creek never move for it, and no random numbers
+    // are drawn here, so a landing at the centre generates exactly as before.
+    let LX, LY;
+    {
+      const want = G.MapGen.landing(opts.landing), m = Math.min(G.MapGen.LANDING_MARGIN, Math.floor(W / 4)), CLEAR = 36;
+      const dist = new Int16Array(N).fill(-1), queue = new Int32Array(N);
+      let head = 0, tail = 0;
+      for (let i = 0; i < N; i++) if (isWater(g[i])){ dist[i] = 0; queue[tail++] = i; }
+      while (head < tail){
+        const q = queue[head++], x = q % W, y = (q / W) | 0, d = dist[q] + 1;
+        if (d > CLEAR) continue;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){
+          const nx = x + dx, ny = y + dy;
+          if (!inb(nx, ny)) continue;
+          const k = ny * W + nx;
+          if (dist[k] < 0){ dist[k] = d; queue[tail++] = k; }
+        }
+      }
+      const dry = (x, y) => dist[y * W + x] < 0;
+      LX = want.x; LY = want.y;
+      if (!dry(LX, LY)){
+        let best = Infinity;
+        for (let y = m; y < W - m; y++) for (let x = m; x < W - m; x++){
+          if (!dry(x, y)) continue;
+          const dd = (x - want.x) ** 2 + (y - want.y) ** 2;
+          if (dd < best){ best = dd; LX = x; LY = y; }
+        }
+      }
+    }
+
     // 5. Small streams run off the high ground into the rivers, dropping over small falls.
     for (let tries = 0; tries < 400 && feats.streams < 5; tries++){
       const x0 = ri(20, W - 20), y0 = ri(20, W - 20), i0 = y0 * W + x0;
@@ -195,7 +227,7 @@
       if (x0 >= jx && Math.abs(rB[x0] - y0) < Math.abs(rA[y0] - x0)) tgt = { x: x0, y: rB[x0] };
       const len = Math.hypot(tgt.x - x0, tgt.y - y0);
       if (len < 40 || len > 170) continue;
-      if (segDist(MID, MID, x0, y0, tgt.x, tgt.y) < 60 || segDist(lk.x, lk.y, x0, y0, tgt.x, tgt.y) < lk.r * 2) continue;
+      if (segDist(LX, LY, x0, y0, tgt.x, tgt.y) < 60 || segDist(lk.x, lk.y, x0, y0, tgt.x, tgt.y) < lk.r * 2) continue;
       const ph = R() * 6, nx = -(tgt.y - y0) / len, ny = (tgt.x - x0) / len, pts = [];
       let last = -1, hit = false;
       for (let k = 0; k <= len * 1.5; k++){
@@ -234,9 +266,9 @@
       g[i] = b > .6 ? T.BOG : r < .07 ? T.TREE : r < .32 ? T.THICK : r < .36 ? T.SHRUB : T.SWAMP;
     });
 
-    // 7. Landing zone: a flat clearing at the centre.
-    const Lc = lvl[MID * W + MID];
-    disc(MID, MID, 44, (x, y, d) => {
+    // 7. Landing zone: a flat clearing around the landing site.
+    const Lc = lvl[LY * W + LX];
+    disc(LX, LY, 44, (x, y, d) => {
       const i = y * W + x; lvl[i] = Lc; reserved[i] = 1;
       if (d <= 24) g[i] = T.PAD; else if (d <= 34) g[i] = R() < .55 ? T.GRASS : T.THICK;
     });
@@ -274,7 +306,7 @@
     }
     for (let tries = 0; tries < 900 && feats.sites.length < 5; tries++){
       const cx = ri(40, W - 40), cy = ri(40, W - 40);
-      if (Math.hypot(cx - MID, cy - MID) < 90) continue;
+      if (Math.hypot(cx - LX, cy - LY) < 90) continue;
       if (feats.sites.some(o => Math.hypot(o.x - cx, o.y - cy) < 105)) continue;
       if (!okArea(cx, cy, 23)) continue;
       const Ls = lvl[cy * W + cx];
@@ -512,7 +544,7 @@
     const pickZone = r => {
       for (let tries = 0; tries < 800; tries++){
         const x = ri(r + 12, W - r - 12), y = ri(r + 12, W - r - 12);
-        if (Math.hypot(x - MID, y - MID) < 90 || reserved[y * W + x]) continue;
+        if (Math.hypot(x - LX, y - LY) < 90 || reserved[y * W + x]) continue;
         if (feats.sites.some(o => Math.hypot(o.x - x, o.y - y) < r + 32) || feats.zones.some(z => Math.hypot(z.x - x, z.y - y) < 95)) continue;
         if (okArea(x, y, r, ZONE_BLOCK)) return { x, y, r };
       }
@@ -638,10 +670,10 @@
       }
       trails.push({ nodes: p, kind });
     }
-    const home = { x: MID, y: MID };
+    const home = { x: LX, y: LY };
     const hubs = [home, ...feats.sites];
     const nearest = (p, list) => list.reduce((best, q) => q !== p && (!best || Math.hypot(q.x - p.x, q.y - p.y) < Math.hypot(best.x - p.x, best.y - p.y)) ? q : best, null);
-    feats.sites.slice().sort((a, b) => Math.hypot(a.x - MID, a.y - MID) - Math.hypot(b.x - MID, b.y - MID)).forEach((site, k) => trail(home, site, k === 0 ? 'rover' : 'road'));
+    feats.sites.slice().sort((a, b) => Math.hypot(a.x - LX, a.y - LY) - Math.hypot(b.x - LX, b.y - LY)).forEach((site, k) => trail(home, site, k === 0 ? 'rover' : 'road'));
     const linked = new Set();
     for (const site of feats.sites){
       const other = nearest(site, feats.sites);
@@ -668,7 +700,7 @@
       const r = hash2(x, y, s + 201);
       let d = 0;
       if (geo && Math.hypot(x - geo.x, y - geo.y) < geo.r + 3) d = r < .28 ? D.ASH : r < .46 ? D.CRACKED : r < .56 ? D.SCORCH : r < .6 ? D.PEBBLES : 0;
-      else if (t === T.PAD){ const dc = Math.hypot(x - MID, y - MID); d = dc > 4 && dc < 12 && r < .22 ? D.SCORCH : 0; }
+      else if (t === T.PAD){ const dc = Math.hypot(x - LX, y - LY); d = dc > 4 && dc < 12 && r < .22 ? D.SCORCH : 0; }
       else if (t === T.PATH || t === T.STAIRS) d = r < .06 ? D.PEBBLES : r < .09 ? (moist[i] > meadowT ? D.PUDDLE : D.CRACKED) : r < .11 ? D.MUD : 0;
       else if (t === T.SWAMP || t === T.REEDS) d = r < .12 ? D.MUD : r < .18 ? D.PUDDLE : r < .185 ? D.BONES : 0;
       else if (anyNear(x, y, 1, isWet)) d = r < .08 ? D.MUD : r < .13 ? D.SHELLS : r < .17 ? D.PUDDLE : r < .19 ? D.PEBBLES : 0;
@@ -725,7 +757,7 @@
       ...feats.caves.map(c => ({ kind: 'cave', name: 'Cave', x: c.x, y: c.y })),
       ...feats.camps.map(c => ({ kind: 'camp', name: 'Logging camp', x: c.x, y: c.y }))
     ];
-    grid.art = { kind: 'woodlands', seed: s, level: lvl, dir, detail: dec, angle: ang, places };
+    grid.art = { kind: 'woodlands', seed: s, landing: { x: LX, y: LY }, level: lvl, dir, detail: dec, angle: ang, places };
     return grid;
   }
 

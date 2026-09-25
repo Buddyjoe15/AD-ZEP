@@ -11,6 +11,9 @@
 .mpvHead h2 { margin: 6px 0 4px; font: 800 30px/1 system-ui, sans-serif; letter-spacing: .02em; text-transform: uppercase; }
 .mpvLede { margin: 0; max-width: 70ch; color: #93a28f; }
 .mpvWait { color: #93a28f; }
+.mpvLanding { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 8px; }
+.mpvLanding span { color: #d4c46c; font-size: 12px; }
+.mpvPicking { outline: 2px solid #49a4ff; }
 .mpvActions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .mpvBtn, .mpvClose, .mpvTools button, .mpvSeg button {
   background: #1c2720; border: 1px solid #2b3a2f; color: #dde5d6; border-radius: 4px; padding: 7px 12px; font: 700 12px system-ui, sans-serif; cursor: pointer;

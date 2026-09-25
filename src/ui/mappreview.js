@@ -25,13 +25,15 @@
 
   G.MapPreviewUI = {
     grid: null, seed: 0, info: null, view: { x: 0, y: 0 }, viewIdx: 2, mode: 'terrain', confirm: false, drag: null, queued: false,
-    base: null,
+    base: null, want: null, landing: null, picking: false, confirmNew: false,
 
     isOpen(){ return !$('mapPreview').classList.contains('hidden'); },
-    open(seed){
-      const el = $('mapPreview');
+    // `want` ({x, y} tiles) is the landing site to preview: by default where the ship is now.
+    open(seed, want){
+      const el = $('mapPreview'), ship = G.Units.ship(), T = G.CONFIG.TILE;
       el.classList.remove('hidden');
-      this.seed = seed >>> 0; this.confirm = false; this.grid = null;
+      this.seed = seed >>> 0; this.confirm = false; this.confirmNew = false; this.picking = false; this.grid = null;
+      this.want = G.MapGen.landing(want || (ship ? { x: Math.floor(ship.x / T), y: Math.floor(ship.y / T) } : null));
       el.innerHTML = `<div class="mpvBox"><div class="mpvHead"><div><div class="mpvEyebrow">Woodlands preview</div><h2>Seed ${this.seed}</h2></div>
         <button type="button" class="mpvClose" id="mpvClose" aria-label="Close preview">×</button></div>
         <p class="mpvWait">Generating the map for seed ${this.seed}…</p></div>`;
@@ -39,9 +41,9 @@
       // Let the "Generating" text paint before the generator runs (about a second).
       setTimeout(() => {
         if (!this.isOpen() || this.seed !== (seed >>> 0)) return;
-        this.grid = G.MapGen.woodlands(this.seed);
-        const c = this.grid.cols;
-        this.view = { x: c / 2, y: c / 2 };
+        this.grid = G.MapGen.woodlands(this.seed, { landing: this.want });
+        this.landing = { ...this.grid.art.landing };
+        this.view = { x: this.landing.x, y: this.landing.y };
         this.info = this.survey(this.grid);
         this.build();
       }, 40);
@@ -94,9 +96,13 @@
       el.innerHTML = `<div class="mpvBox">
         <div class="mpvHead">
           <div><div class="mpvEyebrow">Woodlands preview · not loaded yet</div><h2>Seed ${s}</h2>
-            <p class="mpvLede">This is the map the Maps tab will build for this seed: five height levels with cliffs between them, rivers that fall at every step, villages, logging camps and caves. The ship lands on the clearing in the middle.</p></div>
+            <p class="mpvLede">This is the map the Maps tab will build for this seed: five height levels with cliffs between them, rivers that fall at every step, villages, logging camps and caves. The ship lands on the clearing at the landing site.</p>
+            <div class="mpvLanding"><b>Landing site ${this.landing.x}, ${this.landing.y}</b>${this.landing.x !== this.want.x || this.landing.y !== this.want.y ? ` <span>moved from ${this.want.x}, ${this.want.y} to the nearest dry ground</span>` : ''}
+              <button type="button" class="mpvBtn${this.picking ? ' mpvPicking' : ''}" id="mpvPick">${this.picking ? 'Tap the full map…' : 'Choose landing site'}</button>
+              <button type="button" class="mpvBtn" id="mpvCentre">Centre</button></div></div>
           <div class="mpvActions">
-            <button type="button" class="mpvBtn mpvPrimary" id="mpvLoad">${this.confirm ? 'Tap again to load' : 'Load this map'}</button>
+            <button type="button" class="mpvBtn mpvPrimary" id="mpvNew">${this.confirmNew ? 'Tap again: replaces this game' : 'Start a new expedition here'}</button>
+            <button type="button" class="mpvBtn" id="mpvLoad">${this.confirm ? 'Tap again to load' : 'Load terrain into this game'}</button>
             <button type="button" class="mpvBtn" id="mpvAnother">Preview another seed</button>
             <button type="button" class="mpvClose" id="mpvClose" aria-label="Close preview">×</button>
           </div>
@@ -140,7 +146,7 @@
     },
     places(){
       const c = this.grid.cols, counters = {};
-      const list = [{ name: 'Ship landing zone', sub: 'Where the ship lands', x: c / 2, y: c / 2 }];
+      const list = [{ name: 'Ship landing zone', sub: 'Where the ship lands', x: this.landing.x, y: this.landing.y }];
       for (const p of this.grid.art.places){
         counters[p.kind] = (counters[p.kind] || 0) + 1;
         const numbered = p.kind === 'cave' || p.kind === 'camp';
@@ -152,33 +158,48 @@
     bind(){
       const el = $('mapPreview');
       $('mpvClose').onclick = () => this.close();
+      // Load the terrain under the game in progress: the clearing goes at the landing site
+      // shown, and units, structures and the ship stay where they are.
       $('mpvLoad').onclick = () => {
         if (!this.confirm){ this.confirm = true; $('mpvLoad').textContent = 'Tap again to load'; return; }
-        const seed = this.seed;
+        const seed = this.seed, landing = { ...this.landing };
         this.close();
         G.UI.toast('Generating map…');
         setTimeout(() => {
-          G.UI.toast(G.MapEdit.loadMap('woodlands', seed) ? `Loaded Woodlands, seed ${seed}` : 'Could not load that map');
+          G.UI.toast(G.MapEdit.loadMap('woodlands', seed, [], landing) ? `Loaded Woodlands, seed ${seed}` : 'Could not load that map');
           if (G.MapEditorUI.isOpen()) G.MapEditorUI.render();
         }, 30);
+      };
+      // A fresh expedition in this save slot: the ship crash-lands at the landing site.
+      $('mpvNew').onclick = () => {
+        if (!this.confirmNew){ this.confirmNew = true; $('mpvNew').textContent = 'Tap again: replaces this game'; return; }
+        const seed = this.seed, landing = { ...this.landing };
+        this.close();
+        if (G.MapEditorUI.isOpen()) G.MapEditorUI.toggle(false);
+        if (G.DebugUI.isOpen()) G.DebugUI.toggle(false);
+        G.Game.start(seed, G.State.activeSaveSlot, { map: 'woodlands', landing });
       };
       $('mpvAnother').onclick = () => {
         const seed = 1 + Math.floor(Math.random() * 999999);
         G.MapEditorUI.woodSeed = seed;
         if (G.MapEditorUI.isOpen()) G.MapEditorUI.render();
-        this.open(seed);
+        this.open(seed, this.want);
       };
+      $('mpvPick').onclick = () => { this.picking = !this.picking; $('mpvPick').textContent = this.picking ? 'Tap the full map…' : 'Choose landing site'; $('mpvPick').classList.toggle('mpvPicking', this.picking); };
+      $('mpvCentre').onclick = () => this.open(this.seed, { x: this.grid.cols / 2, y: this.grid.rows / 2 });
       el.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { this.mode = b.dataset.mode; el.querySelectorAll('[data-mode]').forEach(x => x.classList.toggle('on', x === b)); this.buildBase(); this.redraw(); });
       $('mpvIn').onclick = () => { this.viewIdx = Math.max(0, this.viewIdx - 1); this.redraw(); };
       $('mpvOut').onclick = () => { this.viewIdx = Math.min(VIEWS.length - 1, this.viewIdx + 1); this.redraw(); };
-      $('mpvShip').onclick = () => { const c = this.grid.cols; this.view = { x: c / 2, y: c / 2 }; this.redraw(); };
+      $('mpvShip').onclick = () => { this.view = { x: this.landing.x, y: this.landing.y }; this.redraw(); };
       const places = this.places();
       el.querySelectorAll('[data-place]').forEach(b => b.onclick = () => { const p = places[+b.dataset.place]; this.view = { x: p.x, y: p.y }; this.redraw(); });
 
       const ov = $('mpvOv'), dt = $('mpvDt'), cols = this.grid.cols;
       const ovTile = e => { const r = ov.getBoundingClientRect(); return { x: Math.floor((e.clientX - r.left) / r.width * cols), y: Math.floor((e.clientY - r.top) / r.height * cols) }; };
       ov.onpointermove = e => { const p = ovTile(e); $('mpvOvRead').innerHTML = this.describe(p.x, p.y); };
-      ov.onclick = e => { this.view = ovTile(e); this.redraw(); };
+      // Tap to inspect an area, or, while choosing a landing site, to land there (the map is
+      // generated again around it).
+      ov.onclick = e => { if (this.picking){ this.open(this.seed, ovTile(e)); return; } this.view = ovTile(e); this.redraw(); };
       const dtTile = e => {
         const r = dt.getBoundingClientRect(), v = VIEWS[this.viewIdx], o = this.origin();
         return { x: o.x + Math.floor((e.clientX - r.left) / r.width * v), y: o.y + Math.floor((e.clientY - r.top) / r.height * v) };
@@ -264,10 +285,10 @@
       for (const p of P) if (p.kind === 'camp'){ mark(p.x * k, p.y * k, 'sq', '#e0b56a'); label('Logging', p.x * k, p.y * k + 19, 16, '#e0b56a', 500); }
       for (const p of P) if (p.kind === 'cave') mark(p.x * k, p.y * k, 'tri', '#1b1814');
       for (const p of P) if (p.kind === 'settlement') label(p.name, p.x * k, (p.y - 26) * k, 26, '#f1ecd0', 700);
-      const m = g.cols / 2 * k;
-      ctx.beginPath(); ctx.moveTo(m, m - 16); ctx.lineTo(m + 11, m + 10); ctx.lineTo(m, m + 5); ctx.lineTo(m - 11, m + 10); ctx.closePath();
+      const mx = this.landing.x * k, my = this.landing.y * k;
+      ctx.beginPath(); ctx.moveTo(mx, my - 16); ctx.lineTo(mx + 11, my + 10); ctx.lineTo(mx, my + 5); ctx.lineTo(mx - 11, my + 10); ctx.closePath();
       ctx.fillStyle = '#49a4ff'; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = '#0a0e0b'; ctx.stroke();
-      label('SHIP', m, m + 26, 18, '#9fd0ff', 700);
+      label('SHIP', mx, my + 26, 18, '#9fd0ff', 700);
       const v = VIEWS[this.viewIdx], o = this.origin();
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(8,12,9,.9)'; ctx.strokeRect(o.x * k, o.y * k, v * k, v * k);
       ctx.lineWidth = 2; ctx.strokeStyle = '#d4c46c'; ctx.strokeRect(o.x * k, o.y * k, v * k, v * k);
@@ -279,7 +300,7 @@
       const ctx = dt.getContext('2d'), v = VIEWS[this.viewIdx], S = dt.width / v, o = this.origin(), g = this.grid;
       ctx.fillStyle = '#0a0e0b'; ctx.fillRect(0, 0, dt.width, dt.height);
       G.WoodlandsArt.paintChunk(ctx, g, o.x, o.y, v, S, { trees: true });
-      const mid = g.cols / 2, px = (mid - o.x) * S, py = (mid - o.y) * S;
+      const px = (this.landing.x - o.x) * S, py = (this.landing.y - o.y) * S;
       if (px > -S * 30 && px < dt.width + S * 30 && py > -S * 30 && py < dt.height + S * 30){
         ctx.save(); ctx.translate(px, py); ctx.scale(S, S);
         const poly = (pts, dx = 0, dy = 0) => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x + dx, y + dy) : ctx.moveTo(x + dx, y + dy)); ctx.closePath(); };

@@ -106,12 +106,16 @@
     // (the terrain edits of a saved map). Everything else in the game stays: structures,
     // resource nodes, sites, containers and signals get open ground under them (recorded as
     // edits), and units on blocked ground move to the nearest open point. The map type and
-    // seed are saved with the game, so a restored save rebuilds the same terrain.
-    loadMap(map, seed = G.State.seed, edits = []){
+    // seed are saved with the game, so a restored save rebuilds the same terrain. The landing
+    // clearing goes under the ship unless `landing` ({x, y} tiles) says otherwise.
+    loadMap(map, seed = G.State.seed, edits = [], landing = null){
       const S = G.State, grid = S.grid, type = G.MapGen.types[map];
       if (!type || !grid || !Number.isInteger(seed) || seed < 0 || !Array.isArray(edits) || !edits.every(e => this.validEdit(e))) return false;
-      const fresh = type.generate(seed >>> 0);
+      const ship = G.Units.ship(), T0 = T();
+      const want = G.MapGen.landing(landing || (ship ? { x: Math.floor(ship.x / T0), y: Math.floor(ship.y / T0) } : S.landing));
+      const fresh = type.generate(seed >>> 0, { landing: want });
       if (fresh.cols !== grid.cols || fresh.rows !== grid.rows) return false;
+      S.landing = fresh.art && fresh.art.landing ? { x: fresh.art.landing.x, y: fresh.art.landing.y } : want;
       grid.tiles.set(fresh.tiles);
       if (fresh.art) grid.art = fresh.art; else delete grid.art;
       S.map = map; S.seed = seed >>> 0; S.terrainEdits = [];
@@ -195,7 +199,7 @@
       const S = G.State;
       name = String(name || '').trim().slice(0, 60);
       if (!name || !S.grid) return null;
-      const entry = { name, map: S.map, seed: S.seed >>> 0, edits: G.copy(S.terrainEdits || []), savedAt: G.Clock.stamp() };
+      const entry = { name, map: S.map, seed: S.seed >>> 0, landing: S.landing ? { x: S.landing.x, y: S.landing.y } : null, edits: G.copy(S.terrainEdits || []), savedAt: G.Clock.stamp() };
       const list = this.list().filter(m => m.name !== name);
       if (list.length >= this.MAX) return null;
       list.push(entry);
@@ -204,7 +208,7 @@
     },
     load(name){
       const m = this.list().find(x => x.name === name);
-      return !!m && G.MapEdit.loadMap(m.map, m.seed, m.edits);
+      return !!m && G.MapEdit.loadMap(m.map, m.seed, m.edits, m.landing || null);
     },
     remove(name){
       const list = this.list(), next = list.filter(m => m.name !== name);
