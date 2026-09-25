@@ -9,7 +9,9 @@
     FIXED_DT: 1 / 30, MAX_FRAME: 0.25, MAX_STEPS_PER_FRAME: 4,
 
     // Rendering
+    // CHUNK_CACHE_MAX is a budget in 1×-resolution chunks; a TERRAIN_RES chunk costs RES².
     CHUNK_TILES: 16, CHUNK_CACHE_MAX: 64, CHUNKS_BUILT_PER_FRAME: 2,
+    TERRAIN_RES: 2,            // canvas px per world px for terrain chunks when zoomed in past 1:1
     // Between LOD_ZOOM and FAR_CHUNK_ZOOM (1.5× further out) terrain uses lower-resolution
     // chunks (FAR_CHUNK_SCALE of full size, trees drawn in at rest) before the overview image.
     FAR_CHUNK_ZOOM: 0.20, FAR_CHUNK_SCALE: 1 / 3, FAR_CHUNK_CACHE_MAX: 176,

@@ -1,7 +1,7 @@
 {
   "name": "woodlands_grass",
-  "frameWidth": 24,
-  "frameHeight": 24,
+  "frameWidth": 48,
+  "frameHeight": 48,
   "variants": 8,
   "weights": [
     6,
@@ -15,6 +15,6 @@
   ],
   "hash": "mix32",
   "image": "woodlands_grass.png",
-  "sheetWidth": 192,
-  "sheetHeight": 24
+  "sheetWidth": 384,
+  "sheetHeight": 48
 }

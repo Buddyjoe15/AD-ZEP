@@ -1,7 +1,7 @@
 {
   "name": "woodlands_cliff",
-  "frameWidth": 24,
-  "frameHeight": 24,
+  "frameWidth": 48,
+  "frameHeight": 48,
   "variants": 18,
   "pieces": [
     "S",
@@ -24,6 +24,6 @@
     "cNW"
   ],
   "image": "woodlands_cliff.png",
-  "sheetWidth": 432,
-  "sheetHeight": 24
+  "sheetWidth": 864,
+  "sheetHeight": 48
 }

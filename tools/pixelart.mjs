@@ -90,6 +90,14 @@ export function painter(g, angle = 0, origin = [(g.w - 1) / 2, (g.h - 1) / 2]){
     ellipse(x, y, rx, ry, c){ return P.fill((lx, ly) => ((lx - x) / rx) ** 2 + ((ly - y) / ry) ** 2 <= 1 + E, c); },
     rect(x0, y0, x1, y1, c){ return P.fill((lx, ly) => lx >= x0 - 0.01 && lx <= x1 + 0.01 && ly >= y0 - 0.01 && ly <= y1 + 0.01, c); },
     dot(x, y, c){ const [gx, gy] = toGrid(x, y); g.set(gx, gy, C[c]); return P; },
+    // Segment `w` px wide with round ends (legs, arms, girders).
+    thick(x0, y0, x1, y1, w, c){
+      const dx = x1 - x0, dy = y1 - y0, L2 = dx * dx + dy * dy || 1, r2 = (w / 2) ** 2 + E;
+      return P.fill((lx, ly) => {
+        const t = Math.max(0, Math.min(1, ((lx - x0) * dx + (ly - y0) * dy) / L2)), ex = lx - x0 - t * dx, ey = ly - y0 - t * dy;
+        return ex * ex + ey * ey <= r2;
+      }, c);
+    },
     line(x0, y0, x1, y1, c){
       let [ax, ay] = toGrid(x0, y0); const [bx, by] = toGrid(x1, y1);
       const dx = Math.abs(bx - ax), dy = -Math.abs(by - ay), sx = ax < bx ? 1 : -1, sy = ay < by ? 1 : -1;

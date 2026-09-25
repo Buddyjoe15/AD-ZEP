@@ -1,12 +1,12 @@
 {
   "name": "vance",
-  "frameWidth": 25,
-  "frameHeight": 25,
+  "frameWidth": 49,
+  "frameHeight": 49,
   "origin": [
-    12,
-    12
+    24,
+    24
   ],
-  "worldPxPerArtPx": 2,
+  "worldPxPerArtPx": 1,
   "rows": "facing",
   "facings": [
     "up",
@@ -37,13 +37,13 @@
   "shadow": {
     "drawnBy": "engine",
     "offset": [
-      3,
-      4
+      6,
+      8
     ],
     "elevation": "hover"
   },
   "team": "team0..team2 (magenta ramp)",
   "image": "vance.png",
-  "sheetWidth": 200,
-  "sheetHeight": 200
+  "sheetWidth": 392,
+  "sheetHeight": 392
 }

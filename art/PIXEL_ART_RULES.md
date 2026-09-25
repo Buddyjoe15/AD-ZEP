@@ -11,7 +11,7 @@ These are the rules for making new pixel art for the game. They match the art al
 ### 1.1 How to ask
 
 - Ask all the questions in one round, grouped by the headings below. Leave out the ones that plainly don't apply to this kind of asset.
-- Offer the default in brackets so the requester can just say "defaults". Example: *Frame size? [25×25, like the Spider]*.
+- Offer the default in brackets so the requester can just say "defaults". Example: *Frame size? [49×49, like the Spider]*.
 - If the requester points to an existing unit or structure in the game, read its definition first (`src/data/units.js`, `src/data/buildables.js`, `src/data/resources.js`, `src/data/terrain.js`). Fill in whatever it already says, such as radius, footprint, hp and behaviour, and only ask for what's left.
 - Ask a follow-up round only for answers that are missing or contradict each other.
 
@@ -85,7 +85,7 @@ Save change: none | <what and why>
 ### 2.1 Scale and view
 
 - **Straight top-down.** Not isometric and not three-quarter view. The camera looks straight down.
-- **1 art pixel = 2 world px.** A map tile is 48 world px, which is **24 × 24 art px**. This scale was confirmed in play; don't change it.
+- **1 art pixel = 1 world px.** A map tile is 48 world px, which is **48 × 48 art px**. The first test set used 2 world px per art pixel (24 × 24 per tile); it was redrawn at this scale for more detail. Don't change it again without redrawing every asset.
 - The engine only ever draws the art at whole art pixels, nearest-neighbour. Never draw sub-pixel detail or anti-aliasing.
 
 ### 2.2 Palette: 37 colours, nothing else
@@ -116,10 +116,10 @@ Save change: none | <what and why>
 
   | Elevation | Offset | Examples |
   |---|---|---|
-  | ground unit | 1, 2 | Spider |
-  | hover | 3, 4 | Vance |
-  | air | 4, 5 | drones |
-  | structure / prop | 2, 2 | Repair Station |
+  | ground unit | 2, 4 | Spider |
+  | hover | 6, 8 | Vance |
+  | air | 8, 10 | drones |
+  | structure / prop | 4, 4 | Repair Station |
 
 - **Light comes from the top left, on every facing.** Don't paint directional light into the art. Author with flat mid-tones. The pipeline adds light and shadow edges and the outline itself, after rotating:
   - Each pixel on a top or left silhouette edge steps one shade lighter along its ramp. Each pixel on a bottom or right edge steps one shade darker.
@@ -131,22 +131,23 @@ Save change: none | <what and why>
 ### 2.4 Units
 
 - **Square, odd-sized frames**, so there's a single centre pixel. The origin (the unit's position) is the centre pixel. Sizes in use:
-  - **25 × 25** for Spider-sized units (about 1 tile).
-  - **17 × 17** for drone-sized units.
+  - **49 × 49** for Spider-sized units (about 1 tile).
+  - **33 × 33** for drone-sized units.
 
   Pick one of these unless the spec says otherwise.
-- **Keep all art within the frame's inscribed circle, minus 1 px** for the outline: radius 11 for 25 × 25, radius 7 for 17 × 17. Otherwise the 45° facing clips at the corners.
+- **Keep all art within the frame's inscribed circle, minus 1 px** for the outline: radius 23 for 49 × 49, radius 15 for 33 × 33. Otherwise the 45° facing clips at the corners.
 - **8 facings**, one sheet row each, in this order: `up, up-right, right, down-right, down, down-left, left, up-left`. The engine picks the facing nearest the unit's heading and never rotates the sprite.
 - **Author only `up` and `up-right`.** The other six are lossless 90° turns of those two, made by the pipeline.
 - **Draw `up-right` at 45° directly.** Don't resample `up`. Check that the diagonal keeps the unit's silhouette: legs splay radially so a Spider shows an X, not a plus sign.
 - "Forward" is up in the `up` frame. Put weapons, eyes and sensors at the front and thrusters at the back.
-- Team colour must be visible from straight above: a plate, stripe or pad on top, at least 3 × 3 px on a 25 px unit.
-- **Readability test:** at ⅓ zoom on a phone (2 device px per art px), the unit must still be told apart from Spiders, drones and Vance by shape and team colour, including in a crowd of 30 or more.
+- Team colour must be visible from straight above: a plate, stripe or pad on top, at least 6 × 6 px on a 49 px unit.
+- Use the finer scale for real detail (joints, seams, rivets, vents, visor glints), and keep limbs, arms and girders at least 2 px thick (`thick` in the painter) so they still read at ⅓ zoom.
+- **Readability test:** at ⅓ zoom on a phone (1 device px per art px), the unit must still be told apart from Spiders, drones and Vance by shape and team colour, including in a crowd of 30 or more.
 
 ### 2.5 Structures
 
-- The frame is the footprint in tiles × 24 art px. A 2 × 2 structure is 48 × 48. The origin is the **top-left corner** [0, 0], aligned to the grid. No facings: one row of frames.
-- Keep a **1 px transparent margin** inside the frame for the outline. The body usually fills the rest, like the Repair Station's hull at 3 to 44 on a 48 px frame.
+- The frame is the footprint in tiles × 48 art px. A 2 × 2 structure is 96 × 96. The origin is the **top-left corner** [0, 0], aligned to the grid. No facings: one row of frames.
+- Keep a **1 px transparent margin** inside the frame for the outline. The body usually fills the rest, like the Repair Station's hull at 6 to 89 on a 96 px frame.
 - **States**, and when the engine shows them:
 
   | State | Shown when |
@@ -165,14 +166,14 @@ Save change: none | <what and why>
 
 ### 2.6 Resource nodes, props and items
 
-- These use the structure rules: grid-aligned, top-left origin, frame = footprint × 24 px, engine shadow at offset 2, 2, no facings.
-- A 1 × 1 deposit or prop is **24 × 24**. Small ground items may use a smaller odd-sized frame centred on the item, like 11 × 11.
+- These use the structure rules: grid-aligned, top-left origin, frame = footprint × 48 px, engine shadow at offset 4, 4, no facings.
+- A 1 × 1 deposit or prop is **48 × 48**. Small ground items may use a smaller odd-sized frame centred on the item, like 21 × 21.
 - States by what's left (full, partly mined, depleted) come from saved amounts and need no save change.
 - **Engine work needed:** the renderer doesn't yet draw pixel art for these categories. Say so in the spec (section 1.3).
 
 ### 2.7 Terrain tiles
 
-- **24 × 24**, seamless, flat top-down. Use `dust` colours for the dust plain; another terrain type needs its own ramp, so ask first. No outline and no shading pass.
+- **48 × 48**, seamless, flat top-down. Use `dust` colours for the dust plain; another terrain type needs its own ramp, so ask first. No outline and no shading pass.
 - **8 variants, weighted.** Mostly plain, with rare feature variants. The dust plain uses weights 6, 6, 6, 4, 3, 2, 1, 1.
 - **Edge-matched:** every variant shares the same values along its edges, so any two variants meet without a seam.
 - **Tone-matched:** every variant has the same overall brightness (the same interior values, reshuffled), so no tile stands out.
@@ -188,7 +189,7 @@ For each asset:
 1. **Sheet PNG** at 1×, with the magenta team ramp in place.
    - Units: rows are the 8 facings; columns are all animation frames in order, each animation contiguous.
    - Structures, props and terrain: one row.
-2. **JSON metadata** next to it, in the same shape as `art/pixel-test/sheets/spider.json`: `name`, `frameWidth`, `frameHeight`, `origin`, `worldPxPerArtPx: 2`, `facings` (units), `animations` or `states` as `{ start, frames, fps }`, and `shadow: { drawnBy: "engine", offset, elevation }`.
+2. **JSON metadata** next to it, in the same shape as `art/pixel-test/sheets/spider.json`: `name`, `frameWidth`, `frameHeight`, `origin`, `worldPxPerArtPx: 1`, `facings` (units), `animations` or `states` as `{ start, frames, fps }`, and `shadow: { drawnBy: "engine", offset, elevation }`.
 3. **Preview** at ⅓, ⅔ and 1 zoom on a phone-sized screen, on dust terrain, next to Spiders and drones for scale. Show blue and red team versions.
 
 Inside this repository:

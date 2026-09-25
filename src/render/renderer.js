@@ -62,18 +62,24 @@
       const TC = G.TerrainCache, ct = C.CHUNK_TILES * T;
       const cx0 = Math.max(0, Math.floor(v.x0 / ct)), cy0 = Math.max(0, Math.floor(v.y0 / ct));
       const cx1 = Math.min(Math.ceil(C.WORLD_W / ct) - 1, Math.floor(v.x1 / ct)), cy1 = Math.min(Math.ceil(C.WORLD_H / ct) - 1, Math.floor(v.y1 / ct));
-      // Full-resolution chunks up close, lower-resolution chunks at middle zoom (or when the
+      // Full-resolution chunks up close (TERRAIN_RES once a world px covers more than one
+      // device px, if they fit the cache), lower-resolution chunks at middle zoom (or when the
       // view holds more chunks than the full cache), and only the overview image when far.
       const count = (cx1 - cx0 + 1) * (cy1 - cy0 + 1), near = z >= C.LOD_ZOOM && count <= C.CHUNK_CACHE_MAX;
       const far = !near && (z < C.FAR_CHUNK_ZOOM || count > C.FAR_CHUNK_CACHE_MAX), low = !near && !far;
+      const R = C.TERRAIN_RES, res = low ? C.FAR_CHUNK_SCALE : this.dpr * z > 1 && count * R * R <= C.CHUNK_CACHE_MAX ? R : 1;
+      const alt = low ? 1 : res === 1 ? R : 1;   // drawn while the wanted chunk is still queued
       g.imageSmoothingEnabled = false; g.drawImage(TC.getOverview(), 0, 0, C.WORLD_W, C.WORLD_H); g.imageSmoothingEnabled = true;
       let chunks = 0;
       if (!far){
         g.imageSmoothingEnabled = !(G.PixelArt.enabled && z * this.dpr >= 1);   // pixel terrain stays crisp up close
         let built = 0;
         for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++){
-          if (!TC.has(cx, cy, low)){ if (built >= C.CHUNKS_BUILT_PER_FRAME) continue; built++; }
-          g.drawImage(TC.chunk(cx, cy, low), cx * ct, cy * ct, ct, ct); chunks++;
+          let cv = null;
+          if (TC.has(cx, cy, res) || built < C.CHUNKS_BUILT_PER_FRAME){ if (!TC.has(cx, cy, res)) built++; cv = TC.chunk(cx, cy, res); }
+          else cv = TC.peek(cx, cy, alt);   // another resolution until this one is painted
+          if (!cv) continue;
+          g.drawImage(cv, cx * ct, cy * ct, ct, ct); chunks++;
         }
         g.imageSmoothingEnabled = true;
         // Pixel-art trees moving in the wind (Woodlands); lower-resolution chunks have them drawn in.
@@ -207,7 +213,9 @@
         if (e.shadow) shadows = true;
       }
       if (items.length){
-        const lv = k >= 1 ? 0 : k >= 0.5 ? 1 : 2, s = 1 / (1 << lv);   // atlas level nearest to 1:1 for this zoom
+        // Atlas level n holds RES / 2^n px per world px (Canvas art); use the most detailed
+        // level that is at most 2× the device resolution.
+        const lv = Math.min(Math.log2(A.RES) + 1, Math.max(0, Math.ceil(Math.log2(A.RES / (2 * k))))), s = 1 / (1 << lv);
         const stamp = (ctx, img, u, e, f, dx, dy) => {
           const ang = e.upright ? 0 : u.heading, co = Math.cos(ang) * k, si = Math.sin(ang) * k, at = e.at[f];
           ctx.setTransform(co, si, -si, co, (u.x + dx - c.x) * k, (u.y + dy - c.y) * k);

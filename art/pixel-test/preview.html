@@ -188,7 +188,7 @@ function buildSheets(){
   for (const name of ['spider', 'drone', 'vance']) if (want(name)){
     const sp = D.sprites[name], anims = Object.entries(sp.animations).map(([a, v]) => `${a} ${v.frames}f @ ${v.fps} fps`).join(' · ');
     const [d, row] = section(`${name} — ${sp.frameWidth}×${sp.frameHeight}`, `Rows: ${sp.facings.join(', ')} (only up and up-right authored). Columns: ${anims}. Shadow: engine, offset ${sp.shadow.offset.join(',')} art px.`);
-    const k = name === 'drone' ? 6 : 4;
+    const k = name === 'drone' ? 3 : 2;
     row.append(fig(sheetCanvas(sp.frames, sp.frameWidth, sp.frameHeight, null, k, '#3a3129'), 'raw sheet (magenta team ramp)'));
     row.append(fig(sheetCanvas(sp.frames, sp.frameWidth, sp.frameHeight, 'blue', k, '#3a3129'), 'blue team'));
     row.append(fig(sheetCanvas(sp.frames, sp.frameWidth, sp.frameHeight, 'red', k, '#3a3129'), 'red team'));
@@ -197,37 +197,39 @@ function buildSheets(){
   if (want('repair_station')){
     const st = D.sprites.repair_station, names = [];
     for (const [s, v] of Object.entries(st.states)) for (let i = 0; i < v.frames; i++) names.push(v.frames > 1 ? `${s} ${i + 1}` : s);
-    const [d, row] = section('repair station — 48×48 (2×2 tiles)', 'Stand-in design. States left to right: ' + names.join(', ') + '.');
-    for (const team of [null, 'blue', 'red']) row.append(fig(sheetCanvas(st.frames, st.frameWidth, st.frameHeight, team, 3, '#3a3129'), team ? team + ' team' : 'raw sheet (magenta)'));
+    const [d, row] = section(`repair station — ${st.frameWidth}×${st.frameHeight} (2×2 tiles)`, 'Stand-in design. States left to right: ' + names.join(', ') + '.');
+    for (const team of [null, 'blue', 'red']) row.append(fig(sheetCanvas(st.frames, st.frameWidth, st.frameHeight, team, 2, '#3a3129'), team ? team + ' team' : 'raw sheet (magenta)'));
     root.append(d);
   }
   if (want('woodlands') && D.woodlands){
-    const W = D.woodlands, [d, row] = section('woodlands pilot — 24×24 tiles and tree props', 'Grass, tall grass, water and deep water: 8 weighted, edge-matched variants each. Shoreline: 16 pieces by which sides touch land (1 N, 2 E, 4 S, 8 W). Cliffs: one tile tall, a piece per dropping side. Trees: oak, pine and birch canopy props with 9 frames each, 3 leans × 3 leaf-rustle steps (set by the weather), outline by the pipeline, engine shadow at 2,2.');
+    const W = D.woodlands, A = D.tileArt, off = W.tree.shadow.offset;
+    const [d, row] = section(`woodlands pilot — ${A}×${A} tiles and tree props`, `Grass, tall grass, water and deep water: 8 weighted, edge-matched variants each. Shoreline: 16 pieces by which sides touch land (1 N, 2 E, 4 S, 8 W). Cliffs: one tile tall, a piece per dropping side. Trees: oak, pine and birch canopy props with 9 frames each, 3 leans × 3 leaf-rustle steps (set by the weather), outline by the pipeline, engine shadow at ${off.join(',')}.`);
     for (const key of ['grass', 'tall_grass', 'water', 'deep_water', 'shore', 'cliff']){
       const strip = document.createElement('div'); strip.className = 'row';
-      W[key].tiles.forEach((s, i) => strip.append(fig(scaled(s, 24, 24, null, 3), key === 'cliff' ? W.cliff.pieces[i] : key === 'shore' ? 'mask ' + i : W[key].weights ? `${i} w${W[key].weights[i]}` : String(i))));
+      W[key].tiles.forEach((s, i) => strip.append(fig(scaled(s, A, A, null, 2), key === 'cliff' ? W.cliff.pieces[i] : key === 'shore' ? 'mask ' + i : W[key].weights ? `${i} w${W[key].weights[i]}` : String(i))));
       row.append(fig(strip, key.replace('_', ' ')));
     }
     for (const kind of W.tree.types){
       const strip = document.createElement('div'); strip.className = 'row';
-      W.tree.variants[kind].forEach((frames, v) => frames.forEach((s, f) => strip.append(fig(scaled(s, 24, 24, null, 3), `v${v + 1} lean ${Math.floor(f / 3)} leaves ${f % 3}`))));
-      row.append(fig(strip, kind + ' tree: 3 leans (0, 1, 2 art px downwind) × 3 leaf-rustle steps'));
+      W.tree.variants[kind].forEach((frames, v) => frames.forEach((s, f) => strip.append(fig(scaled(s, A, A, null, 2), `v${v + 1} lean ${Math.floor(f / 3)} leaves ${f % 3}`))));
+      row.append(fig(strip, kind + ' tree: 3 leans (0, 2, 4 art px downwind) × 3 leaf-rustle steps'));
     }
     root.append(d);
   }
   if (want('terrain')){
-    const [d, row] = section('dust plain terrain — 24×24 tiles', 'v1 is the tested set: 4 variants picked by (3x + 5y) & 3, which forms diagonal bands at a distance. v2 is the fix: 8 weighted, edge-matched variants picked by a mixing hash.');
+    const A = D.tileArt;
+    const [d, row] = section(`dust plain terrain — ${A}×${A} tiles`, 'v1 is the tested set: 4 variants picked by (3x + 5y) & 3, which forms diagonal bands at a distance. v2 is the fix: 8 weighted, edge-matched variants picked by a mixing hash.');
     for (const v of ['v1', 'v2']){
       const T = D.terrain[v], strip = document.createElement('div'); strip.className = 'row';
-      T.tiles.forEach((s, i) => strip.append(fig(scaled(s, 24, 24, null, 4), `${v}.${i} w${T.weights[i]}`)));
+      T.tiles.forEach((s, i) => strip.append(fig(scaled(s, A, A, null, 2), `${v}.${i} w${T.weights[i]}`)));
       row.append(fig(strip, `${v} variants`));
     }
     const row2 = document.createElement('div'); row2.className = 'row';
     for (const v of ['v1', 'v2']){
-      const n = 24, c = document.createElement('canvas'); c.width = c.height = n * 24; c.className = 'px';
+      const n = 12, c = document.createElement('canvas'); c.width = c.height = n * A; c.className = 'px';
       const x = c.getContext('2d');
-      for (let ty = 0; ty < n; ty++) for (let tx = 0; tx < n; tx++) x.drawImage(frameCanvas(D.terrain[v].tiles[tileVariant(v, tx, ty)], 24, 24), tx * 24, ty * 24);
-      row2.append(fig(c, `${v}: 24×24 tiles, one screen px per art px`));
+      for (let ty = 0; ty < n; ty++) for (let tx = 0; tx < n; tx++) x.drawImage(frameCanvas(D.terrain[v].tiles[tileVariant(v, tx, ty)], A, A), tx * A, ty * A);
+      row2.append(fig(c, `${v}: ${A}×${A} tiles, one screen px per art px`));
     }
     d.append(row2);
     root.append(d);

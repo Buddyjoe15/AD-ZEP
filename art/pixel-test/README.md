@@ -1,6 +1,6 @@
 # Pixel-art sprite test set
 
-A test set of straight top-down pixel sprites. The rules for new art are in [../PIXEL_ART_RULES.md](../PIXEL_ART_RULES.md). It exists to prove sizes, the palette and the pipeline, and isn't final art. The repair station is a stand-in design.
+A set of straight top-down pixel sprites, drawn at 1 art px per world px (48 × 48 art px per tile). The rules for new art are in [../PIXEL_ART_RULES.md](../PIXEL_ART_RULES.md). It exists to prove sizes, the palette and the pipeline, and isn't final art. The repair station is a stand-in design.
 
 The game uses this art by default. Spiders, security and hostile drones, survey drones, Vance, the Repair Station (including its construction site and rubble) and grass/clearing terrain are drawn with it. Add `?art=classic` or use **DEBUG → Pixel-art sprites** to switch back to the original art. How it's wired in is described under "Pixel art" in `docs/ARCHITECTURE.md`.
 
@@ -17,7 +17,7 @@ npm run sprites:preview  # also previews/ (needs Playwright + Chromium)
 
 | | |
 |---|---|
-| `previews/scene-zoom-033.png`, `-067`, `-100` | 390×844 @3x phone: about 35 friendly Spiders, Vance, 24 hostile drones and the station in every state |
+| `previews/scene-zoom-033.png`, `-067`, `-100` | 390×844 @3x phone (1, 2 and 3 device px per art px): about 35 friendly Spiders, Vance, 24 hostile drones and the station in every state |
 | `previews/scene-zoom-033-tiles-v1.png` | the same at ⅓ with the tested v1 terrain, to compare |
 | `previews/sheet-*.png` | each sheet at 4× in raw magenta, blue and red |
 
@@ -25,17 +25,17 @@ npm run sprites:preview  # also previews/ (needs Playwright + Chromium)
 
 | Sprite | Frame | Facings | Animations |
 |---|---|---|---|
-| Utility Spider | 25×25 | 8 | idle 2f, walk 4f, work 4f |
-| Drone (security / hostile) | 17×17 | 8 | fly 4f (spinning rotors) |
-| Commander Vance | 25×25 | 8 | hover-idle 4f, walk 4f |
-| Repair station (2×2) | 48×48 | 1 | foundation, frame, near-complete, finished, working 4f, damaged, rubble |
-| Dust plain terrain | 24×24 | – | v1: 4 variants (as tested), v2: 8 variants (the fix) |
+| Utility Spider | 49×49 | 8 | idle 2f, walk 4f, work 4f |
+| Drone (security / hostile) | 33×33 | 8 | fly 4f (spinning rotors) |
+| Commander Vance | 49×49 | 8 | hover-idle 4f, walk 4f |
+| Repair station (2×2) | 96×96 | 1 | foundation, frame, near-complete, finished, working 4f, damaged, rubble |
+| Dust plain terrain | 48×48 | – | v1: 4 variants (as tested), v2: 8 variants (the fix) |
 
 `sheets/` holds the real 1× game files. Each sprite has a PNG sheet with the magenta team colours still in place, plus JSON metadata (frame size, origin, facing order, animation ranges, fps, shadow offset). `palette.json` and `palette.png` hold the 37-colour palette. `src/render/pixel-data.js` has the same data as palette-indexed text. The game and the preview both read it, and it lets the preview recolour teams under `file://`.
 
 ## Rules
 
-- **Scale.** One art pixel is 2 world px, so a 48 px tile is 24 art px. This scale is confirmed for the game; draw new art to it. Draw at whole multiples of the art pixel where possible, and use nearest-neighbour sampling.
+- **Scale.** One art pixel is 1 world px, so a 48 px tile is 48 art px. Draw new art to it. Draw at whole multiples of the art pixel where possible, and use nearest-neighbour sampling.
 - **Palette.** Only the 37 colours in `palette.json`. `team0`–`team2` (magenta) are placeholders, replaced per team at load.
 - **Alpha.** Every pixel is fully opaque or fully transparent.
 - **Shadows are drawn by the engine, never baked into sprites.** The engine stamps the sprite's silhouette at the `shadow.offset` in its metadata and darkens whatever is underneath by 55%. It merges all shadows into one mask first, so overlapping shadows don't double up. Ground units get a small offset. Hovering and flying units get larger ones.
@@ -54,7 +54,8 @@ npm run sprites:preview  # also previews/ (needs Playwright + Chromium)
   The v2 comparison in the sheets view and the ⅓ scenes show the difference.
 - **Shadow rule clarified** (above). They're drawn by the engine, not baked in, which keeps sprites within the opaque-or-transparent rule.
 - **Diagonal Spiders.** Rotating the leg layout made the up-right Spider look like a plus sign. Here the up-right frame is drawn at 45° directly, and the legs splay radially, so the diagonal keeps an X of legs.
-- **Scale confirmed in play.** The pixel units are smaller than the old Canvas art: a Spider is about one tile across, where the old one spanned almost two. After testing the build, this scale was kept.
+- **Unit size confirmed in play.** The pixel units are smaller than the old Canvas art: a Spider is about one tile across, where the old one spanned almost two. After testing the build, this size was kept.
+- **Redrawn at double resolution.** The first set was drawn at 2 world px per art px (24 × 24 per tile, a 25 × 25 Spider). Everything was redrawn at 1 world px per art px for more detail: jointed Spider legs with gold knees, twin eyes and hatch seams; Vance's pauldrons, nozzles, power core and antenna; two-blade drone rotors and running lights; station deck plating, rivets and a hazard strip; and two-octave dust with lit pebbles and branching cracks. Sizes on screen are unchanged. Readability at ⅓ zoom still passes.
 - **Still open.**
   - The drone's diagonal facing is busy: its rotors and arms blur together at ⅓.
   - Vance reads slightly smaller than a Spider. He may need a 27×27 frame or larger shoulders.

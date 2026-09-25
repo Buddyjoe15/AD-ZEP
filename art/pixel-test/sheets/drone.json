@@ -1,12 +1,12 @@
 {
   "name": "drone",
-  "frameWidth": 17,
-  "frameHeight": 17,
+  "frameWidth": 33,
+  "frameHeight": 33,
   "origin": [
-    8,
-    8
+    16,
+    16
   ],
-  "worldPxPerArtPx": 2,
+  "worldPxPerArtPx": 1,
   "rows": "facing",
   "facings": [
     "up",
@@ -32,13 +32,13 @@
   "shadow": {
     "drawnBy": "engine",
     "offset": [
-      4,
-      5
+      8,
+      10
     ],
     "elevation": "air"
   },
   "team": "team0..team2 (magenta ramp)",
   "image": "drone.png",
-  "sheetWidth": 68,
-  "sheetHeight": 136
+  "sheetWidth": 132,
+  "sheetHeight": 264
 }

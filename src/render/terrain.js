@@ -1,4 +1,4 @@
-/* Terrain presentation: LRU caches of pre-rendered chunk canvases (full resolution for close
+/* Terrain presentation: LRU caches of pre-rendered chunk canvases (1× or TERRAIN_RES for close
    zoom, a lower-resolution set for middle zoom) and a one-pixel-per-tile overview image for
    far zoom and the minimap. */
 (function(){
@@ -6,15 +6,22 @@
   const G = GW;
   const TT = G.TT;
 
+  // Chunks are cached per resolution (canvas px per world px): 1 normally, TERRAIN_RES when
+  // zoomed in past 1:1. `used` is the cache size in 1× chunks (a res-2 chunk costs 4).
   G.TerrainCache = {
-    grid: null, chunks: new Map(), farChunks: new Map(), overview: null, overviewDirty: true,
-    reset(grid){ this.grid = grid; this.chunks.clear(); this.farChunks.clear(); this.overview = null; this.overviewDirty = true; },
+    grid: null, chunks: new Map(), used: 0, farChunks: new Map(), overview: null, overviewDirty: true,
+    reset(grid){ this.grid = grid; this.chunks.clear(); this.used = 0; this.farChunks.clear(); this.overview = null; this.overviewDirty = true; },
     sync(){ if (this.grid !== G.State.grid) this.reset(G.State.grid); },
+    drop(key){ const cv = this.chunks.get(key); if (cv){ this.used -= cv.res * cv.res; this.chunks.delete(key); } },
     invalidate(rect){
-      const ct = G.CONFIG.CHUNK_TILES;
-      if (!rect){ this.chunks.clear(); this.farChunks.clear(); this.overviewDirty = true; return; }
+      const ct = G.CONFIG.CHUNK_TILES, R = G.CONFIG.TERRAIN_RES;
+      if (!rect){ this.chunks.clear(); this.used = 0; this.farChunks.clear(); this.overviewDirty = true; return; }
       for (let cy = Math.floor(rect.y / ct); cy <= Math.floor((rect.y + rect.h) / ct); cy++)
-        for (let cx = Math.floor(rect.x / ct); cx <= Math.floor((rect.x + rect.w) / ct); cx++){ this.chunks.delete(cx + ',' + cy); this.farChunks.delete(cx + ',' + cy); }
+        for (let cx = Math.floor(rect.x / ct); cx <= Math.floor((rect.x + rect.w) / ct); cx++){
+          this.drop(cx + ',' + cy + ',1');
+          if (R !== 1) this.drop(cx + ',' + cy + ',' + R);
+          this.farChunks.delete(cx + ',' + cy);
+        }
       this.overviewDirty = true;
     },
     getOverview(){
@@ -34,24 +41,37 @@
       this.overview = cv; this.overviewDirty = false;
       return cv;
     },
-    has(cx, cy, low){ return (low ? this.farChunks : this.chunks).has(cx + ',' + cy); },
-    // `low`: the lower-resolution chunk used at middle zoom.
-    chunk(cx, cy, low){
+    // `res` below 1 (FAR_CHUNK_SCALE) is the lower-resolution chunk used at middle zoom. Those
+    // have their own cache, counted in chunks (FAR_CHUNK_CACHE_MAX), so they never push the
+    // close-up chunks out.
+    has(cx, cy, res = 1){ return res < 1 ? this.farChunks.has(cx + ',' + cy) : this.chunks.has(cx + ',' + cy + ',' + res); },
+    // Cached chunk without painting or touching the LRU order (fallback while a chunk at
+    // the wanted resolution is still queued).
+    peek(cx, cy, res = 1){ return (res < 1 ? this.farChunks.get(cx + ',' + cy) : this.chunks.get(cx + ',' + cy + ',' + res)) || null; },
+    chunk(cx, cy, res = 1){
       this.sync();
-      const key = cx + ',' + cy, cache = low ? this.farChunks : this.chunks;
-      const hit = cache.get(key);
-      if (hit){ cache.delete(key); cache.set(key, hit); return hit; }   // LRU touch
-      const cv = this.paint(cx, cy, low);
-      cache.set(key, cv);
-      const max = low ? G.CONFIG.FAR_CHUNK_CACHE_MAX : G.CONFIG.CHUNK_CACHE_MAX;
-      while (cache.size > max) cache.delete(cache.keys().next().value);
+      if (res < 1){
+        const key = cx + ',' + cy, hit = this.farChunks.get(key);
+        if (hit){ this.farChunks.delete(key); this.farChunks.set(key, hit); return hit; }   // LRU touch
+        const cv = this.paint(cx, cy, res);
+        this.farChunks.set(key, cv);
+        while (this.farChunks.size > G.CONFIG.FAR_CHUNK_CACHE_MAX) this.farChunks.delete(this.farChunks.keys().next().value);
+        return cv;
+      }
+      const key = cx + ',' + cy + ',' + res;
+      const hit = this.chunks.get(key);
+      if (hit){ this.chunks.delete(key); this.chunks.set(key, hit); return hit; }   // LRU touch
+      const cv = this.paint(cx, cy, res);
+      this.chunks.set(key, cv); this.used += res * res;
+      while (this.used > G.CONFIG.CHUNK_CACHE_MAX && this.chunks.size > 1) this.drop(this.chunks.keys().next().value);
       return cv;
     },
-    paint(cx, cy, low){
-      const C = G.CONFIG, T = C.TILE, ct = C.CHUNK_TILES, scale = low ? C.FAR_CHUNK_SCALE : 1, size = Math.round(ct * T * scale), grid = this.grid;
-      const cv = document.createElement('canvas'); cv.width = size; cv.height = size;
+    // Paints in world px scaled by `res`, so the same art gains detail at higher res.
+    paint(cx, cy, res = 1){
+      const C = G.CONFIG, T = C.TILE, ct = C.CHUNK_TILES, size = ct * T, grid = this.grid, low = res < 1;
+      const cv = document.createElement('canvas'); cv.width = Math.round(size * res); cv.height = Math.round(size * res); cv.res = res;
       const g = cv.getContext('2d'), r = G.RNG(G.State.seed + cx * 13007 + cy * 9011);
-      if (low) g.scale(scale, scale);
+      g.scale(res, res);
       const P = G.PixelArt, dust = P.enabled ? P.dustIds() : null, WA = G.WoodlandsArt;
       g.imageSmoothingEnabled = false;
       // A Woodlands map draws every tile in its own style, with height and ground detail.

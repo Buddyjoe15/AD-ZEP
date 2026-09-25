@@ -1,10 +1,10 @@
 {
   "name": "woodlands_shore",
-  "frameWidth": 24,
-  "frameHeight": 24,
+  "frameWidth": 48,
+  "frameHeight": 48,
   "variants": 16,
   "index": "land mask: 1 north, 2 east, 4 south, 8 west (0 = open water)",
   "image": "woodlands_shore.png",
-  "sheetWidth": 384,
-  "sheetHeight": 24
+  "sheetWidth": 768,
+  "sheetHeight": 48
 }
