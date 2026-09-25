@@ -725,7 +725,7 @@
       ...feats.caves.map(c => ({ kind: 'cave', name: 'Cave', x: c.x, y: c.y })),
       ...feats.camps.map(c => ({ kind: 'camp', name: 'Logging camp', x: c.x, y: c.y }))
     ];
-    grid.art = { kind: 'woodlands', level: lvl, dir, detail: dec, angle: ang, places };
+    grid.art = { kind: 'woodlands', seed: s, level: lvl, dir, detail: dec, angle: ang, places };
     return grid;
   }
 

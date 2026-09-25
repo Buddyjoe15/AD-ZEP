@@ -88,6 +88,7 @@
         <div class="dbgGroup">Load a map</div>
         <button type="button" class="dbgEntry" data-load="grass"><span class="dbgIcon" style="background:${this.swatch('grass')}"></span>Test map (open grass)${confirmText('grass')}</button>
         <div class="medRow"><label class="medLabel" for="medSeed">Woodlands seed</label><input id="medSeed" class="medInput" type="number" min="0" max="4294967295" value="${seed}"><button type="button" id="medRnd" class="medSize">Random</button></div>
+        <button type="button" id="medPreview" class="dbgEntry"><span class="dbgIcon">◎</span>Preview seed ${seed} <small>see the map first</small></button>
         <button type="button" class="dbgEntry" data-load="woodlands"><span class="dbgIcon" style="background:${this.swatch('tree')}"></span>Woodlands, seed ${seed}${confirmText('woodlands')}</button>
         <div class="dbgGroup">Saved maps</div>
         <div class="medRow"><input id="medName" class="medInput" type="text" maxlength="60" value="${esc(defName)}" aria-label="Name for the saved map"><button type="button" id="medSave" class="medSize">Save current map</button></div>
@@ -104,6 +105,7 @@
         setTimeout(() => { run(); this.render(); }, 30);
       };
       $('medSeed').onchange = () => { const v = readSeed(); if (v !== null) this.woodSeed = v; this.confirm = null; this.render(); };
+      $('medPreview').onclick = () => { const v = readSeed() ?? G.State.seed; this.woodSeed = v; this.confirm = null; this.render(); G.MapPreviewUI.open(v); };
       $('medRnd').onclick = () => { this.woodSeed = 1 + Math.floor(Math.random() * 999999); this.confirm = null; this.render(); };
       p.querySelectorAll('[data-load]').forEach(b => b.onclick = () => {
         const map = b.dataset.load, seed = map === 'woodlands' ? (readSeed() ?? G.State.seed) : G.State.seed;

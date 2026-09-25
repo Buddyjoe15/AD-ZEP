@@ -14,6 +14,7 @@
     G.ExpeditionUI.init();
     G.DebugUI.init();
     G.MapEditorUI.init();
+    G.MapPreviewUI.init();
     G.InventoryUI.initDrag();
     G.MainMenu.init();
     // A world is generated immediately so the map renders behind the menu.

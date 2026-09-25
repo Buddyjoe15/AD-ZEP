@@ -471,38 +471,27 @@
   }
   const TOP = new Set([K.TREE, K.THICKET, K.MOUND, K.VENT]);
 
-  // Brighter high ground, shade under cliffs, and south cliff faces that continue into the
-  // tile below so a one-level step reads about a tile and a half tall.
+  // Brighter high ground and a soft shadow at the foot of higher ground. Cliff faces stay
+  // inside their own tile, so a cliff is exactly one tile tall.
   function heightShade(ctx, gx, gy, px, py, S){
     const l = lvlAt(gx, gy);
     if (l < 0) return;
     const tint = [-.18, -.09, 0, .06, .12][l];
     if (tint){ ctx.fillStyle = tint < 0 ? `rgba(0,0,0,${-tint})` : `rgba(255,255,240,${tint})`; ctx.fillRect(px, py, S + .5, S + .5); }
-    const nl = lvlAt(gx, gy - 1), wl = lvlAt(gx - 1, gy), above = tileAt(gx, gy - 1), here = tileAt(gx, gy);
-    const wetHere = here === K.WATER || here === K.DEEP || here === K.FALLS || here === K.BOG;
-    if (nl > l && (above === K.CLIFF || above === K.CAVE) && (maskAt((gy - 1) * grid.cols + gx) & 4) && !wetHere && here !== K.CLIFF){
-      const rock = [100, 90, 76], fh = S * Math.min(.9, .45 + (nl - l) * .2), hh = hash(gx, gy, seed + 21);
-      ctx.fillStyle = rgb(rock, -8 + Math.round((hh - .5) * 8)); ctx.fillRect(px, py, S + .5, fh);
-      ctx.fillStyle = rgb(rock, -24); ctx.fillRect(px, py + fh * .45, S + .5, Math.max(1, S * .05));
-      ctx.strokeStyle = rgb(rock, -34); ctx.lineWidth = Math.max(1, S * .05);
-      ctx.beginPath(); ctx.moveTo(px + S * hh, py); ctx.lineTo(px + S * (hh * .8 + .1), py + fh); ctx.stroke();
-      ctx.fillStyle = rgb(rock, -46); ctx.fillRect(px, py + fh - Math.max(1, S * .08), S + .5, Math.max(1, S * .08));
-      const gr = ctx.createLinearGradient(0, py + fh, 0, py + S);
-      gr.addColorStop(0, 'rgba(0,0,0,.3)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = gr; ctx.fillRect(px, py + fh, S + .5, S - fh + .5);
-    } else if (nl > l && here !== K.CLIFF){
-      const gr = ctx.createLinearGradient(0, py, 0, py + S * .7);
-      gr.addColorStop(0, `rgba(0,0,0,${.22 + (nl - l) * .08})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = gr; ctx.fillRect(px, py, S + .5, S * .7);
+    const nl = lvlAt(gx, gy - 1), wl = lvlAt(gx - 1, gy), here = tileAt(gx, gy);
+    if (nl > l && here !== K.CLIFF && here !== K.CAVE){
+      const gr = ctx.createLinearGradient(0, py, 0, py + S * .4);
+      gr.addColorStop(0, `rgba(0,0,0,${.2 + (nl - l) * .06})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gr; ctx.fillRect(px, py, S + .5, S * .4);
     }
     if (wl > l){
-      const gr = ctx.createLinearGradient(px, 0, px + S * .4, 0);
-      gr.addColorStop(0, 'rgba(0,0,0,.18)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = gr; ctx.fillRect(px, py, S * .4, S + .5);
+      const gr = ctx.createLinearGradient(px, 0, px + S * .3, 0);
+      gr.addColorStop(0, 'rgba(0,0,0,.16)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gr; ctx.fillRect(px, py, S * .3, S + .5);
     }
   }
 
-  const bind = grd => { grid = grd; art = grd.art || null; seed = G.State.seed | 0; };
+  const bind = grd => { grid = grd; art = grd.art || null; seed = (art && art.seed != null ? art.seed : G.State.seed) | 0; };
 
   G.WoodlandsArt = {
     FIRST_ID: 12,          // terrain ids below this keep the classic art on other maps
@@ -539,6 +528,8 @@
         if (TOP.has(t) && (all || t >= this.FIRST_ID)) drawTop(ctx, t, gx, gy, lx * S, ly * S, S);
       }
     },
+    // A ground-detail mark drawn alone, for a legend icon.
+    detailIcon(ctx, d, S){ drawDecal(ctx, d, 3, 5, 0, 0, S, 0, 1); },
     // Minimap shading: brighter high ground, darker ground just below a cliff.
     overviewShade(grd, i){
       const a = grd.art, l = a.level[i], cols = grd.cols;

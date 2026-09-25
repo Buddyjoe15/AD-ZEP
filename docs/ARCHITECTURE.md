@@ -102,7 +102,7 @@ The `power` system runs before production each tick and sets `G.Power.grid.ratio
 
 **Resource nodes, climates and expedition balance** live in `src/data/world.js` (`GW.EXPEDITION_RULES`). A node is either `kind: 'scavenge'` (collected directly by gatherers) or `kind: 'deposit'` (a 1×1 tile that needs its `building` built centred on it). Add a new mine type by defining a deposit node, then either reuse `mine_building` or add a buildable with `placeOnNode: 'deposit'`, an odd footprint and an `extractor` behaviour.
 
-The debug catalog (DEBUG button) lists every registered structure, item, unit and node, so new content can be placed and inspected immediately. It also holds the cheats (`GW.Cheats`: metal, godmode, instant build). The Map Editor (`src/ui/mapeditor.js`) paints terrain and places or erases objects through `GW.MapEdit` in `src/sim/debugtools.js`. Its Maps tab swaps the map type under a running game (`GW.MapEdit.loadMap`) and keeps named maps (type, seed and edits) in `GW.MapLibrary`, which uses `GW.Storage` but not the save slots.
+The debug catalog (DEBUG button) lists every registered structure, item, unit and node, so new content can be placed and inspected immediately. It also holds the cheats (`GW.Cheats`: metal, godmode, instant build). The Map Editor (`src/ui/mapeditor.js`) paints terrain and places or erases objects through `GW.MapEdit` in `src/sim/debugtools.js`. Its Maps tab swaps the map type under a running game (`GW.MapEdit.loadMap`) and keeps named maps (type, seed and edits) in `GW.MapLibrary`, which uses `GW.Storage` but not the save slots. Its Preview (`src/ui/mappreview.js`) runs the Woodlands generator for a seed without touching the game and draws it with the game's own terrain art.
 
 ## Scaling notes
 
