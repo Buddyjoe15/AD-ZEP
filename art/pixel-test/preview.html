@@ -201,6 +201,15 @@ function buildSheets(){
     for (const team of [null, 'blue', 'red']) row.append(fig(sheetCanvas(st.frames, st.frameWidth, st.frameHeight, team, 3, '#3a3129'), team ? team + ' team' : 'raw sheet (magenta)'));
     root.append(d);
   }
+  if (want('woodlands') && D.woodlands){
+    const W = D.woodlands, [d, row] = section('woodlands pilot — 24×24 tiles and tree props', 'Grass, tall grass, water and deep water: 8 weighted, edge-matched variants each. Shoreline: 16 pieces by which sides touch land (1 N, 2 E, 4 S, 8 W). Cliffs: one tile tall, a piece per dropping side. Trees: canopy props, outline by the pipeline, engine shadow at 2,2.');
+    for (const key of ['grass', 'tall_grass', 'water', 'deep_water', 'shore', 'cliff', 'tree']){
+      const strip = document.createElement('div'); strip.className = 'row';
+      W[key].tiles.forEach((s, i) => strip.append(fig(scaled(s, 24, 24, null, 3), key === 'cliff' ? W.cliff.pieces[i] : key === 'shore' ? 'mask ' + i : W[key].weights ? `${i} w${W[key].weights[i]}` : String(i))));
+      row.append(fig(strip, key.replace('_', ' ')));
+    }
+    root.append(d);
+  }
   if (want('terrain')){
     const [d, row] = section('dust plain terrain — 24×24 tiles', 'v1 is the tested set: 4 variants picked by (3x + 5y) & 3, which forms diagonal bands at a distance. v2 is the fix: 8 weighted, edge-matched variants picked by a mixing hash.');
     for (const v of ['v1', 'v2']){

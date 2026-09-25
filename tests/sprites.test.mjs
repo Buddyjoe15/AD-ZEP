@@ -11,10 +11,10 @@ import { PALETTE, ALPHABET, Grid, rot90, finish } from '../tools/pixelart.mjs';
 const { data } = build();
 const decode = (s, w) => { const g = new Grid(w, s.length / w); [...s].forEach((ch, i) => g.p[i] = ALPHABET.indexOf(ch)); return g; };
 
-test('palette has 37 distinct colours', () => {
-  assert.equal(PALETTE.length, 37);
-  assert.equal(new Set(PALETTE.map(([, h]) => h)).size, 37);
-  assert.equal(ALPHABET.length, 38);
+test('palette has 48 distinct colours', () => {
+  assert.equal(PALETTE.length, 48);
+  assert.equal(new Set(PALETTE.map(([, h]) => h)).size, 48);
+  assert.equal(ALPHABET.length, 49);
 });
 
 test('every facing except up and up-right is a lossless rotation, shaded after rotating', () => {
@@ -60,5 +60,28 @@ test('sheet PNGs are fully opaque or fully transparent', () => {
       const a = raw[y * (w * 4 + 1) + 1 + x * 4 + 3];
       assert.ok(a === 0 || a === 255, `${f} (${x},${y}) alpha ${a}`);
     }
+  }
+});
+
+test('woodlands pilot: full terrain tiles, edge-matched variants, shoreline and cliff pieces, outlined tree props', () => {
+  const W = data.woodlands, T = 24;
+  for (const key of ['grass', 'tall_grass', 'water', 'deep_water', 'shore', 'cliff']){
+    for (const s of W[key].tiles){ assert.equal(s.length, T * T, key); assert.ok(!s.includes('.'), key + ' tiles are fully opaque'); }
+  }
+  for (const key of ['grass', 'tall_grass', 'water', 'deep_water']) assert.equal(W[key].tiles.length, W[key].weights.length, key);
+  assert.equal(W.shore.tiles.length, 16, 'one shoreline piece per land mask');
+  assert.equal(W.cliff.tiles.length, W.cliff.pieces.length);
+  for (const k of ['S', 'N', 'E', 'W', 'cNE', 'cSE', 'cSW', 'cNW']) assert.ok(W.cliff.pieces.includes(k), k);
+  // A south face has rock across its middle rows; a north rim keeps grass there.
+  const S = decode(W.cliff.tiles[W.cliff.pieces.indexOf('S')], T), N = decode(W.cliff.tiles[W.cliff.pieces.indexOf('N')], T);
+  const name = i => PALETTE[i - 1][0];
+  assert.ok(name(S.get(12, 12)).startsWith('dust') || name(S.get(12, 12)).startsWith('char'));
+  assert.ok(name(N.get(12, 12)).startsWith('grass'));
+  // Tree props: transparent corners and 1 px margin, outlined, with the engine shadow offset.
+  assert.deepEqual([...W.tree.shadow.offset], [2, 2]);
+  for (const s of W.tree.tiles){
+    const g = decode(s, T);
+    for (let i = 0; i < T; i++) for (const [x, y] of [[i, 0], [0, i], [i, T - 1], [T - 1, i]]) assert.equal(g.get(x, y), 0, 'margin');
+    assert.ok(s.includes(ALPHABET[1]), 'outlined');
   }
 });

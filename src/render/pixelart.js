@@ -134,7 +134,30 @@
       if (!this._dust){ this._dust = new Set(); for (const t of G.Defs.terrain.all()) if (this.DUST.has(t.key)) this._dust.add(t.id); }
       return this._dust;
     },
-    DUST_MINIMAP: D ? hex(D.palette.find(c => c.name === 'dust2').hex) : [0, 0, 0]
+    DUST_MINIMAP: D ? hex(D.palette.find(c => c.name === 'dust2').hex) : [0, 0, 0],
+    // Woodlands pilot art (grass, tall grass, water, shoreline, cliffs, tree props), or null
+    // when pixel art is off; the Woodlands renderer keeps its vector art for anything else.
+    woodlands(){ return this.enabled && D && D.woodlands ? D.woodlands : null; },
+    // Weighted variant for tile (x, y), mixing-hashed like the dust plain; `salt` keeps
+    // different terrain types from picking in step.
+    weighted(weights, x, y, salt){
+      let total = 0;
+      for (const w of weights) total += w;
+      let r = fmix32(Math.imul(x, 0x9E3779B1) ^ Math.imul(y, 0x85EBCA77) ^ salt) % total;
+      for (let i = 0; i < weights.length; i++){ if (r < weights[i]) return i; r -= weights[i]; }
+      return 0;
+    },
+    tileCanvas(str){ return this.canvas(str, D.tileArt, D.tileArt); },
+    // A tree canopy prop with its engine shadow, drawn at world rect (x, y, size).
+    prop(g, str, x, y, size){
+      const k = size / D.tileArt, smooth = g.imageSmoothingEnabled, off = D.woodlands.tree.shadow.offset;
+      g.imageSmoothingEnabled = false;
+      g.globalAlpha = SHADOW_ALPHA;
+      g.drawImage(this.canvas(str, D.tileArt, D.tileArt, null, true), x + off[0] * k, y + off[1] * k, size, size);
+      g.globalAlpha = 1;
+      g.drawImage(this.canvas(str, D.tileArt, D.tileArt, 'neutral'), x, y, size, size);
+      g.imageSmoothingEnabled = smooth;
+    }
   };
 
   const P = G.PixelArt;

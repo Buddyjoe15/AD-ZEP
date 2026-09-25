@@ -29,8 +29,8 @@
   function fbm(x, y, s, oct){ let sum = 0, amp = 1, norm = 0, f = 1; for (let i = 0; i < oct; i++){ sum += vnoise(x * f, y * f, s + i * 101) * amp; norm += amp; amp *= .5; f *= 2; } return sum / norm; }
   const rgb = (c, k = 0) => `rgb(${Math.max(0, Math.min(255, c[0] + k)) | 0},${Math.max(0, Math.min(255, c[1] + k)) | 0},${Math.max(0, Math.min(255, c[2] + k)) | 0})`;
 
-  // The grid being painted, set by each paint call.
-  let grid = null, art = null, seed = 0;
+  // The grid being painted, set by each paint call; `pix` is the pixel-art set when on.
+  let grid = null, art = null, seed = 0, pix = null;
   const tileAt = (x, y) => grid.inBounds(x, y) ? grid.tiles[y * grid.cols + x] : 255;
   const lvlAt = (x, y) => art && grid.inBounds(x, y) ? art.level[y * grid.cols + x] : -1;
   const dirAt = i => art ? art.dir[i] : 0;
@@ -96,7 +96,41 @@
     }
   }
 
+  // ---- Pixel-art pilot ----
+  const WET = new Set([K.WATER, K.DEEP, K.FALLS, K.BOG, K.BRIDGE]);
+  const CLIFF_PIECE = { 1: 'N', 2: 'E', 8: 'W', 3: 'NE', 9: 'NW', 10: 'EW', 11: 'NEW', 16: 'cNE', 32: 'cSE', 64: 'cSW', 128: 'cNW' };
+  const variant = (set, gx, gy, salt) => set.tiles[G.PixelArt.weighted(set.weights, gx, gy, salt)];
+  // The pixel tile for terrain `t`, or null when the pilot has no art for it.
+  function pixelTile(i, t, gx, gy){
+    if (t === K.GRASS || t === K.TREE) return variant(pix.grass, gx, gy, 11);
+    if (t === K.THICK) return variant(pix.tall_grass, gx, gy, 23);
+    if (t === K.DEEP) return variant(pix.deep_water, gx, gy, 41);
+    if (t === K.WATER){
+      let m = 0;
+      if (!WET.has(tileAt(gx, gy - 1)) && tileAt(gx, gy - 1) !== 255) m |= 1;
+      if (!WET.has(tileAt(gx + 1, gy)) && tileAt(gx + 1, gy) !== 255) m |= 2;
+      if (!WET.has(tileAt(gx, gy + 1)) && tileAt(gx, gy + 1) !== 255) m |= 4;
+      if (!WET.has(tileAt(gx - 1, gy)) && tileAt(gx - 1, gy) !== 255) m |= 8;
+      return m ? pix.shore.tiles[m] : variant(pix.water, gx, gy, 37);
+    }
+    if (t === K.CLIFF){
+      const m = maskAt(i), P = pix.cliff.pieces;
+      let key;
+      if (m & 4) key = (m & 2) && (m & 8) ? 'SEW' : m & 2 ? 'SE' : m & 8 ? 'SW' : (hash(gx, gy, 53) < .5 ? 'S' : 'S2');
+      else key = CLIFF_PIECE[m & 15] || CLIFF_PIECE[m & 16 || m & 32 || m & 64 || m & 128] || 'N';
+      return pix.cliff.tiles[P.indexOf(key)];
+    }
+    return null;
+  }
+  function blit(ctx, str, px, py, S){
+    const smooth = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(G.PixelArt.tileCanvas(str), px, py, S + .5, S + .5);
+    ctx.imageSmoothingEnabled = smooth;
+  }
+
   function drawTile(ctx, i, t, gx, gy, px, py, S){
+    if (pix){ const str = pixelTile(i, t, gx, gy); if (str){ blit(ctx, str, px, py, S); return; } }
     const s = seed, h = [hash(gx, gy, s + 7), hash(gx, gy, s + 9), hash(gx, gy, s + 13)];
     const jit = Math.round((h[0] - .5) * 10), lw = Math.max(1, S * .08);
     if (t === K.CLIFF || t === K.CAVE){ cliffTile(ctx, i, px, py, S, h, t === K.CAVE); return; }
@@ -432,9 +466,15 @@
     }
   }
 
+  const fenAt = (gx, gy) => [tileAt(gx + 1, gy), tileAt(gx - 1, gy), tileAt(gx, gy + 1), tileAt(gx, gy - 1)].some(q => q === K.SWAMP || q === K.BOG || q === K.REEDS);
   // Tall things drawn after the ground, row by row, so nearer objects overlap farther ones.
   function drawTop(ctx, t, gx, gy, px, py, S){
     const s = seed, h0 = hash(gx, gy, s + 7), h1 = hash(gx, gy, s + 9), h2 = hash(gx, gy, s + 17);
+    if (t === K.TREE && pix && !fenAt(gx, gy)){
+      const set = pix.tree;
+      G.PixelArt.prop(ctx, set.tiles[Math.floor(hash(gx, gy, 61) * set.tiles.length)], px, py, S);
+      return;
+    }
     if (t === K.TREE){
       const fen = [tileAt(gx + 1, gy), tileAt(gx - 1, gy), tileAt(gx, gy + 1), tileAt(gx, gy - 1)].some(q => q === K.SWAMP || q === K.BOG || q === K.REEDS);
       const cx = px + S / 2 + (h0 - .5) * S * .3, cy = py + S / 2 + (h1 - .5) * S * .3, r = S * (.55 + h2 * .15);
@@ -491,7 +531,7 @@
     }
   }
 
-  const bind = grd => { grid = grd; art = grd.art || null; seed = (art && art.seed != null ? art.seed : G.State.seed) | 0; };
+  const bind = grd => { grid = grd; art = grd.art || null; seed = (art && art.seed != null ? art.seed : G.State.seed) | 0; pix = G.PixelArt ? G.PixelArt.woodlands() : null; };
 
   G.WoodlandsArt = {
     FIRST_ID: 12,          // terrain ids below this keep the classic art on other maps

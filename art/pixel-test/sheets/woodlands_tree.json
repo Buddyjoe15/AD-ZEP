@@ -1,0 +1,21 @@
+{
+  "name": "woodlands_tree",
+  "frameWidth": 24,
+  "frameHeight": 24,
+  "variants": 4,
+  "origin": [
+    0,
+    0
+  ],
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      2,
+      2
+    ],
+    "elevation": "prop"
+  },
+  "image": "woodlands_tree.png",
+  "sheetWidth": 96,
+  "sheetHeight": 24
+}

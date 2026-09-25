@@ -243,6 +243,155 @@ export const TERRAIN = {
       .map((o, i) => dustTile(21 + i, { ...o, matched: true })) }
 };
 
+// ---- Woodlands terrain and tree props (24×24) ----
+// Same method as the dust plain v2: a smooth value lattice whose border values are shared
+// by every variant (edge-matched) and whose interior values are one shuffled set
+// (tone-matched), then small features that wrap across the edges.
+const W_WEIGHTS = [6, 6, 6, 4, 3, 2, 1, 1];
+function latticeTile(seed, sharedSeed, pickColour){
+  const shared = rng(sharedSeed), border = Array.from({ length: 11 }, () => shared()), interior = Array.from({ length: 25 }, () => shared());
+  const r = rng(seed), g = new Grid(TILE_ART, TILE_ART), L = 6, cell = TILE_ART / L, inner = interior.slice();
+  for (let i = inner.length - 1; i > 0; i--){ const j = Math.floor(r() * (i + 1)); [inner[i], inner[j]] = [inner[j], inner[i]]; }
+  const lat = new Array(L * L);
+  for (let y = 0; y < L; y++) for (let x = 0; x < L; x++)
+    lat[y * L + x] = y === 0 ? border[x] : x === 0 ? border[L - 1 + y] : inner[(y - 1) * (L - 1) + x - 1];
+  const at = (x, y) => lat[((y % L + L) % L) * L + ((x % L + L) % L)], sm = t => t * t * (3 - 2 * t);
+  for (let y = 0; y < TILE_ART; y++) for (let x = 0; x < TILE_ART; x++){
+    const gx = x / cell, gy = y / cell, x0 = Math.floor(gx), y0 = Math.floor(gy), tx = sm(gx - x0), ty = sm(gy - y0);
+    const n = (at(x0, y0) * (1 - tx) + at(x0 + 1, y0) * tx) * (1 - ty) + (at(x0, y0 + 1) * (1 - tx) + at(x0 + 1, y0 + 1) * tx) * ty;
+    g.set(x, y, C[pickColour(n * 0.8 + r() * 0.2)]);
+  }
+  const put = (x, y, c) => g.set(((x % 24) + 24) % 24, ((y % 24) + 24) % 24, C[c]);
+  return { g, r, put };
+}
+function grassTile(seed, { speckles = 8, clover = 0, tufts = 0, pebble = 0 } = {}){
+  const { g, r, put } = latticeTile(seed, 7101, v => v < 0.34 ? 'grass0' : v < 0.7 ? 'grass1' : 'grass2');
+  for (let i = 0; i < speckles; i++) put(Math.floor(r() * 24), Math.floor(r() * 24), r() < 0.5 ? 'grass0' : 'grass3');
+  for (let i = 0; i < clover; i++){
+    const x = Math.floor(r() * 24), y = Math.floor(r() * 24);
+    for (const [dx, dy] of [[1, 0], [0, 1], [2, 1], [1, 2], [4, 2], [3, 3], [5, 3], [4, 4]]) put(x + dx, y + dy, 'grass3');
+    put(x + 1, y + 1, 'grass2'); put(x + 4, y + 3, 'grass2');
+  }
+  for (let i = 0; i < tufts; i++){
+    const x = Math.floor(r() * 24), y = Math.floor(r() * 24);
+    for (const [dx, dy, c] of [[0, 0, 'grass3'], [0, 1, 'grass2'], [0, 2, 'grass2'], [-1, 1, 'grass3'], [-1, 2, 'grass2'], [1, -1, 'grass3'], [1, 0, 'grass2'], [1, 1, 'grass2'], [1, 2, 'grass0']]) put(x + dx, y + dy, c);
+  }
+  for (let i = 0; i < pebble; i++){
+    const x = Math.floor(r() * 24), y = Math.floor(r() * 24);
+    for (const [dx, dy, c] of [[0, 0, 'dust5'], [1, 0, 'dust4'], [0, 1, 'dust4'], [1, 1, 'dust3'], [2, 1, 'dust1'], [1, 2, 'dust1']]) put(x + dx, y + dy, c);
+  }
+  return g;
+}
+function tallGrassTile(seed, { blades = 30, seedheads = 0 } = {}){
+  const { g, r, put } = latticeTile(seed, 7202, v => v < 0.45 ? 'grass0' : 'grass1');
+  for (let i = 0; i < blades; i++){
+    const x = Math.floor(r() * 24), y = Math.floor(r() * 24), len = 3 + Math.floor(r() * 3), lean = r() < 0.3 ? 1 : 0;
+    for (let k = 0; k < len; k++) put(x + (k === len - 1 ? lean : 0), y - k, k === len - 1 ? 'grass3' : 'grass2');
+    put(x + 1, y, 'grass0');
+  }
+  for (let i = 0; i < seedheads; i++){ const x = Math.floor(r() * 24), y = Math.floor(r() * 24); put(x, y, 'dust5'); put(x, y + 1, 'dust4'); }
+  return g;
+}
+function waterTile(seed, { deep = false, ripples = 5, sparkle = 0 } = {}){
+  const { g, r, put } = latticeTile(seed, deep ? 7404 : 7303, deep ? (v => v < 0.78 ? 'water0' : 'water1') : (v => v < 0.28 ? 'water0' : v < 0.8 ? 'water1' : 'water2'));
+  for (let i = 0; i < ripples; i++){
+    const x = Math.floor(r() * 24), y = Math.floor(r() * 24), len = 2 + Math.floor(r() * 3);
+    for (let k = 0; k < len; k++) put(x + k, y, deep ? 'water1' : 'water2');
+    put(x + len, y + 1, deep ? 'water0' : 'water1');
+  }
+  for (let i = 0; i < sparkle; i++) put(Math.floor(r() * 24), Math.floor(r() * 24), 'water3');
+  return g;
+}
+// Shoreline: open water with a muddy bank and a broken foam line along each side that
+// touches land. `mask` bits: 1 north, 2 east, 4 south, 8 west. Where two neighbouring
+// sides are land, the corner is rounded.
+function shoreTile(mask){
+  const g = waterTile(31), N = 24, R = 6, pat = rng(5150 + mask);
+  const noise = Array.from({ length: N * N }, () => pat());
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++){
+    const sides = [];
+    if (mask & 1) sides.push(y); if (mask & 2) sides.push(N - 1 - x); if (mask & 4) sides.push(N - 1 - y); if (mask & 8) sides.push(x);
+    if (!sides.length) continue;
+    let d = Math.min(...sides);
+    const corner = (a, b, cx, cy) => { if ((mask & a) && (mask & b) && Math.abs(x - cx) < R && Math.abs(y - cy) < R) d = Math.min(d, R - Math.hypot(R - Math.abs(x - cx) - 0.5, R - Math.abs(y - cy) - 0.5)); };
+    corner(1, 8, 0, 0); corner(1, 2, N - 1, 0); corner(4, 2, N - 1, N - 1); corner(4, 8, 0, N - 1);
+    // A little wobble along the bank, the same on every tile so neighbouring pieces line up.
+    const along = (mask & 5) && !(mask & 10) ? x : (mask & 10) && !(mask & 5) ? y : x + y;
+    d += [0, 0.4, 0.8, 0.4, 0, -0.3][along % 6];
+    const n = noise[y * N + x];
+    if (d < 1.2) g.set(x, y, C[n < 0.5 ? 'dust1' : 'dust0']);
+    else if (d < 2.5) g.set(x, y, C[n < 0.7 ? 'dust2' : 'dust1']);
+    else if (d < 3.4) g.set(x, y, C[n < 0.65 ? 'water3' : 'water2']);
+    else if (d < 4.4 && n < 0.25) g.set(x, y, C.water2);
+  }
+  return g;
+}
+// Cliffs, one tile tall. A south drop shows the whole rock face; a drop on another side
+// shows the grass top with a rock rim on that side; a corner drop a rounded rim.
+function cliffTile(key, variant = 0){
+  const N = 24, r = rng(6100 + variant * 31 + key.length * 7), corner = key.startsWith('c') ? key.slice(1) : null;
+  if (!corner && key.startsWith('S')){
+    const g = new Grid(N, N);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++){
+      let c;
+      if (y < 4) c = (x * 7 + y * 3 + variant) % 9 === 0 ? 'grass2' : y === 3 ? 'grass0' : 'grass1';
+      else if (y === 4) c = 'dust5';
+      else if (y >= 22) c = y === 22 ? 'char1' : 'char0';
+      else c = [5, 6, 11, 12, 17].includes(y) ? 'dust3' : [8, 14, 19].includes(y) ? 'dust1' : 'dust2';
+      g.set(x, y, C[c]);
+    }
+    // Cracks and ledges inside the face (not on the left/right edge columns).
+    for (let i = 0; i < 3 + variant; i++){
+      let x = 3 + Math.floor(r() * 18), y = 6 + Math.floor(r() * 4);
+      for (let k = 0; k < 6 + Math.floor(r() * 6) && y < 21; k++){ g.set(x, y, C.char1); y++; if (r() < 0.3) x += r() < 0.5 ? -1 : 1; x = Math.max(2, Math.min(21, x)); }
+    }
+    for (let i = 0; i < 4; i++){ const x = 2 + Math.floor(r() * 19), y = 7 + Math.floor(r() * 12); g.set(x, y, C.dust4); g.set(x + 1, y, C.dust4); g.set(x, y + 1, C.dust1); }
+    const rim = (x0, x1, hi) => { for (let y = 4; y < 22; y++) for (let x = x0; x <= x1; x++) g.set(x, y, C[x === hi ? 'dust4' : 'dust1']); };
+    if (key.includes('E')) rim(N - 3, N - 1, N - 3);
+    if (key.includes('W')) rim(0, 2, 2);
+    return g;
+  }
+  const g = grassTile(21);
+  if (corner){
+    const [cx, cy] = { NE: [N, 0], SE: [N, N], SW: [0, N], NW: [0, 0] }[corner];
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++){
+      const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+      if (d < 4) g.set(x, y, C[d < 2.2 ? 'char1' : d < 3.2 ? 'dust2' : 'dust4']);
+    }
+    return g;
+  }
+  if (key.includes('N')) for (let x = 0; x < N; x++){ g.set(x, 0, C.char1); g.set(x, 1, C.dust2); g.set(x, 2, C.dust4); }
+  if (key.includes('E')) for (let y = 0; y < N; y++){ g.set(N - 1, y, C.char1); g.set(N - 2, y, C.dust1); g.set(N - 3, y, C.dust2); g.set(N - 4, y, C.dust4); }
+  if (key.includes('W')) for (let y = 0; y < N; y++){ g.set(0, y, C.char1); g.set(1, y, C.dust1); g.set(2, y, C.dust2); g.set(3, y, C.dust4); }
+  return g;
+}
+// Cliff piece keys, and which piece each drop mask (1 N, 2 E, 4 S, 8 W; 16/32/64/128 corners) uses.
+export const CLIFF_KEYS = ['S', 'S2', 'SE', 'SW', 'SEW', 'N', 'E', 'W', 'NE', 'NW', 'EW', 'NEW', 'cNE', 'cSE', 'cSW', 'cNW'];
+function cliffPieces(){
+  return CLIFF_KEYS.map(k => k === 'S2' ? cliffTile('S', 1) : cliffTile(k));
+}
+// Tree canopy props: an outline and top-left light added by the pipeline (leaf ramp).
+function treeProp(seed){
+  const r = rng(seed), g = new Grid(TILE_ART, TILE_ART), p = painter(g, 0, [11.5, 11.5]);
+  const lobes = 4 + Math.floor(r() * 3);
+  p.ellipse(0, 0, 7.5, 7.5, 'leaf1');
+  for (let i = 0; i < lobes; i++){ const a = (i / lobes) * Math.PI * 2 + r() * 0.6, d = 4.5 + r() * 1.5, rr = 3.3 + r() * 1.2; p.ellipse(Math.cos(a) * d, Math.sin(a) * d, rr, rr, 'leaf1'); }
+  for (let i = 0; i < 5; i++) p.ellipse((r() - 0.5) * 9, (r() - 0.5) * 9, 1.2 + r(), 1.2 + r(), r() < 0.35 ? 'leaf0' : 'leaf2');
+  p.ellipse(-1.5, -1.5, 2.2, 2, 'leaf2');
+  // Keep a 1 px margin for the outline.
+  for (let y = 0; y < TILE_ART; y++) for (let x = 0; x < TILE_ART; x++) if (x === 0 || y === 0 || x === TILE_ART - 1 || y === TILE_ART - 1) g.set(x, y, 0);
+  return finish(g);
+}
+export const WOODLANDS = {
+  grass: () => [{}, {}, {}, { speckles: 16 }, { clover: 1 }, { tufts: 2 }, { pebble: 1, tufts: 1 }, { clover: 2, speckles: 12 }].map((o, i) => grassTile(41 + i, o)),
+  tall_grass: () => [{}, {}, {}, { blades: 38 }, { seedheads: 3 }, { blades: 24 }, { seedheads: 6 }, { blades: 44, seedheads: 2 }].map((o, i) => tallGrassTile(61 + i, o)),
+  water: () => [{}, {}, {}, { ripples: 8 }, { ripples: 3 }, { sparkle: 1 }, { ripples: 7, sparkle: 1 }, { sparkle: 2 }].map((o, i) => waterTile(81 + i, o)),
+  deep_water: () => [{}, {}, {}, { ripples: 7 }, { ripples: 3 }, {}, { ripples: 6 }, { ripples: 2 }].map((o, i) => waterTile(101 + i, { ...o, deep: true })),
+  shore: () => Array.from({ length: 16 }, (_, m) => m ? shoreTile(m) : waterTile(31)),
+  cliff: cliffPieces,
+  tree: () => [301, 302, 303, 304].map(treeProp)
+};
+
 // ---- Build everything in memory ----
 export function build(){
   const sprites = {}, sheets = {};
@@ -275,9 +424,21 @@ export function build(){
     const meta = { name: 'dust_plain_' + v, frameWidth: TILE_ART, frameHeight: TILE_ART, variants: tiles.length, hash: T.hash, formula: T.formula, weights: T.weights };
     sheets['dust_plain_' + v] = { meta, rows: [tiles] };
   }
+  // Woodlands: weighted terrain variants, 16 shoreline pieces by land mask, cliff pieces,
+  // and tree canopy props (engine shadow at the prop offset).
+  const woodlands = {};
+  for (const [key, make] of Object.entries(WOODLANDS)){
+    const tiles = make(), weights = ['grass', 'tall_grass', 'water', 'deep_water'].includes(key) ? W_WEIGHTS : null;
+    woodlands[key] = { tiles: tiles.map(g => g.encode()), ...(weights ? { weights } : {}) };
+    const meta = { name: 'woodlands_' + key, frameWidth: TILE_ART, frameHeight: TILE_ART, variants: tiles.length, ...(weights ? { weights, hash: 'mix32' } : {}) };
+    if (key === 'shore') meta.index = 'land mask: 1 north, 2 east, 4 south, 8 west (0 = open water)';
+    if (key === 'cliff'){ meta.pieces = CLIFF_KEYS; woodlands.cliff.pieces = CLIFF_KEYS; }
+    if (key === 'tree'){ meta.origin = [0, 0]; meta.shadow = woodlands.tree.shadow = { drawnBy: 'engine', offset: [2, 2], elevation: 'prop' }; }
+    sheets['woodlands_' + key] = { meta, rows: [tiles] };
+  }
   const data = {
     alphabet: ALPHABET, palette: PALETTE.map(([name, hex]) => ({ name, hex })), teamIndex: [C.team0, C.team1, C.team2], teams: TEAMS,
-    tileArt: TILE_ART, worldPxPerArtPx: WORLD_PX_PER_ART_PX, sprites, terrain
+    tileArt: TILE_ART, worldPxPerArtPx: WORLD_PX_PER_ART_PX, sprites, terrain, woodlands
   };
   return { data, sheets };
 }
@@ -329,7 +490,7 @@ async function capture(){
   for (const [z, tag] of [['0.333', '033'], ['0.667', '067'], ['1', '100']]) await shot(`zoom=${z}&t=0.4&hud=0`, `scene-zoom-${tag}.png`, phone);
   await shot('zoom=0.333&t=0.4&hud=0&tiles=v1', 'scene-zoom-033-tiles-v1.png', phone);
   const desk = { viewport: { width: 1200, height: 800 }, deviceScaleFactor: 1, fullPage: true };
-  for (const s of ['spider', 'drone', 'vance', 'repair_station', 'terrain']) await shot(`view=sheets&only=${s}&hud=0`, `sheet-${s}.png`, desk);
+  for (const s of ['spider', 'drone', 'vance', 'repair_station', 'terrain', 'woodlands']) await shot(`view=sheets&only=${s}&hud=0`, `sheet-${s}.png`, desk);
   await browser.close();
 }
 
