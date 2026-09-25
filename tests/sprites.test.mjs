@@ -77,22 +77,27 @@ test('woodlands pilot: full terrain tiles, edge-matched variants, shoreline and 
   const name = i => PALETTE[i - 1][0];
   assert.ok(name(S.get(12, 12)).startsWith('dust') || name(S.get(12, 12)).startsWith('char'));
   assert.ok(name(N.get(12, 12)).startsWith('grass'));
-  // Tree props: three kinds, each variant with 3 sway frames that lean further downwind (east);
+  // Tree props: three kinds, each variant with 9 frames (lean * 3 + rustle): leans move further
+  // downwind (east), rustle steps change the leaves without moving the crown;
   // transparent 1 px margin, outlined, engine shadow offset.
   assert.deepEqual([...W.tree.shadow.offset], [2, 2]);
   assert.equal(W.tree.types.join(), 'oak,pine,birch');
-  assert.equal(W.tree.animations.sway.frames, 3);
+  assert.equal(W.tree.animations.lean.frames * W.tree.animations.rustle.frames, 9);
   const cx = g => { let sum = 0, n = 0; for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) if (g.get(x, y)){ sum += x; n++; } return sum / n; };
   for (const kind of W.tree.types){
     assert.ok(W.tree.variants[kind].length >= 2, kind + ' variants');
     for (const frames of W.tree.variants[kind]){
-      assert.equal(frames.length, 3);
+      assert.equal(frames.length, 9);
       const gs = frames.map(s => decode(s, T));
       for (const [f, g] of gs.entries()){
         for (let i = 0; i < T; i++) for (const [x, y] of [[i, 0], [0, i], [i, T - 1], [T - 1, i]]) assert.equal(g.get(x, y), 0, `${kind} frame ${f} margin`);
         assert.ok(frames[f].includes(ALPHABET[1]), 'outlined');
       }
-      assert.ok(cx(gs[1]) > cx(gs[0]) && cx(gs[2]) > cx(gs[1]), kind + ' leans further east each frame');
+      assert.ok(cx(gs[3]) > cx(gs[0]) + 0.5 && cx(gs[6]) > cx(gs[3]) + 0.5, kind + ' leans further east at each lean');
+      for (const lean of [0, 3, 6]) for (const step of [1, 2]){
+        assert.notEqual(frames[lean + step], frames[lean], kind + ' leaves move');
+        assert.ok(Math.abs(cx(gs[lean + step]) - cx(gs[lean])) < 0.5, kind + ' rustling does not lean');
+      }
     }
   }
 });

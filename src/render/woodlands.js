@@ -493,8 +493,8 @@
   function drawTop(ctx, t, gx, gy, px, py, S){
     const s = seed, h0 = hash(gx, gy, s + 7), h1 = hash(gx, gy, s + 9), h2 = hash(gx, gy, s + 17);
     if (t === K.TREE && pix && !fenAt(gx, gy)){
-      // Trees that sway in the current wind are drawn every frame (drawTrees); the rest are
-      // drawn at rest into the chunk.
+      // Trees that lean in the current wind are drawn every frame (drawTrees); the rest are
+      // drawn upright into the chunk, and rustling leaves are drawn over them when close.
       if (bakeTrees || !G.Weather.sways(gx, gy)) G.PixelArt.prop(ctx, treeFrame(gy * grid.cols + gx, gx, gy, 0), px, py, S);
       return;
     }
@@ -585,9 +585,13 @@
       this.paintTops(ctx, grd, x0, y0, ct, S, true);
       bakeTrees = false;
     },
-    // Pixel-art trees in view that sway in the current wind, drawn every frame. `v` is the
+    // Pixel-art trees in view that move in the current weather, drawn every frame. Leaning
+    // trees are drawn whole; trees that only rustle are already in the chunk, so their leaves
+    // are drawn over it without a second shadow, and only at zoom `z` of at least
+    // RUSTLE_ZOOM (below that a leaf pixel is smaller than a screen pixel). `v` is the
     // visible world rectangle and T the tile size.
-    drawTrees(g, grd, v, T, t){
+    RUSTLE_ZOOM: 0.5,
+    drawTrees(g, grd, v, T, t, z = 1){
       if (!this.isWoodlands(grd)) return;
       bind(grd);
       if (!pix) return;
@@ -596,8 +600,13 @@
       const y0 = Math.max(0, Math.floor(v.y0 / T) - 1), y1 = Math.min(grd.rows - 1, Math.ceil(v.y1 / T) + 1);
       for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++){
         const i = gy * cols + gx;
-        if (tiles[i] !== K.TREE || !G.Weather.sways(gx, gy) || fenAt(gx, gy)) continue;
-        G.PixelArt.prop(g, treeFrame(i, gx, gy, G.Weather.swayFrame(gx, gy, t)), gx * T, gy * T, T);
+        if (tiles[i] !== K.TREE) continue;
+        const sways = G.Weather.sways(gx, gy);
+        if (!sways && (z < this.RUSTLE_ZOOM || !G.Weather.rustles(gx, gy))) continue;
+        if (fenAt(gx, gy)) continue;
+        const pose = G.Weather.pose(gx, gy, t);
+        if (!sways && !pose.rustle) continue;
+        G.PixelArt.prop(g, treeFrame(i, gx, gy, pose.lean * 3 + pose.rustle), gx * T, gy * T, T, !sways);
       }
     },
     // One tile of a new terrain type on any other map.

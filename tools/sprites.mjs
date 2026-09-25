@@ -370,8 +370,8 @@ export const CLIFF_KEYS = ['S', 'S2', 'SE', 'SW', 'SEW', 'N', 'E', 'W', 'NE', 'N
 function cliffPieces(){
   return CLIFF_KEYS.map(k => k === 'S2' ? cliffTile('S', 1) : cliffTile(k));
 }
-// Tree canopy props, three kinds. Each variant has 3 sway frames: at rest, then leaning
-// 1 and 2 art px downwind (east). The canopy sits 1 px left of centre at rest so the
+// Tree canopy props, three kinds. Each variant has 9 frames: 3 leans (at rest, then 1 and
+// 2 art px downwind, east) × 3 leaf-rustle steps (frame = lean * 3 + rustle). The canopy sits 1 px left of centre at rest so the
 // furthest lean still keeps the 1 px outline margin. Outline and top-left light are added
 // by the pipeline (the leaf ramp shades); the engine draws the shadow.
 const TREE_KINDS = {
@@ -405,20 +405,37 @@ const TREE_KINDS = {
     for (let i = 0; i < 4; i++) p.ellipse((r() - 0.5) * 9, (r() - 0.5) * 9, 1, 1, 'leaf1');
   }
 };
-export const TREE_TYPES = Object.keys(TREE_KINDS), TREE_FRAMES = 3;
+export const TREE_TYPES = Object.keys(TREE_KINDS), TREE_LEANS = 3, TREE_RUSTLES = 3, TREE_FRAMES = TREE_LEANS * TREE_RUSTLES;
+// Leaf rustle: step 0 is the crown as drawn; steps 1 and 2 move a few leaf tips along the
+// edge (some drop back, some poke out) and catch the light in different places. The same
+// changes are used at every lean, so rustling and leaning combine smoothly.
+function rustle(g, kind, seed, step, cx){
+  if (!step) return;
+  const r = rng(seed * 13 + step * 977), glint = kind === 'birch' ? C.grass3 : C.leaf2, leaf = kind === 'pine' ? C.leaf0 : kind === 'birch' ? C.leaf2 : C.leaf1;
+  const edge = [], outside = [];
+  for (let y = 2; y < TILE_ART - 2; y++) for (let x = 2; x < TILE_ART - 2; x++){
+    const v = g.get(x, y), open = (a, b) => !g.get(a, b);
+    if (v && (open(x - 1, y) || open(x + 1, y) || open(x, y - 1) || open(x, y + 1))) edge.push([x, y]);
+    else if (!v && (g.get(x - 1, y) || g.get(x + 1, y) || g.get(x, y - 1) || g.get(x, y + 1))) outside.push([x, y]);
+  }
+  const pick = list => list[Math.floor(r() * list.length)];
+  for (let i = 0; i < 5; i++){ const [x, y] = pick(edge); g.set(x, y, 0); }
+  for (let i = 0; i < 5; i++){ const [x, y] = pick(outside); g.set(x, y, leaf); }
+  for (let i = 0; i < 4; i++){
+    const x = Math.round(cx + (r() - 0.5) * 10), y = Math.round(11.5 + (r() - 0.5) * 10);
+    if (g.get(x, y) && g.get(x, y) !== C.leaf0) g.set(x, y, glint);
+  }
+}
 function treeFrames(kind, seed){
-  return Array.from({ length: TREE_FRAMES }, (_, f) => {
-    const g = new Grid(TILE_ART, TILE_ART), p = painter(g, 0, [10.5 + f, 11.5]);
+  const out = [];
+  for (let lean = 0; lean < TREE_LEANS; lean++) for (let step = 0; step < TREE_RUSTLES; step++){
+    const g = new Grid(TILE_ART, TILE_ART), cx = 10.5 + lean, p = painter(g, 0, [cx, 11.5]);
     TREE_KINDS[kind](p, rng(seed));
-    // Leaf glints shift a little between frames, as leaves turn in the wind.
-    const shimmer = rng(seed * 7 + f * 131);
-    for (let i = 0; i < 3 && f; i++){
-      const x = Math.round(10.5 + f + (shimmer() - 0.5) * 9), y = Math.round(11.5 + (shimmer() - 0.5) * 9);
-      if (g.get(x, y) && g.get(x, y) !== C.leaf0) g.set(x, y, kind === 'birch' ? C.grass3 : C.leaf2);
-    }
+    rustle(g, kind, seed, step, cx);
     for (let y = 0; y < TILE_ART; y++) for (let x = 0; x < TILE_ART; x++) if (x === 0 || y === 0 || x === TILE_ART - 1 || y === TILE_ART - 1) g.set(x, y, 0);
-    return finish(g);
-  });
+    out.push(finish(g));
+  }
+  return out;
 }
 // variants[kind] = [[frame0, frame1, frame2], ...]
 function treeSet(){
@@ -479,11 +496,12 @@ export function build(){
     if (key === 'cliff'){ meta.pieces = CLIFF_KEYS; woodlands.cliff.pieces = CLIFF_KEYS; }
     sheets['woodlands_' + key] = { meta, rows: [tiles] };
   }
-  // Trees: per kind, variants of 3 sway frames. One sheet row per kind.
-  const trees = treeSet(), shadow = { drawnBy: 'engine', offset: [2, 2], elevation: 'prop' }, sway = { start: 0, frames: TREE_FRAMES, fps: 'set by the weather' };
-  woodlands.tree = { types: TREE_TYPES, animations: { sway }, shadow, variants: Object.fromEntries(TREE_TYPES.map(k => [k, trees[k].map(fr => fr.map(g => g.encode()))])) };
+  // Trees: per kind, variants of 9 frames (lean * 3 + rustle). One sheet row per kind.
+  const trees = treeSet(), shadow = { drawnBy: 'engine', offset: [2, 2], elevation: 'prop' };
+  const animations = { lean: { frames: TREE_LEANS, fps: 'set by the weather' }, rustle: { frames: TREE_RUSTLES, fps: 'set by the weather' }, frame: 'lean * 3 + rustle' };
+  woodlands.tree = { types: TREE_TYPES, animations, shadow, variants: Object.fromEntries(TREE_TYPES.map(k => [k, trees[k].map(fr => fr.map(g => g.encode()))])) };
   sheets.woodlands_tree = {
-    meta: { name: 'woodlands_tree', frameWidth: TILE_ART, frameHeight: TILE_ART, origin: [0, 0], rows: TREE_TYPES, columns: 'variant 1 frames 0-2, variant 2 frames 0-2', animations: { sway }, shadow },
+    meta: { name: 'woodlands_tree', frameWidth: TILE_ART, frameHeight: TILE_ART, origin: [0, 0], rows: TREE_TYPES, columns: 'variant 1 frames 0-8, variant 2 frames 0-8 (frame = lean * 3 + rustle)', animations, shadow },
     rows: TREE_TYPES.map(k => trees[k].flat())
   };
   const data = {

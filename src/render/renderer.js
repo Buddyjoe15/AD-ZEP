@@ -73,7 +73,7 @@
           g.drawImage(TC.chunk(cx, cy), cx * ct, cy * ct); chunks++;
         }
         g.imageSmoothingEnabled = true;
-        G.WoodlandsArt.drawTrees(g, S.grid, v, T, t);   // swaying pixel-art trees (Woodlands)
+        G.WoodlandsArt.drawTrees(g, S.grid, v, T, t, z);   // pixel-art trees moving in the wind (Woodlands)
       }
 
       // Resource nodes.

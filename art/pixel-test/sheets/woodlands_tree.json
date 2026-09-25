@@ -11,13 +11,17 @@
     "pine",
     "birch"
   ],
-  "columns": "variant 1 frames 0-2, variant 2 frames 0-2",
+  "columns": "variant 1 frames 0-8, variant 2 frames 0-8 (frame = lean * 3 + rustle)",
   "animations": {
-    "sway": {
-      "start": 0,
+    "lean": {
       "frames": 3,
       "fps": "set by the weather"
-    }
+    },
+    "rustle": {
+      "frames": 3,
+      "fps": "set by the weather"
+    },
+    "frame": "lean * 3 + rustle"
   },
   "shadow": {
     "drawnBy": "engine",
@@ -28,6 +32,6 @@
     "elevation": "prop"
   },
   "image": "woodlands_tree.png",
-  "sheetWidth": 144,
+  "sheetWidth": 432,
   "sheetHeight": 72
 }
