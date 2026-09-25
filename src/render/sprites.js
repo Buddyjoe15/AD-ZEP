@@ -5,8 +5,9 @@
 (function(){
   'use strict';
   const G = GW;
-  // Atlas cell: a 128×128 world-px box around the unit, stored at 2 px per world px.
-  const BOX = 128, RES = 2, CELL = BOX * RES, ATLAS_W = 2048, PER_ROW = ATLAS_W / CELL;
+  // Atlas cell: a 128×128 world-px box around the unit, stored at 4 px per world px so
+  // sprites stay sharp at maximum zoom on high-DPI screens.
+  const BOX = 128, RES = 4, CELL = BOX * RES, ATLAS_W = 4096, PER_ROW = ATLAS_W / CELL;
   const ORIGIN_X = 64, ORIGIN_Y = 76;   // unit position inside the box (tall art reaches up)
 
   G.SpriteAtlas = {
@@ -61,9 +62,10 @@
       const render = (moving, t) => {
         const idx = A.next++, row = Math.floor(idx / PER_ROW);
         if ((row + 1) * CELL > A.canvas.height){
-          // Grow the atlas, keeping what is already drawn.
+          // Grow the atlas by one row, keeping what is already drawn (rows are large at
+          // this resolution, so doubling would waste a lot of memory).
           const old = A.canvas, grown = document.createElement('canvas');
-          grown.width = ATLAS_W; grown.height = Math.min(8192, old.height * 2);
+          grown.width = ATLAS_W; grown.height = Math.min(8192, (row + 1) * CELL);
           const gg = grown.getContext('2d', { willReadFrequently: true });
           gg.drawImage(old, 0, 0);
           A.canvas = grown; A.g = gg;

@@ -5,15 +5,21 @@
   const G = GW;
   const TT = G.TT;
 
+  // Chunks are cached per resolution (canvas px per world px): 1 normally, TERRAIN_RES when
+  // zoomed in past 1:1. `used` is the cache size in 1× chunks (a res-2 chunk costs 4).
   G.TerrainCache = {
-    grid: null, chunks: new Map(), overview: null, overviewDirty: true,
-    reset(grid){ this.grid = grid; this.chunks.clear(); this.overview = null; this.overviewDirty = true; },
+    grid: null, chunks: new Map(), used: 0, overview: null, overviewDirty: true,
+    reset(grid){ this.grid = grid; this.chunks.clear(); this.used = 0; this.overview = null; this.overviewDirty = true; },
     sync(){ if (this.grid !== G.State.grid) this.reset(G.State.grid); },
+    drop(key){ const cv = this.chunks.get(key); if (cv){ this.used -= cv.res * cv.res; this.chunks.delete(key); } },
     invalidate(rect){
-      const ct = G.CONFIG.CHUNK_TILES;
-      if (!rect){ this.chunks.clear(); this.overviewDirty = true; return; }
+      const ct = G.CONFIG.CHUNK_TILES, R = G.CONFIG.TERRAIN_RES;
+      if (!rect){ this.chunks.clear(); this.used = 0; this.overviewDirty = true; return; }
       for (let cy = Math.floor(rect.y / ct); cy <= Math.floor((rect.y + rect.h) / ct); cy++)
-        for (let cx = Math.floor(rect.x / ct); cx <= Math.floor((rect.x + rect.w) / ct); cx++) this.chunks.delete(cx + ',' + cy);
+        for (let cx = Math.floor(rect.x / ct); cx <= Math.floor((rect.x + rect.w) / ct); cx++){
+          this.drop(cx + ',' + cy + ',1');
+          if (R !== 1) this.drop(cx + ',' + cy + ',' + R);
+        }
       this.overviewDirty = true;
     },
     getOverview(){
@@ -31,21 +37,26 @@
       this.overview = cv; this.overviewDirty = false;
       return cv;
     },
-    has(cx, cy){ return this.chunks.has(cx + ',' + cy); },
-    chunk(cx, cy){
+    has(cx, cy, res = 1){ return this.chunks.has(cx + ',' + cy + ',' + res); },
+    // Cached chunk without painting or touching the LRU order (fallback while a chunk at
+    // the wanted resolution is still queued).
+    peek(cx, cy, res = 1){ return this.chunks.get(cx + ',' + cy + ',' + res) || null; },
+    chunk(cx, cy, res = 1){
       this.sync();
-      const key = cx + ',' + cy;
+      const key = cx + ',' + cy + ',' + res;
       const hit = this.chunks.get(key);
       if (hit){ this.chunks.delete(key); this.chunks.set(key, hit); return hit; }   // LRU touch
-      const cv = this.paint(cx, cy);
-      this.chunks.set(key, cv);
-      while (this.chunks.size > G.CONFIG.CHUNK_CACHE_MAX) this.chunks.delete(this.chunks.keys().next().value);
+      const cv = this.paint(cx, cy, res);
+      this.chunks.set(key, cv); this.used += res * res;
+      while (this.used > G.CONFIG.CHUNK_CACHE_MAX && this.chunks.size > 1) this.drop(this.chunks.keys().next().value);
       return cv;
     },
-    paint(cx, cy){
+    // Paints in world px scaled by `res`, so the same art gains detail at higher res.
+    paint(cx, cy, res = 1){
       const C = G.CONFIG, T = C.TILE, ct = C.CHUNK_TILES, size = ct * T, grid = this.grid;
-      const cv = document.createElement('canvas'); cv.width = size; cv.height = size;
+      const cv = document.createElement('canvas'); cv.width = size * res; cv.height = size * res; cv.res = res;
       const g = cv.getContext('2d'), r = G.RNG(G.State.seed + cx * 13007 + cy * 9011);
+      g.scale(res, res);
       for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
         const gx = cx * ct + lx, gy = cy * ct + ly;
         if (gx >= grid.cols || gy >= grid.rows) continue;
