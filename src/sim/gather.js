@@ -62,7 +62,7 @@
       if (this.isMine(target)) mine = target;
       else if (this.isDeposit(target)){
         mine = this.mineOn(target);
-        if (!mine){ G.notify('Build a Mine Building on this ' + target.name + ' first'); return false; }
+        if (!mine){ G.notify('Build a ' + (G.Defs.buildables.get(this.def(target).building)?.name || 'Resource Extractor') + ' on this ' + target.name + ' first'); return false; }
       }
       if (mine){
         G.Units.clearOrders(u);

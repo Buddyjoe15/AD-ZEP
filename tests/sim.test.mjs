@@ -821,7 +821,10 @@ test('power: the Warp Drive gives 25, Solar Arrays scale with the Earth, and a s
   const fab = S.buildings.find(b => b.type === 'fabricator'), proc = S.buildings.find(b => b.type === 'ore_processor');
   const mines = S.buildings.filter(b => b.type === 'mine_building' && b.team === 'blue');
   assert.equal(P.draw(fab), 0); assert.equal(P.draw(proc), 0);
-  assert.equal(P.grid.supply, 33);
+  const wind = S.buildings.find(b => b.type === 'wind_turbine');
+  assert.ok(wind && wind.gy + wind.h <= ship.gy, 'wind turbine north of the ship');
+  assert.equal(P.output(wind), 6, 'steady breeze on the first Earth');
+  assert.equal(P.grid.supply, 39);
   assert.equal(P.grid.demand, 5 * mines.filter(b => G.Gather.extracting(b)).length);
   // Producing draws power.
   S.resources.metal = 10000;
@@ -829,9 +832,9 @@ test('power: the Warp Drive gives 25, Solar Arrays scale with the Earth, and a s
   assert.ok(G.Fabrication.enqueue(proc, 'steel'));
   G.Sim.run(0.1);
   assert.equal(P.draw(fab), 10); assert.equal(P.draw(proc), 15);
-  assert.equal(P.grid.ratio, 1, '33 supply covers 30 demand');
+  assert.equal(P.grid.ratio, 1, '39 supply covers 30 demand');
   // Lose the Solar Array and add demand: everything slows to supply / demand.
-  S.buildings.splice(S.buildings.indexOf(solar), 1);
+  S.buildings.splice(S.buildings.indexOf(solar), 1); S.buildings.splice(S.buildings.indexOf(wind), 1);
   const extra = G.Buildings.add('fabricator', ship.gx + 12, ship.gy + 10);
   assert.ok(G.Fabrication.enqueue(extra, 'survey_drone'));
   G.Sim.run(0.1);
@@ -856,15 +859,42 @@ test('power: the Warp Drive gives 25, Solar Arrays scale with the Earth, and a s
   assert.equal(P.grid.demand, demand);
 });
 
-test('power: solar efficiency follows each Earth\'s climate', () => {
+test('power: solar and wind output follow each Earth\'s climate', () => {
   const G = newGame();
-  const S = G.State, P = G.Power, solar = S.buildings.find(b => b.type === 'solar_array');
-  const expect = { temperate: 8, frozen: 4.8, silent: 10, irradiated: 3.2 };
+  const S = G.State, P = G.Power, solar = S.buildings.find(b => b.type === 'solar_array'), wind = S.buildings.find(b => b.type === 'wind_turbine');
+  assert.equal(wind.w, 2); assert.equal(wind.h, 2);
+  const expect = { temperate: [8, 6], frozen: [4.8, 10.8], silent: [10, 0.3], irradiated: [3.2, 7.8] };
   G.Defs.climates.all().forEach((c, i) => {
     S.expedition.climate = i;
-    assert.ok(Math.abs(P.output(solar) - expect[c.key]) < 1e-9, c.key + ': ' + P.output(solar));
+    assert.ok(Math.abs(P.output(solar) - expect[c.key][0]) < 1e-9, c.key + ' solar: ' + P.output(solar));
+    assert.ok(Math.abs(P.output(wind) - expect[c.key][1]) < 1e-9, c.key + ' wind: ' + P.output(wind));
   });
+  // Storm worlds make wind worth building; stagnant ones make it nearly worthless.
+  assert.ok(expect.frozen[1] > expect.frozen[0] && expect.silent[1] < 1);
   // Pausing or losing the array removes its output.
   solar.hp = 0;
   assert.equal(P.output(solar), 0);
+});
+
+test('the Resource Extractor mines whatever deposit it stands on', () => {
+  const G = newGame();
+  const S = G.State, d = G.Defs.buildables.get('mine_building');
+  assert.equal(d.name, 'Resource Extractor');
+  assert.equal(d.w, 3); assert.equal(d.h, 3);
+  S.resources.metal = 10000;
+  const made = {};
+  for (const type of ['metal_mine', 'copper_mine', 'uranium_mine']){
+    const n = S.resourceNodes.find(n => n.type === type && !G.Gather.mineOn(n) && !S.buildings.some(b => b.nodeId === n.id));
+    assert.ok(G.Buildings.canPlaceKey('mine_building', n.gx - 1, n.gy - 1), type);
+    const b = G.Buildings.add('mine_building', n.gx - 1, n.gy - 1);
+    assert.equal(b.nodeId, n.id, 'claims the deposit underneath');
+    made[type] = b;
+  }
+  G.Sim.run(10);
+  assert.ok(made.metal_mine.stock.metal > 15 && !made.metal_mine.stock.copper);
+  assert.ok(made.copper_mine.stock.copper > 15 && !made.copper_mine.stock.metal);
+  assert.ok(made.uranium_mine.stock.uranium > 7 && made.uranium_mine.stock.uranium < made.copper_mine.stock.copper, 'uranium is slower');
+  // It will not stand anywhere but centred on a deposit.
+  const sh = G.Units.ship();
+  assert.equal(G.Buildings.canPlaceKey('mine_building', sh.gx + 10, sh.gy + 12), false);
 });

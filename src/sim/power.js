@@ -6,9 +6,9 @@
 
    Definitions carry `power`:
      { supply: 25 }                       – constant output (the ship)
-     { supply: 8, solar: true }           – output × the current Earth's solar efficiency
+     { supply: 8, scale: 'solar' }        – output × the current Earth's `solar` (or `wind`)
      { demand: 10, when: 'producing' }    – draws only while its production queue runs
-     { demand: 5, when: 'extracting' }    – draws only while a Mine Building is extracting
+     { demand: 5, when: 'extracting' }    – draws only while a Resource Extractor is extracting
      { demand: 2 }                        – draws all the time
    Everything here is recomputed from saved state every tick, so nothing is saved. */
 (function(){
@@ -19,17 +19,18 @@
   const defOf = o => G.Defs.buildables.get(o.type) || G.Defs.units.get(o.type);
 
   G.Power = {
-    grid: { supply: 0, demand: 0, ratio: 1, solar: 1 },   // blue team, rebuilt each tick
-    // Solar efficiency of the current Earth (1 = full sun), from its climate.
-    solarEfficiency(){
+    grid: { supply: 0, demand: 0, ratio: 1 },   // blue team, rebuilt each tick
+    // How well `kind` ('solar' or 'wind') works on the current Earth (1 = normal), from its climate.
+    efficiency(kind){
       const E = G.State.expedition;
-      return E && G.Expedition ? G.Expedition.climate().solar ?? 1 : 1;
+      return E && G.Expedition ? G.Expedition.climate()[kind] ?? 1 : 1;
     },
+    solarEfficiency(){ return this.efficiency('solar'); },
     // Current output of one producer.
     output(o){
       const p = defOf(o)?.power;
       if (!p || !p.supply || o.hp <= 0) return 0;
-      return p.solar ? p.supply * this.solarEfficiency() : p.supply;
+      return p.scale ? p.supply * this.efficiency(p.scale) : p.supply;
     },
     // Whether a consumer is drawing power right now.
     drawing(o){
@@ -47,7 +48,7 @@
       for (const u of S.units) if (u.team === team){ supply += this.output(u); demand += this.draw(u); }
       for (const b of S.buildings) if (b.team === team){ supply += this.output(b); demand += this.draw(b); }
       supply = G.round6(supply);
-      return { supply, demand, ratio: demand > 0 ? Math.min(1, supply / demand) : 1, solar: this.solarEfficiency() };
+      return { supply, demand, ratio: demand > 0 ? Math.min(1, supply / demand) : 1 };
     },
     // Speed factor for a consumer this tick (1 for anything that doesn't use power or
     // isn't on the player's grid).

@@ -41,19 +41,25 @@ GW.Defs.buildables.defineAll({
   },
   solar_array: {
     name: 'Solar Array', w: 3, h: 2, hp: 300, buildTime: 6, cost: { metal: 60 }, symbol: 'SOL', color: '#e8c547',
-    power: { supply: 8, solar: true },
+    power: { supply: 8, scale: 'solar' },
     description: 'Basic renewable power generation. Extremely cheap to operate but dependent on sunlight: makes up to 8 power, scaled by this Earth\'s solar efficiency (atmosphere, weather, orbit and environment).'
+  },
+  wind_turbine: {
+    name: 'Wind Turbine', w: 2, h: 2, hp: 350, buildTime: 8, cost: { metal: 90 }, symbol: 'WND', color: '#a9d8e8',
+    power: { supply: 6, scale: 'wind' },
+    description: 'Generates energy from atmospheric wind: 6 power in a steady breeze, scaled by this Earth\'s wind. Extremely useful on storm-heavy worlds, nearly worthless where the atmosphere is thin or stagnant.'
   },
   ore_processor: {
     name: 'Ore Processor', w: 3, h: 3, hp: 1200, buildTime: 15, cost: { metal: 250 }, symbol: 'ORE', color: '#d9a066',
     fabricator: { queueMax: 10, recipes: ['steel', 'electronics', 'fuel_rods'] }, power: { demand: 15, when: 'producing' },
     description: 'Turns raw material into usable construction resources. Choose Steel (2 metal), Electronics (6 copper) or Fuel Rods (6 uranium); inputs come from the stockpile when queued and the product goes back to it. Draws 15 power only while processing.'
   },
+  // Key kept as mine_building so saves and deposits keep working.
   mine_building: {
-    name: 'Mine Building', w: 3, h: 3, hp: 1200, buildTime: 15, cost: { metal: 150 }, symbol: 'MINE', color: '#b8a16a',
+    name: 'Resource Extractor', w: 3, h: 3, hp: 1200, buildTime: 15, cost: { metal: 150 }, symbol: 'EXT', color: '#b8a16a',
     placeOnNode: 'deposit',
     behaviors: [{ type: 'extractor', stockCap: 300 }], power: { demand: 5, when: 'extracting' },
-    description: 'Built centred over a mine deposit. Slowly extracts its resource into a 300-unit stockpile that Utility Spiders haul to the ship. Draws 5 power while extracting.'
+    description: 'Primary automated mining structure. Placed over any resource deposit, it switches its mining system to the material underneath (metal, copper, uranium…) and extracts it into a 300-unit stockpile that Utility Spiders haul to the ship. Draws 5 power while extracting.'
   },
   hostile_fabricator: {
     name: 'Hostile Fabricator', w: 2, h: 2, hp: 1500, buildTime: 10, cost: {}, symbol: 'HF', color: '#e0685f',

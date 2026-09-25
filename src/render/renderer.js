@@ -136,12 +136,16 @@
         g.fillStyle = g.strokeStyle; g.font = `${11 / z}px sans-serif`; g.textAlign = 'center'; g.fillText(p.kind, p.x, p.y - 30);
       }
 
+      // Fog of war over the map and structures; hidden enemies are not drawn at all.
+      const Fog = G.Fog;
+      if (Fog.enabled){ Fog.update(); Fog.draw(g); }
+
       // Units. With WebGL2 they are drawn by the GPU on their own canvas (one instanced call);
       // the ship stays on this canvas and everything that must sit above units (selection,
       // routes, beams, gunfire, previews) goes on a 2D overlay canvas. Without WebGL2 the
       // same content is drawn here with Canvas 2D.
       const visible = [];
-      for (const u of S.units) if (inView(u.x, u.y, u.isShip ? 340 : 80)) visible.push(u);
+      for (const u of S.units) if (inView(u.x, u.y, u.isShip ? 340 : 80) && (u.team === 'blue' || Fog.visibleAt(u.x, u.y))) visible.push(u);
       const gpu = G.GPU.ok, sprites = [], bars = [];
       for (const u of visible){
         if (u.isShip) G.Visuals.drawUnit(g, u, z, t);
@@ -285,7 +289,7 @@
         g.lineWidth = 2 / z;
         for (const [team, col] of [['blue', '#b9e2ff'], ['red', '#ffb08b']]){
           g.strokeStyle = col; g.beginPath();
-          for (const s of S.shots) if ((s.team === 'blue') === (team === 'blue') && inView(s.x1, s.y1, 700)){ g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); }
+          for (const s of S.shots) if ((s.team === 'blue') === (team === 'blue') && inView(s.x1, s.y1, 700) && (s.team === 'blue' || G.Fog.visibleAt(s.x1, s.y1))){ g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); }
           g.stroke();
         }
       }
@@ -316,10 +320,11 @@
       for (const n of S.resourceNodes) if (n.remaining > 0){ g.fillStyle = G.Gather.isDeposit(n) ? G.Gather.def(n).ore || '#c9d4dc' : '#d0a65b'; g.fillRect(n.x * sx - 1, n.y * sy - 1, 3, 3); }
       for (const b of S.buildings){ g.fillStyle = '#adb5ad'; g.fillRect(b.x * sx - 1, b.y * sy - 1, 3, 3); }
       for (const s of S.constructionSites){ g.fillStyle = '#d4b96b'; g.fillRect(s.x * sx - 1, s.y * sy - 1, 3, 3); }
+      if (G.Fog.enabled && G.Fog.canvas){ G.Fog.update(); g.imageSmoothingEnabled = true; g.drawImage(G.Fog.canvas, 0, 0, W, H); }
       // Ordinary units batched per team; ship and Vance on top.
       const byTeam = new Map();
       for (const u of S.units){
-        if (u.isShip || u.isHero) continue;
+        if (u.isShip || u.isHero || !G.Fog.canSee(u)) continue;
         const col = C.COLORS[u.team] || '#ccc';
         let list = byTeam.get(col);
         if (!list) byTeam.set(col, list = []);

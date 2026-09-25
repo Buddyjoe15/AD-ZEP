@@ -583,8 +583,9 @@ test('Ore Processor window lists its three products and queues them; the top bar
     await page.waitForFunction(() => GW.Economy.get('steel') >= 1 && GW.Economy.get('electronics') >= 1, null, { timeout: 8000 });
     await page.evaluate(() => GW.Cheats.set('instantBuild', false));
     // Power pill: supply / demand, red while the grid is short.
-    assert.match(await page.textContent('#economyBar .resource-pill.power'), /^ϟ\s*33\/\d+$/);
-    await page.evaluate(() => { const G = GW, sh = G.Units.ship(); for (let i = 0; i < 3; i++){ const f = G.Buildings.add('fabricator', sh.gx + 10 + i * 3, sh.gy + 12); G.State.resources.metal += 200; G.Fabrication.enqueue(f, 'survey_drone'); } });
+    const grid = await page.evaluate(() => GW.Power.grid);
+    assert.equal((await page.textContent('#economyBar .resource-pill.power')).replace(/\s/g, ''), `ϟ${Math.round(grid.supply)}/${Math.round(grid.demand)}`);
+    await page.evaluate(() => { const G = GW, sh = G.Units.ship(); for (let i = 0; i < 3; i++){ const f = G.Buildings.add('fabricator', sh.gx + 10 + i * 3, sh.gy + 12); G.State.resources.metal += 200; G.Fabrication.enqueue(f, 'survey_drone'); } for (let i = 0; i < 2; i++){ const f = G.Buildings.add('fabricator', sh.gx + 10 + i * 3, sh.gy + 15); G.State.resources.metal += 200; G.Fabrication.enqueue(f, 'survey_drone'); } });
     await page.waitForSelector('#economyBar .resource-pill.power.short');
     // The pills never reach the centred DEBUG button, even with all six resources.
     await page.evaluate(() => Object.assign(GW.State.resources, { uranium: 5, steel: 5, electronics: 5, fuel_rods: 5 }));
@@ -592,6 +593,44 @@ test('Ore Processor window lists its three products and queues them; the top bar
     const [bar, dbg, squad] = await page.evaluate(() => ['economyBar', 'dbgBtn', 'squadBar'].map(id => document.getElementById(id).getBoundingClientRect().toJSON()));
     assert.ok(bar.right <= dbg.left, `pills end at ${bar.right}, DEBUG starts at ${dbg.left}`);
     assert.ok(squad.top >= bar.bottom, 'squad bar sits below the pills');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('fog of war hides enemies outside the crew\'s sight; the Debug panel turns it off and inspects any unit', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    const r = await page.evaluate(() => {
+      const G = GW, h = G.Units.hero();
+      const near = G.Units.spawn('hostile_machine', h.x + 250, h.y), far = G.Units.spawn('hostile_machine', h.x + 2400, h.y + 600);
+      near.speed = far.speed = 0; G.rebuildSpatial(); G.Fog.update(true);
+      G.centerCamera(far.x, far.y, 0.6); G.Renderer.draw();
+      const p = G.screenFromWorld(far.x, far.y);
+      return { on: G.Fog.enabled, near: G.Fog.canSee(near), far: G.Fog.canSee(far), farId: far.id, visible: G.State.metrics.visible, pickFar: !!G.Input.unitAt(far.x, far.y, true), p };
+    });
+    assert.ok(r.on, 'fog is on by default');
+    assert.ok(r.near && !r.far, 'near enemy seen, far enemy hidden');
+    assert.equal(r.pickFar, false, 'hidden enemies cannot be clicked');
+    assert.equal(r.visible, 0, 'the hidden enemy is not drawn');
+    await page.screenshot({ path: path.join(OUT, 'fog.png') });
+    // A unit walking over reveals it, and the area stays explored (dimmed) afterwards.
+    assert.ok(await page.evaluate(id => { const G = GW, f = G.Units.alive(id), s = G.State.units.find(u => u.type === 'survey_drone'); s.x = f.x - 200; s.y = f.y; G.Fog.update(true); const seen = G.Fog.canSee(f); s.x = G.Units.hero().x; s.y = G.Units.hero().y; G.Fog.update(true); return seen && !G.Fog.canSee(f) && G.Fog.seen[Math.floor(f.y / 48) * G.Fog.cols + Math.floor(f.x / 48)] === 1; }, r.farId));
+    // Debug: the Units list counts both teams, the inspector sees through fog, fog turns off.
+    await page.click('#dbgBtn');
+    assert.match(await page.textContent('#dbgUnits'), /red · 2[\s\S]*Hostile Autonomous Machine/i);
+    await page.click('#dbgInspect');
+    await page.mouse.click(r.p.x, r.p.y);
+    await page.waitForSelector('#dbgTip');
+    const tip = await page.textContent('#dbgTip');
+    assert.match(tip, /Hostile Autonomous Machine/); assert.match(tip, new RegExp('#' + r.farId)); assert.match(tip, /Fog\s*hidden/);
+    await page.click('#dbgInspect');
+    await page.click('#dbgFog');
+    assert.equal(await page.evaluate(id => { GW.Renderer.draw(); return !GW.Fog.enabled && GW.Fog.canSee(GW.Units.alive(id)) && GW.State.metrics.visible > 0; }, r.farId), true, 'fog off shows everything');
+    await page.screenshot({ path: path.join(OUT, 'fog-off.png') });
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

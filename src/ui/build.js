@@ -22,7 +22,7 @@
     choose(key){
       if (!this.active() || !G.Defs.buildables.has(key)) return false;
       this.mode.key = key;
-      G.UI.toast(G.Defs.buildables.get(key).placeOnNode === 'deposit' ? 'Tap a mine deposit: the building centres on it' : 'Tap a grid cell or hold and drag to refine placement');
+      G.UI.toast(G.Defs.buildables.get(key).placeOnNode === 'deposit' ? 'Tap a resource deposit: the extractor centres on it' : 'Tap a grid cell or hold and drag to refine placement');
       this.render();
       return true;
     },

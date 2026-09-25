@@ -85,7 +85,7 @@
     }),
     climates: new Registry('climate', d => {
       need(d, 'Climate', ['name', 'air']);
-      return { hazard: 0, hostiles: true, solar: 1, solarNote: '', ...d };
+      return { hazard: 0, hostiles: true, solar: 1, solarNote: '', wind: 1, windNote: '', ...d };
     })
   };
 
@@ -109,7 +109,7 @@
     for (const b of D.buildables.all()) if (D.units.has(b.key)) problems.push(`buildable ${b.key}: key also used by a unit`);
     for (const d of [...D.units.all(), ...D.buildables.all()]){
       const p = d.power;
-      if (p && !((p.supply > 0) !== (p.demand > 0) && [undefined, 'producing', 'extracting'].includes(p.when))) problems.push(`${d.key}: power needs supply or demand (and a known 'when')`);
+      if (p && !((p.supply > 0) !== (p.demand > 0) && [undefined, 'producing', 'extracting'].includes(p.when) && [undefined, 'solar', 'wind'].includes(p.scale))) problems.push(`${d.key}: power needs supply or demand (and a known 'when' / 'scale')`);
       if (p && p.when === 'producing' && !d.fabricator) problems.push(`${d.key}: power.when 'producing' needs a fabricator`);
     }
     for (const n of D.nodes.all()){

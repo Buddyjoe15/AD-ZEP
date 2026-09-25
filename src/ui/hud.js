@@ -243,7 +243,7 @@
       else if (u.command === 'patrol') s = 'Patrolling';
       else if (u.command === 'build') s = 'Constructing';
       else if (u.command === 'gather'){
-        const where = u.mineId ? 'Mine Building' : (G.Gather.node(u.nodeId)?.name || 'salvage');
+        const where = u.mineId ? 'Resource Extractor' : (G.Gather.node(u.nodeId)?.name || 'salvage');
         s = ({ toNode: 'Heading to ', collecting: 'Collecting at ', toMine: 'Heading to ', loading: 'Loading at ', waiting: 'Waiting for ore at ', return: 'Hauling to ship from ' }[u.haulState] || 'Working ') + esc(where);
       } else if (u.path.length) s = 'Moving';
       return `<span class="muted">${s}</span>`;
