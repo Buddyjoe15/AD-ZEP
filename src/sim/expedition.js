@@ -307,8 +307,9 @@
 
   G.Events.on('cargo:delivered', ({ amount }) => { const E = G.State.expedition; if (E) E.progress.delivered = G.round6(E.progress.delivered + amount); });
   G.Events.on('construction:completed', () => { const E = G.State.expedition; if (E){ E.built++; E.progress.built++; } });
+  // Units deployed go in the log; processing batches (no unit) are too frequent to log.
   G.Events.on('fabrication:completed', ({ unit, owner }) => {
-    if (G.State.expedition) G.Expedition.log('ARIA: ' + unit.name + ' deployed' + (owner.isShip ? '.' : ' from Fabricator.'));
+    if (unit && G.State.expedition) G.Expedition.log('ARIA: ' + unit.name + ' deployed' + (owner.isShip ? '.' : ' from Fabricator.'));
   });
 
   G.Behaviors.register('studySignals', {});   // read by studySignals() above

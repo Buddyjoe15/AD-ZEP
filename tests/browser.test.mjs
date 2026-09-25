@@ -577,6 +577,11 @@ test('Ore Processor window lists its three products and queues them; the top bar
     assert.equal(await page.evaluate(() => GW.State.buildings.find(b => b.type === 'ore_processor').fabQueue.length), 2);
     assert.equal(await page.$$eval('#economyBar .resource-pill', els => els.length), 2, 'metal and copper');
     await page.screenshot({ path: path.join(OUT, 'ore-processor.png') });
+    // Finished batches reach the stockpile without errors (regression: the expedition log
+    // expected every finished job to be a unit).
+    await page.evaluate(() => GW.Cheats.set('instantBuild', true));
+    await page.waitForFunction(() => GW.Economy.get('steel') >= 1 && GW.Economy.get('electronics') >= 1, null, { timeout: 8000 });
+    await page.evaluate(() => GW.Cheats.set('instantBuild', false));
     // The pills never reach the centred DEBUG button, even with all six resources.
     await page.evaluate(() => Object.assign(GW.State.resources, { uranium: 5, steel: 5, electronics: 5, fuel_rods: 5 }));
     await page.waitForTimeout(200);
