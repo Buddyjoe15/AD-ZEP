@@ -62,18 +62,22 @@
       const TC = G.TerrainCache, ct = C.CHUNK_TILES * T;
       const cx0 = Math.max(0, Math.floor(v.x0 / ct)), cy0 = Math.max(0, Math.floor(v.y0 / ct));
       const cx1 = Math.min(Math.ceil(C.WORLD_W / ct) - 1, Math.floor(v.x1 / ct)), cy1 = Math.min(Math.ceil(C.WORLD_H / ct) - 1, Math.floor(v.y1 / ct));
-      const far = z < C.LOD_ZOOM || (cx1 - cx0 + 1) * (cy1 - cy0 + 1) > C.CHUNK_CACHE_MAX;
+      // Full-resolution chunks up close, lower-resolution chunks at middle zoom (or when the
+      // view holds more chunks than the full cache), and only the overview image when far.
+      const count = (cx1 - cx0 + 1) * (cy1 - cy0 + 1), near = z >= C.LOD_ZOOM && count <= C.CHUNK_CACHE_MAX;
+      const far = !near && (z < C.FAR_CHUNK_ZOOM || count > C.FAR_CHUNK_CACHE_MAX), low = !near && !far;
       g.imageSmoothingEnabled = false; g.drawImage(TC.getOverview(), 0, 0, C.WORLD_W, C.WORLD_H); g.imageSmoothingEnabled = true;
       let chunks = 0;
       if (!far){
         g.imageSmoothingEnabled = !(G.PixelArt.enabled && z * this.dpr >= 1);   // pixel terrain stays crisp up close
         let built = 0;
         for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++){
-          if (!TC.has(cx, cy)){ if (built >= C.CHUNKS_BUILT_PER_FRAME) continue; built++; }
-          g.drawImage(TC.chunk(cx, cy), cx * ct, cy * ct); chunks++;
+          if (!TC.has(cx, cy, low)){ if (built >= C.CHUNKS_BUILT_PER_FRAME) continue; built++; }
+          g.drawImage(TC.chunk(cx, cy, low), cx * ct, cy * ct, ct, ct); chunks++;
         }
         g.imageSmoothingEnabled = true;
-        G.WoodlandsArt.drawTrees(g, S.grid, v, T, t, z);   // pixel-art trees moving in the wind (Woodlands)
+        // Pixel-art trees moving in the wind (Woodlands); lower-resolution chunks have them drawn in.
+        if (near) G.WoodlandsArt.drawTrees(g, S.grid, v, T, t, z);
       }
 
       // Resource nodes.
@@ -172,7 +176,7 @@
         const x = Math.min(box.x0, box.x1), y = Math.min(box.y0, box.y1), w = Math.abs(box.x1 - box.x0), h = Math.abs(box.y1 - box.y0);
         o.fillStyle = 'rgba(80,170,255,.12)'; o.fillRect(x, y, w, h); o.strokeStyle = '#7dc0ff'; o.lineWidth = 1; o.strokeRect(x + 0.5, y + 0.5, w, h);
       }
-      Object.assign(S.metrics, { lod: far ? 'overview' : 'detail', cached: TC.chunks.size, visible: visible.length, chunks, drawMs: now() - t0 });
+      Object.assign(S.metrics, { lod: far ? 'overview' : low ? 'detail (low res)' : 'detail', cached: TC.chunks.size + TC.farChunks.size, visible: visible.length, chunks, drawMs: now() - t0 });
       if (now() - this.minimapAt > 1000 / C.MINIMAP_HZ){ this.minimapAt = now(); this.drawMinimap(); }
       else this.drawMinimapCamera();
     },

@@ -40,6 +40,7 @@
 #dbgTip div { display: flex; gap: 6px; }
 #dbgTip span { color: #9a978a; min-width: 68px; }
 #dbgTip p { margin: 5px 0 0; color: #c9c5b6; }
+#dbgTip.hover { pointer-events: none; }
 @media (max-width: 700px) {
   #dbgBtn { left: 50%; transform: translateX(-50%); font-size: 9px; min-height: 24px; padding: 2px 7px; }
 }

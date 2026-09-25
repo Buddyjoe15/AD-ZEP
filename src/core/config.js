@@ -10,6 +10,9 @@
 
     // Rendering
     CHUNK_TILES: 16, CHUNK_CACHE_MAX: 64, CHUNKS_BUILT_PER_FRAME: 2,
+    // Between LOD_ZOOM and FAR_CHUNK_ZOOM (1.5× further out) terrain uses lower-resolution
+    // chunks (FAR_CHUNK_SCALE of full size, trees drawn in at rest) before the overview image.
+    FAR_CHUNK_ZOOM: 0.20, FAR_CHUNK_SCALE: 1 / 3, FAR_CHUNK_CACHE_MAX: 176,
     LOD_ZOOM: 0.30, UNIT_LOD_ZOOM: 0.45, ZOOM_MIN: 0.055, ZOOM_MAX: 2.2, MINIMAP_HZ: 8,
     COLORS: { blue: '#49a4ff', red: '#ef5b55', neutral: '#d4c46c' },
 

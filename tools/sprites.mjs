@@ -326,49 +326,88 @@ function shoreTile(mask){
   }
   return g;
 }
-// Cliffs, one tile tall. A south drop shows the whole rock face; a drop on another side
-// shows the grass top with a rock rim on that side; a corner drop a rounded rim.
+// Cliffs, one tile tall. A south drop shows the whole rock face: a grassy lip with tufts
+// hanging over, then irregular stone blocks (lit on their top-left edges, shaded bottom-right,
+// darker further down), cracks, moss and loose stones at the foot. A drop on another side
+// shows the grass top with a ragged rock rim on that side; a corner drop a rounded rim.
+// Every block band has a joint on column 0, and rims wobble with a 24 px period, so pieces
+// line up with their neighbours.
+const RIM = Array.from({ length: 24 }, (_, k) => 3 + Math.round(Math.sin(k / 24 * Math.PI * 4) * 0.8 + Math.sin(k / 24 * Math.PI * 6 + 1) * 0.6));
+function cliffFace(variant){
+  const N = 24, g = new Grid(N, N), r = rng(6100 + variant * 53), set = (x, y, c) => g.set(x, y, C[c]);
+  // Grassy lip.
+  for (let y = 0; y < 4; y++) for (let x = 0; x < N; x++) set(x, y, y === 3 ? 'grass0' : (x * 7 + y * 5 + variant * 3) % 11 === 0 ? 'grass3' : (x + y * 3) % 5 === 0 ? 'grass2' : 'grass1');
+  // Stone blocks in bands; deeper bands are darker.
+  const bands = [[4, 8], [9, 13], [14, 17], [18, 20]], tones = [['dust4', 'dust3', 'dust2'], ['dust3', 'dust2', 'dust1'], ['dust3', 'dust2', 'dust1'], ['dust2', 'dust1', 'dust0']];
+  bands.forEach(([y0, y1], b) => {
+    let x = b % 2 ? -Math.floor(2 + r() * 3) : 0;
+    while (x < N){
+      const w = 4 + Math.floor(r() * 5), x1 = Math.min(N - 1, x + w - 1), [hi, mid, lo] = tones[b];
+      for (let y = y0; y <= y1; y++) for (let xx = Math.max(0, x); xx <= x1; xx++){
+        let c = mid;
+        if (y === y0 || xx === Math.max(0, x) + 1) c = hi;           // lit top and left edges
+        if (y === y1 || xx === x1) c = lo;                            // shaded bottom and right edges
+        if (xx === Math.max(0, x) && x > 0) c = 'char1';              // joint
+        set(xx, y, c);
+      }
+      if (r() < 0.35){ const px = Math.max(0, x) + 1 + Math.floor(r() * Math.max(1, w - 2)), py = y0 + 1 + Math.floor(r() * Math.max(1, y1 - y0 - 1)); set(px, py, hi); set(px + 1, py, lo); }
+      x = x1 + 1;
+    }
+    for (let y = y0; y <= y1; y++) set(0, y, 'char1');               // joint on column 0 in every band
+  });
+  // Cracks running down a block or two.
+  for (let i = 0; i < 2 + (variant % 2); i++){
+    let x = 3 + Math.floor(r() * 18), y = 5 + Math.floor(r() * 6);
+    for (let k = 0; k < 5 + Math.floor(r() * 5) && y < 21; k++){ set(x, y, 'char0'); if (g.get(x + 1, y) && r() < 0.5) set(x + 1, y, 'dust1'); y++; if (r() < 0.35) x = Math.max(2, Math.min(21, x + (r() < 0.5 ? -1 : 1))); }
+  }
+  // Moss on a few ledges.
+  for (let i = 0; i < 2 + variant % 3; i++){ const x = 2 + Math.floor(r() * 19), y = [4, 9, 14][Math.floor(r() * 3)]; set(x, y, 'leaf1'); set(x + 1, y, 'grass0'); if (r() < 0.5) set(x, y + 1, 'leaf0'); }
+  // Grass tufts hanging over the lip.
+  for (let i = 0; i < 3; i++){ const x = 1 + Math.floor(r() * 21), len = 1 + Math.floor(r() * 3); for (let k = 0; k < len; k++) set(x, 4 + k, k === len - 1 ? 'grass0' : 'grass2'); set(x + 1, 4 + len, 'char1'); }
+  // Foot: shadow line and loose stones.
+  for (let x = 0; x < N; x++){ set(x, 21, (x + variant) % 4 ? 'char1' : 'dust0'); set(x, 22, 'char0'); set(x, 23, (x * 5 + variant) % 7 === 0 ? 'char1' : 'char0'); }
+  for (let i = 0; i < 4; i++){ const x = Math.floor(r() * 23), y = 21 + Math.floor(r() * 2); set(x, y, 'dust3'); set(x + 1, y, 'dust1'); if (y < 22) set(x, y + 1, 'dust2'); }
+  return g;
+}
 function cliffTile(key, variant = 0){
-  const N = 24, r = rng(6100 + variant * 31 + key.length * 7), corner = key.startsWith('c') ? key.slice(1) : null;
+  const N = 24, corner = key.startsWith('c') ? key.slice(1) : null;
   if (!corner && key.startsWith('S')){
-    const g = new Grid(N, N);
-    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++){
-      let c;
-      if (y < 4) c = (x * 7 + y * 3 + variant) % 9 === 0 ? 'grass2' : y === 3 ? 'grass0' : 'grass1';
-      else if (y === 4) c = 'dust5';
-      else if (y >= 22) c = y === 22 ? 'char1' : 'char0';
-      else c = [5, 6, 11, 12, 17].includes(y) ? 'dust3' : [8, 14, 19].includes(y) ? 'dust1' : 'dust2';
-      g.set(x, y, C[c]);
-    }
-    // Cracks and ledges inside the face (not on the left/right edge columns).
-    for (let i = 0; i < 3 + variant; i++){
-      let x = 3 + Math.floor(r() * 18), y = 6 + Math.floor(r() * 4);
-      for (let k = 0; k < 6 + Math.floor(r() * 6) && y < 21; k++){ g.set(x, y, C.char1); y++; if (r() < 0.3) x += r() < 0.5 ? -1 : 1; x = Math.max(2, Math.min(21, x)); }
-    }
-    for (let i = 0; i < 4; i++){ const x = 2 + Math.floor(r() * 19), y = 7 + Math.floor(r() * 12); g.set(x, y, C.dust4); g.set(x + 1, y, C.dust4); g.set(x, y + 1, C.dust1); }
-    const rim = (x0, x1, hi) => { for (let y = 4; y < 22; y++) for (let x = x0; x <= x1; x++) g.set(x, y, C[x === hi ? 'dust4' : 'dust1']); };
-    if (key.includes('E')) rim(N - 3, N - 1, N - 3);
-    if (key.includes('W')) rim(0, 2, 2);
+    const g = cliffFace(variant);
+    // The face turning away at an east or west end.
+    const side = (xs, lit) => { for (let y = 4; y < 21; y++) xs.forEach((x, k) => g.set(x, y, C[k === lit ? 'dust4' : k === 0 ? 'char1' : 'dust1'])); };
+    if (key.includes('E')) side([N - 1, N - 2, N - 3], 2);
+    if (key.includes('W')) side([0, 1, 2], 2);
     return g;
   }
-  const g = grassTile(21);
+  const g = grassTile(21), r = rng(6200 + key.length * 13);
+  // A ragged rim: dark drop edge, then rock shading inwards, a lit lip, and grass creeping over.
+  const rim = (at) => {
+    for (let k = 0; k < N; k++){
+      const w = RIM[k];
+      for (let d = 0; d < w + 1; d++){
+        const [x, y] = at(k, d);
+        g.set(x, y, C[d === 0 ? 'char1' : d === 1 ? 'dust1' : d < w ? (d === w - 1 ? 'dust4' : 'dust2') : ((k * 3) % 5 ? 'dust5' : 'grass0')]);
+      }
+      if (r() < 0.12){ const [x, y] = at(k, w + 1); g.set(x, y, C.grass3); }
+    }
+  };
   if (corner){
     const [cx, cy] = { NE: [N, 0], SE: [N, N], SW: [0, N], NW: [0, 0] }[corner];
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++){
       const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
-      if (d < 4) g.set(x, y, C[d < 2.2 ? 'char1' : d < 3.2 ? 'dust2' : 'dust4']);
+      if (d < 4.6) g.set(x, y, C[d < 1.6 ? 'char1' : d < 2.6 ? 'dust1' : d < 3.6 ? 'dust2' : 'dust4']);
     }
     return g;
   }
-  if (key.includes('N')) for (let x = 0; x < N; x++){ g.set(x, 0, C.char1); g.set(x, 1, C.dust2); g.set(x, 2, C.dust4); }
-  if (key.includes('E')) for (let y = 0; y < N; y++){ g.set(N - 1, y, C.char1); g.set(N - 2, y, C.dust1); g.set(N - 3, y, C.dust2); g.set(N - 4, y, C.dust4); }
-  if (key.includes('W')) for (let y = 0; y < N; y++){ g.set(0, y, C.char1); g.set(1, y, C.dust1); g.set(2, y, C.dust2); g.set(3, y, C.dust4); }
+  if (key.includes('N')) rim((k, d) => [k, d]);
+  if (key.includes('E')) rim((k, d) => [N - 1 - d, k]);
+  if (key.includes('W')) rim((k, d) => [d, k]);
   return g;
 }
 // Cliff piece keys, and which piece each drop mask (1 N, 2 E, 4 S, 8 W; 16/32/64/128 corners) uses.
-export const CLIFF_KEYS = ['S', 'S2', 'SE', 'SW', 'SEW', 'N', 'E', 'W', 'NE', 'NW', 'EW', 'NEW', 'cNE', 'cSE', 'cSW', 'cNW'];
+export const CLIFF_KEYS = ['S', 'S2', 'S3', 'S4', 'SE', 'SW', 'SEW', 'N', 'E', 'W', 'NE', 'NW', 'EW', 'NEW', 'cNE', 'cSE', 'cSW', 'cNW'];
 function cliffPieces(){
-  return CLIFF_KEYS.map(k => k === 'S2' ? cliffTile('S', 1) : cliffTile(k));
+  return CLIFF_KEYS.map(k => /^S\d$/.test(k) ? cliffTile('S', +k[1] - 1) : cliffTile(k));
 }
 // Tree canopy props, three kinds. Each variant has 9 frames: 3 leans (at rest, then 1 and
 // 2 art px downwind, east) × 3 leaf-rustle steps (frame = lean * 3 + rustle). The canopy sits 1 px left of centre at rest so the

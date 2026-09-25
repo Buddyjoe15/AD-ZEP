@@ -116,7 +116,7 @@
     if (t === K.CLIFF){
       const m = maskAt(i), P = pix.cliff.pieces;
       let key;
-      if (m & 4) key = (m & 2) && (m & 8) ? 'SEW' : m & 2 ? 'SE' : m & 8 ? 'SW' : (hash(gx, gy, 53) < .5 ? 'S' : 'S2');
+      if (m & 4) key = (m & 2) && (m & 8) ? 'SEW' : m & 2 ? 'SE' : m & 8 ? 'SW' : ['S', 'S2', 'S3', 'S4'][Math.floor(hash(gx, gy, 53) * 4)];
       else key = CLIFF_PIECE[m & 15] || CLIFF_PIECE[m & 16 || m & 32 || m & 64 || m & 128] || 'N';
       return pix.cliff.tiles[P.indexOf(key)];
     }
@@ -590,6 +590,12 @@
     // are drawn over it without a second shadow, and only at zoom `z` of at least
     // RUSTLE_ZOOM (below that a leaf pixel is smaller than a screen pixel). `v` is the
     // visible world rectangle and T the tile size.
+    // The kind of pixel-art tree on a tile ('oak', 'pine', 'birch'), or null.
+    treeKindAt(grd, gx, gy){
+      bind(grd);
+      if (!pix || !grd.inBounds(gx, gy) || grd.tiles[gy * grd.cols + gx] !== K.TREE || fenAt(gx, gy)) return null;
+      return pix.tree.types[treeKind(gy * grd.cols + gx, gx, gy)];
+    },
     RUSTLE_ZOOM: 0.5,
     drawTrees(g, grd, v, T, t, z = 1){
       if (!this.isWoodlands(grd)) return;
