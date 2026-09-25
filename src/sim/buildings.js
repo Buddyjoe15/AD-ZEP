@@ -28,7 +28,8 @@
         hp: opts.hp != null ? opts.hp : d.hp, maxHp: d.hp, ...(opts.extra || {})
       };
       if (d.level) b.level = d.level;
-      if (d.fabricator) b.fabQueue = b.fabQueue || [];
+      if (d.fabricator){ b.fabQueue = b.fabQueue || []; if (b.rally === undefined) b.rally = null; }
+      if (d.shield){ if (b.shieldOn === undefined) b.shieldOn = false; if (b.shield === undefined) b.shield = 0; }   // switched off, empty
       return this.adopt(b);
     },
     adopt(b){
@@ -64,6 +65,8 @@
         if (c.gx >= gx && c.gx < gx + w && c.gy >= gy && c.gy < gy + h) return false;
       }
       for (const s of S.constructionSites) if (s.gx < gx + w && s.gx + s.w > gx && s.gy < gy + h && s.gy + s.h > gy) return false;
+      // Structures that don't block the grid (gates) still occupy their tiles.
+      for (const b of S.buildings) if (b.gx < gx + w && b.gx + b.w > gx && b.gy < gy + h && b.gy + b.h > gy && !this.def(b)?.blocksMovement) return false;
       const T = C.TILE, cx = (gx + w / 2) * T, cy = (gy + h / 2) * T, r = Math.max(w, h) * T;
       const near = S.spatial ? S.spatial.query(cx, cy, r) : S.units;
       for (const u of near){
@@ -107,6 +110,8 @@
       }
       return best;
     },
+    // Fraction of damage a structure shrugs off (its definition's `armor`); 0 for units.
+    armor(t){ return t && !t.radius && t.type ? this.def(t)?.armor || 0 : 0; },
     // Largest damage reduction from friendly aura structures covering `unit`.
     damageReduction(unit){
       if (!unit || unit.team !== 'blue' || !unit.radius) return 0;

@@ -64,7 +64,7 @@ test('migrate() applies steps in order and rejects unknown schemas', () => {
   assert.throws(() => G.Save.migrate({ ...current, schema: G.SAVE_SCHEMA + 1 }), /newer than this version/);
   assert.throws(() => G.Save.migrate({ ...current, schema: 0 }), /Unsupported save schema/);
   assert.throws(() => G.Save.migrate({ ...current, schema: '2' }), /Unsupported save schema/);
-  assert.throws(() => G.Save.migrate({ ...current, project: 'other' }), /Not an Earth Zero Protocol/);
+  assert.throws(() => G.Save.migrate({ ...current, project: 'other' }), /Not a Zero Earth Protocol/);
 });
 
 for (const { name, file } of fixtures()){
@@ -172,4 +172,98 @@ test('a failure part way through rebuilding the world rolls back to the previous
   G.Buildings.adopt = adopt;
   assert.equal(JSON.stringify(G.Save.serialize()), before, 'previous game restored');
   G.Sim.run(1);
+});
+
+test('migrate_2_to_3: saves from before the grass test map keep their forest terrain', () => {
+  const G = loadSim();
+  for (const file of [fixtureFile(1), fixtureFile(2), path.join(FIXTURES_DIR, 'save-schema-2-early-v0.6.json')]){
+    const raw = readJSON(file);
+    assert.equal(G.Save.migrate(raw).map, 'forest', path.basename(file));
+    const S = G.Save.restore(raw, 1);
+    assert.equal(S.map, 'forest');
+    const forest = G.MapGen.forest(S.seed).tiles;
+    // Same terrain as the forest generator everywhere the save did not edit.
+    let same = 0;
+    for (let i = 0; i < forest.length; i++) if (S.grid.tiles[i] === forest[i]) same++;
+    assert.ok(same / forest.length > 0.97, path.basename(file) + ': ' + same);
+    assert.ok(S.grid.tiles.some(t => t === G.TT.TREE), 'still has trees');
+  }
+  const bad = readJSON(fixtureFile(G.SAVE_SCHEMA)); bad.map = 'moon';
+  assert.throws(() => G.Save.validate(bad), /map type/);
+});
+
+test('migrate_3_to_4: spawners in older saves get the default rally point and keep their settings', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(3));
+  const old = raw.buildings.find(b => b.spawner);
+  assert.ok(old && !old.spawner.rally, 'the schema 3 fixture has a spawner without a rally point');
+  const S = G.Save.restore(raw, 1);
+  const b = S.buildings.find(x => x.id === old.id);
+  assert.deepEqual({ ...b.spawner.rally }, { ...G.Spawner.defaultRally(b) });
+  for (const k of ['rate', 'amount', 'spawned', 'hold', 'running']) assert.equal(b.spawner[k], old.spawner[k], k);
+  const bad = readJSON(fixtureFile(G.SAVE_SCHEMA));
+  bad.buildings.find(x => x.spawner).spawner.rally = { x: 'far' };
+  assert.throws(() => G.Save.validate(bad), /building/);
+});
+
+test('migrate_4_to_5: fabricators in older saves get no rally point, so units still wait beside them', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(4));
+  assert.ok(!('rally' in raw.units.find(u => u.isShip)), 'the schema 4 fixture predates fabrication rally points');
+  const S = G.Save.restore(raw, 1);
+  assert.equal(G.Units.ship().rally, null);
+  for (const b of S.buildings.filter(b => b.fabQueue)) assert.equal(b.rally, null);
+  const bad = readJSON(fixtureFile(G.SAVE_SCHEMA));
+  bad.units.find(u => u.isShip).rally = { x: -5, y: 3 };
+  assert.throws(() => G.Save.validate(bad), /rally point/);
+});
+
+test('migrate_5_to_6: Walls in older saves become Defensive Walls with the same health and cover', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(5));
+  const walls = raw.buildings.filter(b => b.type === 'wall');
+  assert.ok(walls.length > 0, 'the schema 5 fixture has walls');
+  // A wall still under construction migrates too.
+  raw.constructionSites.push({ id: 'site-legacy-wall', type: 'wall', team: 'blue', gx: walls[0].gx + 2, gy: walls[0].gy, w: 1, h: 1,
+    x: (walls[0].gx + 2.5) * 48, y: (walls[0].gy + 0.5) * 48, buildTime: 5, remaining: 3, builderId: null });
+  const before = JSON.stringify(raw);
+  const up = G.Save.migrations[5](raw);
+  assert.equal(JSON.stringify(raw), before, 'the input is not modified');
+  assert.equal(up.schema, 6);
+  assert.ok(!JSON.stringify(up.buildings).includes('"type":"wall"'));
+  assert.equal(up.constructionSites.find(s => s.id === 'site-legacy-wall').type, 'defensive_wall');
+  const S = G.Save.restore(raw, 1);
+  for (const w of walls){
+    const b = S.buildings.find(x => x.id === w.id);
+    assert.equal(b.type, 'defensive_wall');
+    assert.equal(b.hp, w.hp); assert.equal(b.maxHp, 600);
+    assert.equal(S.grid.passable(b.gx, b.gy), false, 'still blocks its tile');
+  }
+  assert.equal(G.Defs.buildables.get('defensive_wall').behaviors[0].reduction, 0.2, 'same cover aura as the old Wall');
+  assert.equal(G.Defs.buildables.has('wall'), false);
+});
+
+test('migrate_6_to_7: Shield Projectors get a switch and a charge; nothing else does', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(6));
+  // A projector saved before it had fields (as a schema 6 save would hold one).
+  const other = raw.buildings.find(b => !b.fabQueue && b.type !== 'mine_building');
+  raw.buildings.push({ id: 'legacy-shield', type: 'shield_projector', team: 'blue', gx: other.gx, gy: other.gy + 30, w: 3, h: 3,
+    x: (other.gx + 1.5) * 48, y: (other.gy + 31.5) * 48, hp: 1500, maxHp: 1500 });
+  const before = JSON.stringify(raw);
+  const up = G.Save.migrations[6](raw);
+  assert.equal(JSON.stringify(raw), before, 'the input is not modified');
+  assert.equal(up.schema, 7);
+  const p = up.buildings.find(b => b.id === 'legacy-shield');
+  assert.equal(p.shieldOn, false); assert.equal(p.shield, 0);
+  assert.ok(up.buildings.filter(b => b.type !== 'shield_projector').every(b => !('shieldOn' in b)));
+  G.Save.validate(G.Save.migrate(raw));
+  // Validation rejects malformed shield data.
+  const bad = readJSON(fixtureFile(7));
+  const sp = bad.buildings.find(b => b.type === 'shield_projector');
+  assert.ok(sp, 'the schema 7 fixture has a Shield Projector');
+  sp.shield = 1e9;
+  assert.throws(() => G.Save.validate(bad), /building shield/);
+  sp.shield = 10; sp.shieldOn = 'yes';
+  assert.throws(() => G.Save.validate(bad), /building shield/);
 });

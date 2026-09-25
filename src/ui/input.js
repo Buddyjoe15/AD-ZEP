@@ -9,7 +9,7 @@
 
   G.Input = {
     ptr: new Map(), box: null, dragCam: null, pinch: null, keys: new Set(), lastTap: { t: 0, x: 0, y: 0 },
-    commandMode: null, touchHold: null, formationGesture: null, buildGesture: null, inspect: null,
+    commandMode: null, rallyFor: null, touchHold: null, formationGesture: null, buildGesture: null, inspect: null,
     init(){
       const cv = G.Renderer.cv, C = G.CONFIG;
       cv.style.touchAction = 'none';
@@ -46,19 +46,21 @@
       else if (k === ' '){ e.preventDefault(); G.UI.togglePause(); }
       else if (k === 'escape'){
         if (G.BuildUI.active()) G.BuildUI.cancel();
-        else if (this.commandMode){ this.commandMode = null; G.UI.toast('Order cancelled'); }
+        else if (this.commandMode){ this.commandMode = null; this.rallyFor = null; G.UI.toast('Order cancelled'); if (G.SpawnerUI.isOpen()) G.SpawnerUI.render(); G.ExpeditionUI.renderFabrication(); }
         else G.Selection.clear();
       }
     },
     p(e){ const r = G.Renderer.cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; },
 
     // ---- Hit tests (world coordinates) ----
+    enemyAt(wx, wy){ const u = this.unitAt(wx, wy, true); return u && u.team !== 'blue' ? u : null; },
     radius(){ return 28 / G.State.camera.z; },
-    unitAt(wx, wy, anyTeam = false){
+    // Units hidden by fog of war can't be picked unless `ignoreFog` (debug inspection).
+    unitAt(wx, wy, anyTeam = false, ignoreFog = false){
       const S = G.State, r = this.radius();
       let best = null, bd = r;
       for (const u of S.spatial.query(wx, wy, r + 20)){
-        if (u.hp <= 0 || u.isShip || (!anyTeam && u.team !== 'blue')) continue;
+        if (u.hp <= 0 || u.isShip || (!anyTeam && u.team !== 'blue') || (!ignoreFog && !G.Fog.canSee(u))) continue;
         const d = Math.hypot(u.x - wx, u.y - wy);
         if (d < bd){ bd = d; best = u; }
       }
@@ -100,6 +102,16 @@
         this.buildGesture = { id: e.pointerId };
         this.dragCam = null; this.box = null; this.cancelTouchHold(); this.cancelFormationGesture(); return;
       }
+      // Map Editor: one finger (or the left button) edits; a second finger ends the stroke
+      // and pinches as usual.
+      if (G.MapEditorUI.active() && (e.pointerType !== 'mouse' || e.button === 0)){
+        if (this.ptr.size === 1){
+          this.ptr.get(e.pointerId).handled = true;
+          if (G.MapEditorUI.pointerDown(q.x, q.y)) this.editGesture = { id: e.pointerId };
+          return;
+        }
+        G.MapEditorUI.pointerUp(); this.editGesture = null;
+      }
       if (this.ptr.size === 2){
         this.cancelTouchHold(); this.cancelFormationGesture(); this.cancelInspect();
         const a = [...this.ptr.values()];
@@ -113,6 +125,18 @@
         const us = this.selectedUnits(), target = this.gatherTarget(q.x, q.y), gatherer = this.gatherer();
         if (target && gatherer) G.Gather.command(gatherer, target);
         else if (us.length) G.Orders.move(us, q.x, q.y);
+        return;
+      }
+      if (this.commandMode === 'rally'){
+        consume();
+        // Any building that produces units: a spawner, a Fabricator, or the ship.
+        const id = this.rallyFor, o = G.State.buildings.find(x => x.id === id && x.hp > 0) || G.Units.alive(id);
+        this.commandMode = null; this.rallyFor = null;
+        if (o && G.Spawner.def(o)) G.Spawner.configure(o, { rally: { x: q.x, y: q.y } });
+        else if (o && o.fabQueue) G.Fabrication.setRally(o, { x: q.x, y: q.y });
+        if (o) G.UI.toast('Rally point moved');
+        if (G.SpawnerUI.isOpen()) G.SpawnerUI.render();
+        G.ExpeditionUI.renderFabrication();
         return;
       }
       if (this.commandMode === 'follow'){
@@ -135,6 +159,11 @@
       const target = this.gatherTarget(q.x, q.y), gatherer = this.gatherer();
       if (target && gatherer){ consume(); G.Gather.command(gatherer, target); return; }
       const hit = this.unitAt(q.x, q.y);
+      // Clicking a hostile unit shows its details (right-click still orders a move).
+      if (!hit && e.pointerType === 'mouse' && e.button === 0){
+        const foe = this.enemyAt(q.x, q.y);
+        if (foe){ consume(); G.UI.showTarget(foe.id); return; }
+      }
       if (hit && e.pointerType === 'mouse'){
         const has = G.State.selected.has(hit.id);
         if (e.shiftKey){ if (!has) G.Selection.toggle(hit.id); }
@@ -164,6 +193,10 @@
       const o = this.ptr.get(e.pointerId);
       if (!o) return;
       const p = this.p(e), dist = Math.hypot(p.x - o.sx, p.y - o.sy);
+      if (this.editGesture && this.editGesture.id === e.pointerId){
+        o.x = p.x; o.y = p.y; o.moved = o.moved || dist > SLOP;
+        const q = G.worldFromScreen(p.x, p.y); G.MapEditorUI.pointerMove(q.x, q.y); return;
+      }
       if (this.inspect && this.inspect.id === e.pointerId && dist > 10) this.cancelInspect();
       if (this.buildGesture && this.buildGesture.id === e.pointerId){
         o.x = p.x; o.y = p.y; o.moved = o.moved || dist > 4;
@@ -194,6 +227,7 @@
     up(e){
       const o = this.ptr.get(e.pointerId);
       if (!o) return;
+      if (this.editGesture && this.editGesture.id === e.pointerId){ G.MapEditorUI.pointerUp(); this.editGesture = null; }
       const S = G.State, inspected = this.inspect && this.inspect.id === e.pointerId && this.inspect.shown;
       this.cancelInspect();
       const finish = () => { this.ptr.delete(e.pointerId); if (this.ptr.size < 2) this.pinch = null; this.dragCam = null; this.touchHold = null; };
@@ -215,6 +249,7 @@
         if (b && !this.unitAt(q.x, q.y)){
           if (b.fabQueue) G.ExpeditionUI.openFabrication(b.id);
           else if (G.Spawner.def(b)) G.SpawnerUI.open(b.id);
+          else if (G.Shields.def(b) && b.team === 'blue') G.ShieldUI.open(b.id);
           else G.DebugUI.showTip(G.DebugUI.buildingDetails(G.Defs.buildables.get(b.type), b), e.clientX, e.clientY, true);
           this.box = null; finish(); return;
         }
@@ -236,8 +271,9 @@
         this.lastTap = { t, x: o.x, y: o.y };
         if (dbl){ G.Selection.clear(); G.UI.toast('Units deselected'); }
         else {
-          const hit = this.unitAt(q.x, q.y);
+          const hit = this.unitAt(q.x, q.y), foe = !hit && this.enemyAt(q.x, q.y);
           if (hit){ if (S.selected.has(hit.id)) G.Selection.toggle(hit.id); else G.Selection.set([hit.id]); }
+          else if (foe) G.UI.showTarget(foe.id);
           else {
             const us = this.selectedUnits();
             if (us.length) G.Orders.move(us, q.x, q.y);
@@ -248,6 +284,7 @@
       finish();
     },
     cancel(e){
+      if (this.editGesture){ G.MapEditorUI.pointerUp(); this.editGesture = null; }
       this.cancelTouchHold(); this.cancelFormationGesture(); this.cancelInspect();
       this.buildGesture = null; this.ptr.delete(e.pointerId); this.box = null; this.dragCam = null;
       if (this.ptr.size < 2) this.pinch = null;

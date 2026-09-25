@@ -22,7 +22,7 @@
     choose(key){
       if (!this.active() || !G.Defs.buildables.has(key)) return false;
       this.mode.key = key;
-      G.UI.toast(G.Defs.buildables.get(key).placeOnNode === 'deposit' ? 'Tap a mine deposit: the building centres on it' : 'Tap a grid cell or hold and drag to refine placement');
+      G.UI.toast(G.Defs.buildables.get(key).placeOnNode === 'deposit' ? 'Tap a resource deposit: the extractor centres on it' : 'Tap a grid cell or hold and drag to refine placement');
       this.render();
       return true;
     },
@@ -52,7 +52,7 @@
     icon(key){
       const d = G.Defs.buildables.get(key);
       if (d.symbol) return `<div class="catalog-art" style="background:${esc(d.color)};color:#0b1820;font-weight:800">${esc(d.symbol)}</div>`;
-      if (key === 'wall') return '<div class="catalog-art catalog-wall">WALL</div>';
+      if (key === 'defensive_wall' || key === 'reinforced_wall') return `<div class="catalog-art catalog-wall${key === 'reinforced_wall' ? ' reinforced' : ''}">WALL</div>`;
       if (d.container) return '<div class="catalog-art catalog-chest">CHEST</div>';
       return `<div class="catalog-art">${esc(G.initials(d.name))}</div>`;
     },

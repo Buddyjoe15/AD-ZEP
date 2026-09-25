@@ -9,7 +9,8 @@ src/data/             content definitions (units, items, buildables, resources, 
 src/world/            grid + occupancy + regions, seeded map generator, spatial hash, pathfinding
 src/sim/              gameplay systems: units, economy, buildings, inventory, orders/AI, movement,
                       combat, gathering, construction, fabrication, expedition, scenario, saves
-src/render/           canvas art registry, terrain chunk cache, renderer + minimap
+src/render/           canvas art registry, pixel art (pixelart.js + generated pixel-data.js),
+                      sprite atlas, terrain chunk cache, renderer + minimap
 src/ui/               HUD, inventory, build mode, expedition panels, debug catalog, input, menus
 src/main.js           boot + fixed-timestep loop
 tools/                build (single-file bundle), static checks, save-format snapshot
@@ -55,7 +56,7 @@ GW.Defs.recipes.define('heavy_drone', { name: 'Heavy Drone', unit: 'heavy_drone'
 
 **An item** (`src/data/items.js`). Equipment has a `slot` and `effects` (`damageReduction`, `inventoryBonus`, …). Materials set `maxStack` and stack automatically.
 
-**A structure** (`src/data/buildables.js`). Its function comes from `behaviors`, each handled by `GW.Behaviors.register(type, { update(building, cfg, dt) })`. Built-in behaviours are `defenseAura`, `repairAura`, `studySignals` and `spawner` (with `spawner: { unit, rate, amount, hold }`; see the Hostile Fabricator). `debugOnly: true` keeps a structure out of the Spider's build menu. Add `fabricator: { queueMax }` to give it a production queue, or `container: { capacity }` to make it storage.
+**A structure** (`src/data/buildables.js`). Its function comes from `behaviors`, each handled by `GW.Behaviors.register(type, { update(building, cfg, dt) })`. Built-in behaviours are `defenseAura`, `repairAura`, `studySignals` and `spawner` (with `spawner: { unit, rate, amount, hold }`; see the Hostile Fabricator: units appear in waves at one spawn point facing the saved, movable rally point, and a new wave waits until the spawn point is clear). `debugOnly: true` keeps a structure out of the Spider's build menu. Add `fabricator: { queueMax }` to give it a production queue, or `container: { capacity }` to make it storage.
 
 ```js
 GW.Behaviors.register('produce', {
@@ -71,11 +72,37 @@ GW.Defs.buildables.define('refinery', {
 });
 ```
 
-**A resource** (`src/data/resources.js`) appears in the resource bar, the ledger and cost checks automatically. `transitCap` limits how much of it crosses to the next Earth.
+**A resource** (`src/data/resources.js`) appears in the resource bar, the ledger and cost checks automatically. `transitCap` limits how much of it crosses to the next Earth. The top bar always shows resources marked `always` and shows the rest once the stockpile holds some.
+
+**A processing recipe** makes resources instead of a unit: give it `produces: { steel: 1 }` in place of `unit`. A structure makes only the recipes listed in its `fabricator.recipes`, like the Ore Processor. Without that list, a fabricator makes every unit recipe. Processing uses the same queue as unit fabrication: inputs are paid when queued, the product goes to the stockpile, and a destroyed processor refunds its queue. Processing doesn't count toward the crew cap.
+
+**Defences** (`src/sim/defense.js`):
+- A buildable with a `turret` behaviour fires at the nearest enemy it can hit:
+  - `targets` is `'ground'`, `'air'` or `'any'`, matched against a unit's `flying`.
+  - It fires between `minRange` and `range`, every `reload` seconds.
+  - `splash` damages other enemies near the target.
+  - `ammo` spends one of that resource per shot and holds fire without it.
+- `armor` on a buildable reduces the damage it takes.
+- A `gate` buildable doesn't stamp the grid, so paths lead through it. Movement asks `G.Gates.blocks(u, tx, ty)` instead: enemies are always blocked, and friendly units only while the gate is closed.
+- Turrets hit with `accuracy` (0–1). A Defensive Sensor (`sensor`) within its `boostTiles` adds `accuracyBonus`. The hit roll is `G.hashRandom(tick, turret, target, shot)`, so replays stay identical.
+- A Defensive Sensor's `sight` reveals fog, and `G.Sensors` warns (`sensor:alert`) when enemies come within `detectTiles`.
+- A Shield Projector (`shield`) is switched on with `G.Shields.set(b, on)`. While on it charges by `recharge` × the power ratio up to `capacity`, and draws power with `when: 'active'`. `G.Shields.absorb()` in combat takes damage to covered structures off its charge first.
+- `shieldOn` and `shield` are the only saved defence state (schema 7). Gate states, turret cooldowns and aim, and sensor warnings are rebuilt and never saved.
+
+**Fog of war** (`src/render/fog.js`) is presentation only. Each rendered frame (throttled to about 7 Hz) it stamps circles of `sight` around friendly units, of the buildable's `sight` (default 240) around structures, and a small circle around construction sites. The renderer draws the fog image over the map and skips enemy units and gunfire outside the visible set. `G.Input.unitAt` won't pick hidden enemies. The explored set lives only in memory, and it's never saved.
+
+**Power** (`src/sim/power.js`) is a rate, not a stockpile. A unit or buildable definition joins the grid with `power`:
+- `{ supply: n }` produces n constantly (the ship's Warp Drive).
+- `{ supply: n, scale: 'solar' | 'wind' }` produces n scaled by the climate's `solar` or `wind` (Solar Array, Wind Turbine).
+- `{ demand: n, when: 'producing' | 'extracting' }` draws n only while its queue runs or its mine extracts. Leave out `when` to draw n all the time.
+
+The `power` system runs before production each tick and sets `G.Power.grid.ratio` = supply ÷ demand (at most 1). Consumers multiply their progress by `G.Power.factor(o)`. It's rebuilt from structures every tick, so it's never saved.
+
+**A deposit** (`src/data/world.js`, `kind: 'deposit'`) is mined by the Resource Extractor (key `mine_building`), which takes the deposit's resource, and hauled like metal. `ore` sets its colour on the map. Add its placement offsets to `GW.EXPEDITION_RULES` and to the list in `Expedition` that places deposits on each new Earth.
 
 **Resource nodes, climates and expedition balance** live in `src/data/world.js` (`GW.EXPEDITION_RULES`). A node is either `kind: 'scavenge'` (collected directly by gatherers) or `kind: 'deposit'` (a 1×1 tile that needs its `building` built centred on it). Add a new mine type by defining a deposit node, then either reuse `mine_building` or add a buildable with `placeOnNode: 'deposit'`, an odd footprint and an `extractor` behaviour.
 
-The debug catalog (DEBUG button) lists every registered structure, item, unit and node, so new content can be placed and inspected immediately.
+The debug catalog (DEBUG button) lists every registered structure, item, unit and node, so new content can be placed and inspected immediately. It also holds the cheats (`GW.Cheats`: metal, godmode, instant build). The Map Editor (`src/ui/mapeditor.js`) paints terrain and places or erases objects through `GW.MapEdit` in `src/sim/debugtools.js`.
 
 ## Scaling notes
 
@@ -90,7 +117,8 @@ The debug catalog (DEBUG button) lists every registered structure, item, unit an
 | Group orders | Groups of `FLOWFIELD_MIN_GROUP` or more share one windowed Dijkstra field. Units smooth their paths incrementally while moving. |
 | Neighbour queries | Dense typed-array grids (per-cell linked lists, rebuilt every tick): tile-sized cells for collision and picking, plus coarser per-team grids for target acquisition. Every unit object has the same fields in the same order (`GW.Units.blank()`), which keeps hot loops fast. |
 | Lookups | Units are indexed by id (`GW.Units.get`). |
-| Rendering | Three stacked canvases: map and structures (Canvas 2D), units (WebGL2, `src/render/gpu.js`) and overlays such as selection, routes, beams, gunfire and previews (Canvas 2D). Unit art comes from the shared sprite atlas (`src/render/sprites.js`), painted once per visual, team and animation frame from `visuals.js` with tight per-visual bounds. The GPU draws all visible units in one instanced call. Without hardware WebGL2 (`failIfMajorPerformanceCaveat`), the Canvas 2D fallback stamps the same sprites, using pre-shrunk atlas levels, and switches to batched markers below `UNIT_LOD_ZOOM`. Sprites are stored at 4 px per world px. Terrain uses an LRU chunk cache (chunks are repainted at `TERRAIN_RES`, 2 px per world px, once zoomed in past 1:1, and the cache is budgeted in 1× chunks) plus a far-zoom overview image, and the minimap redraws at 8 Hz. |
+| Rendering | Three stacked canvases: map and structures (Canvas 2D), units (WebGL2, `src/render/gpu.js`) and overlays such as selection, routes, beams, gunfire and previews (Canvas 2D). Unit art comes from the shared sprite atlas (`src/render/sprites.js`), painted once per visual, team and animation frame from `visuals.js` with tight per-visual bounds. The GPU draws all visible units in one instanced call. Without hardware WebGL2 (`failIfMajorPerformanceCaveat`), the Canvas 2D fallback stamps the same sprites, using pre-shrunk atlas levels, and switches to batched markers below `UNIT_LOD_ZOOM`. Canvas art is stored in the atlas at 4 px per world px. Terrain uses an LRU chunk cache (chunks are repainted at `TERRAIN_RES`, 2 px per world px, once zoomed in past 1:1, and the cache is budgeted in 1× chunks) plus a far-zoom overview image, and the minimap redraws at 8 Hz. |
+| Pixel art | `src/render/pixelart.js` draws Utility Spiders, drones, Vance, the Repair Station and grass/clearing terrain with the top-down pixel art from `art/pixel-test`. Everything else keeps its Canvas art. The data is `src/render/pixel-data.js`, generated by `npm run sprites` (never edit it by hand). Pixel frames go into the same atlas as 64 px slots at 2 atlas px per art px. Each atlas entry records where its frames are (`at`) and its scale, so both renderers stamp either kind. Units pick the nearest of 8 facings from `heading` and are never rotated. They animate `work` while beaming, `walk` while moving, and otherwise `idle`. Shadows are drawn by the engine, from the silhouette at the sprite's `shadow.offset`, and darken what is underneath by 55%. The GPU draws them first with MAX blending, and Canvas 2D merges them into one mask, so overlapping shadows never stack. Structure states come from sim state: construction progress (foundation, frame, near-complete), below half health (damaged), and a damaged friendly unit in reach (working). Rubble of a destroyed station is a render-only afterimage and is not saved. `?art=classic` or the Debug panel switches back to the original art. |
 
 Browser benchmarks (tick budget is 33 ms): 5,000 enemies swarming Vance take about 4.5 ms per tick, 10,000 about 8.5 ms, and 20,000 about 17 ms, rising as they pack tightly. With GPU rendering, simulation rather than drawing is the limit past roughly 20,000 units. The Node test harness runs the simulation inside a `vm` sandbox that is several times slower than a browser, so its timings are only useful for comparing changes against each other. Past roughly 5,000 active units, the next steps would be moving the simulation into a Worker (it is already DOM-free) and switching to structure-of-arrays storage for positions.
 
@@ -98,9 +126,9 @@ Browser benchmarks (tick budget is 33 ms): 5,000 enemies swarming Vance take abo
 
 AI contributors: the binding rules are under "Save format rules" in [`CLAUDE.md`](../CLAUDE.md) (the same text is in [`AGENTS.md`](../AGENTS.md)).
 
-`GW.Save.serialize()` writes schema `GW.SAVE_SCHEMA` (currently 2). `migrate()` upgrades older saves one step at a time through named functions in `src/sim/save.js` (`migrate_1_to_2`, then `migrate_2_to_3`, and so on), registered in `MIGRATIONS` by the schema they start from. `validate()` then rejects malformed data before anything changes. If rebuilding the world still fails part way, `restore()` rolls back to the game that was running.
+`GW.Save.serialize()` writes schema `GW.SAVE_SCHEMA` (currently 5). `migrate()` upgrades older saves one step at a time through named functions in `src/sim/save.js` (`migrate_1_to_2`, then `migrate_2_to_3`, and so on), registered in `MIGRATIONS` by the schema they start from. `validate()` then rejects malformed data before anything changes. If rebuilding the world still fails part way, `restore()` rolls back to the game that was running.
 
-Terrain is regenerated from the seed, and `terrainEdits` replays any changes made after generation. The map generator must keep its RNG call order: a terrain fingerprint test fails if generation changes.
+Terrain is regenerated from the seed by the save's map type (`map`: `grass` for new games, `forest` for saves from before v0.7; see `GW.MapGen.types`), and `terrainEdits` replays any changes made after generation, including Map Editor strokes. The forest generator must keep its RNG call order: a terrain fingerprint test fails if generation changes. To add a map type, add a generator to `GW.MapGen.types`; never change what an existing type generates.
 
 `tests/save.test.mjs` guards the format:
 

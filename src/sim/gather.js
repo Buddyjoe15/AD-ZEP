@@ -46,6 +46,13 @@
     mineOn(n){ return n && n.buildingId ? G.State.buildings.find(b => b.id === n.buildingId && b.hp > 0) || null : null; },
     isMine(b){ return !!b && (G.Defs.buildables.get(b.type)?.behaviors || []).some(x => x.type === 'extractor'); },
     stockTotal,
+    // A Mine Building is extracting while its deposit has ore and its stockpile has room.
+    extracting(b){
+      const cfg = (G.Defs.buildables.get(b.type)?.behaviors || []).find(x => x.type === 'extractor');
+      if (!cfg || b.hp <= 0) return false;
+      const n = b.nodeId ? this.node(b.nodeId) : this.depositAt(b.gx + Math.floor(b.w / 2), b.gy + Math.floor(b.h / 2));
+      return !!n && n.remaining > 0 && stockTotal(b) < (cfg.stockCap || 300);
+    },
 
     // Assigns a gatherer to a scavenge node, a deposit with a mine, or a Mine Building.
     command(u, target){
@@ -55,7 +62,7 @@
       if (this.isMine(target)) mine = target;
       else if (this.isDeposit(target)){
         mine = this.mineOn(target);
-        if (!mine){ G.notify('Build a Mine Building on this ' + target.name + ' first'); return false; }
+        if (!mine){ G.notify('Build a ' + (G.Defs.buildables.get(this.def(target).building)?.name || 'Resource Extractor') + ' on this ' + target.name + ' first'); return false; }
       }
       if (mine){
         G.Units.clearOrders(u);
@@ -84,13 +91,15 @@
     unload(u){
       if (!u.cargo) return 0;
       let total = 0;
+      const parts = [];
       for (const [k, v] of Object.entries(u.cargo)){
         if (!(v > 0)) continue;
         G.Economy.add(k, v, 'delivery');
         total += v; u.cargo[k] = 0;
+        parts.push(Math.floor(v) + ' ' + (G.Defs.resources.get(k)?.name || k).toLowerCase());
       }
       if (total > 0){
-        G.notify(`${u.name} delivered ${Math.floor(total)} metal to the ship`);
+        G.notify(`${u.name} delivered ${parts.join(' + ')} to the ship`);
         G.Events.emit('cargo:delivered', { unit: u, amount: total });
       }
       return total;
@@ -191,7 +200,7 @@
       if (!b.stock) b.stock = {};
       const room = cap - stockTotal(b);
       if (room <= 0 || n.remaining <= 0) return;
-      const amount = Math.min(room, n.remaining, d.rate * dt);
+      const amount = Math.min(room, n.remaining, d.rate * dt * G.Power.factor(b));   // slower on a short grid
       n.remaining = G.round6(n.remaining - amount);
       b.stock[d.resource] = G.round6((b.stock[d.resource] || 0) + amount);
     }

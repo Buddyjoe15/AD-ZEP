@@ -77,7 +77,9 @@ for (const target of ['index.html', 'dist/ad-ezp.html']){
       await page.mouse.click(p.x, p.y);
       assert.ok(await page.evaluate(() => GW.State.selected.has(GW.State.heroId)));
       await page.mouse.click(p.x + 160, p.y + 60, { button: 'right' });
-      await page.waitForTimeout(600);
+      // Wait on game progress rather than a fixed time: slow CI runners drop simulation
+      // steps when frames take long, so 600 ms of wall clock is not always 600 ms of game.
+      await page.waitForFunction(([x, y]) => Math.hypot(GW.Units.hero().x - x, GW.Units.hero().y - y) > 20, [hero.x, hero.y], { timeout: 8000 }).catch(() => {});
       const moved = await page.evaluate(([x, y]) => Math.hypot(GW.Units.hero().x - x, GW.Units.hero().y - y), [hero.x, hero.y]);
       assert.ok(moved > 20, 'Vance moved ' + moved);
 
@@ -86,7 +88,7 @@ for (const target of ['index.html', 'dist/ad-ezp.html']){
       p = await screen(page, spider.x, spider.y);
       await page.mouse.click(p.x, p.y);
       await page.click('#truckBuildBtn');
-      await page.click('[data-build-pick="wall"]');
+      await page.click('[data-build-pick="defensive_wall"]');
       const tile = await page.evaluate(() => { const u = GW.State.units.find(u => u.type === 'utility_spider'), T = 48, g = GW.State.grid;
         for (let r = 3; r < 9; r++) for (let dx = -r; dx <= r; dx++){ const x = Math.floor(u.x / T) + dx, y = Math.floor(u.y / T) + r; if (GW.Buildings.canPlace(x, y, 1, 1)) return { x: (x + 0.5) * T, y: (y + 0.5) * T }; } });
       p = await screen(page, tile.x, tile.y);
@@ -328,8 +330,339 @@ test('old browser saves are backed up before upgrading; unloadable saves are rep
     assert.equal(await page.evaluate(() => localStorage.getItem(GW.Save.backupKey(3, 1))), v1);
     assert.equal(await page.evaluate(() => GW.Units.crew().length), 5, 'Vance and four drones');
     await page.evaluate(() => GW.Save.save(3));
-    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem(GW.Save.keyFor(3))).schema), 2);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem(GW.Save.keyFor(3))).schema === GW.SAVE_SCHEMA), true, 'rewritten in the current format');
     assert.equal(await page.evaluate(() => localStorage.getItem(GW.Save.backupKey(3, 1))), v1, 'backup survives the autosave');
+    await page.evaluate(() => localStorage.clear());
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('debug cheats and the Map Editor work from the interface', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1365, height: 900 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    assert.equal(await page.title(), 'Abyssal Dawn: Zero Earth Protocol');
+    assert.ok(await page.evaluate(() => GW.State.grid.tiles.every(t => t === GW.TT.GRASS)), 'new games start on all grass');
+    assert.ok(await page.isHidden('#mapEdBtn'), 'Map Editor button only in debug mode');
+    await page.click('#dbgBtn');
+    // Cheats.
+    const metal = await page.evaluate(() => GW.Economy.get('metal'));
+    await page.click('#dbgPanel [data-metal="1000"]');
+    assert.equal(await page.evaluate(() => GW.Economy.get('metal')), metal + 1000);
+    await page.click('#dbgPanel [data-cheat="god"]');
+    await page.click('#dbgPanel [data-cheat="instantBuild"]');
+    assert.deepEqual(await page.evaluate(() => [GW.Cheats.god, GW.Cheats.instantBuild]), [true, true]);
+    // Map Editor: drag a water stroke east of Vance.
+    await page.click('#mapEdBtn');
+    assert.ok(await page.isVisible('#mapEdPanel'));
+    assert.ok(await page.isVisible('#mapEdBtn'), 'button stays while the editor is open');
+    await page.click('#mapEdPanel [data-terrain="water"]');
+    await page.click('#mapEdPanel [data-brush="3"]');
+    const tiles = await page.evaluate(() => { const h = GW.Units.hero(), T = GW.CONFIG.TILE; return { gx: Math.floor(h.x / T) + 4, gy: Math.floor(h.y / T) - 3, T }; });
+    const a = await screen(page, (tiles.gx + 0.5) * tiles.T, (tiles.gy + 0.5) * tiles.T), b = await screen(page, (tiles.gx + 6.5) * tiles.T, (tiles.gy + 0.5) * tiles.T);
+    await page.mouse.move(a.x, a.y); await page.mouse.down();
+    for (let i = 1; i <= 6; i++) await page.mouse.move(a.x + (b.x - a.x) * i / 6, a.y);
+    await page.mouse.up();
+    const row = await page.evaluate(({ gx, gy }) => Array.from({ length: 7 }, (_, i) => GW.State.grid.get(gx + i, gy)), tiles);
+    assert.ok(row.every(t => t === 2), 'water along the stroke: ' + row);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: path.join(OUT, 'map-editor.png') });
+    // Objects: place a wall; Erase: remove it.
+    await page.click('#mapEdPanel [data-tab="objects"]');
+    const wallIndex = await page.evaluate(() => GW.MapEditorUI.objects().findIndex(e => e.key === 'defensive_wall'));
+    await page.click(`#mapEdPanel [data-obj="${wallIndex}"]`);
+    const w = await screen(page, (tiles.gx + 0.5) * tiles.T, (tiles.gy + 4.5) * tiles.T);
+    await page.mouse.click(w.x, w.y);
+    assert.equal(await page.evaluate(({ gx, gy }) => GW.Buildings.at(gx, gy + 4)?.type, tiles), 'defensive_wall');
+    await page.click('#mapEdPanel [data-tab="erase"]');
+    await page.mouse.click(w.x, w.y);
+    assert.equal(await page.evaluate(({ gx, gy }) => GW.Buildings.at(gx, gy + 4), tiles), null);
+    // Reset asks once, then clears the map to grass.
+    await page.click('#mapEdPanel [data-tab="terrain"]');
+    await page.click('#medReset'); await page.click('#medReset');
+    assert.ok(await page.evaluate(() => GW.State.grid.tiles.every(t => t === GW.TT.GRASS)));
+    await page.click('#medClose');
+    assert.ok(await page.isHidden('#mapEdBtn'), 'hidden again once debug mode is closed');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('spawner rally point moves with a tap; the inventory closes with × and drags by its title bar', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1365, height: 900 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    // Open the Hostile Fabricator's window.
+    const hf = await page.evaluate(() => { const b = GW.State.buildings.find(b => b.type === 'hostile_fabricator'); GW.centerCamera(b.x, b.y + 150, 0.72); return { id: b.id, x: b.x, y: b.y }; });
+    await page.waitForTimeout(200);
+    let p = await screen(page, hf.x, hf.y);
+    await page.mouse.click(p.x, p.y);
+    await page.waitForSelector('#spawnerPanel:not(.hidden) #spRally');
+    assert.match(await page.textContent('#spawnerPanel'), /Gather at rally point/);
+    assert.doesNotMatch(await page.textContent('#spawnerPanel'), /Hold position/);
+    // Move the rally point with a tap on the map.
+    await page.click('#spRally');
+    const target = await page.evaluate(({ x, y }) => GW.openPoint(x - 300, y + 300), hf);   // clear of the spawner window
+    p = await screen(page, target.x, target.y);
+    await page.mouse.click(p.x, p.y);
+    const rally = await page.evaluate(id => ({ ...GW.State.buildings.find(b => b.id === id).spawner.rally }), hf.id);
+    assert.ok(Math.hypot(rally.x - target.x, rally.y - target.y) < 30, 'rally point set where tapped');
+    // Spawn a small batch: they appear at the spawn point and gather at the flag.
+    await page.click('#spawnerPanel [data-rate="25"]');
+    await page.fill('#spAmount', '20'); await page.press('#spAmount', 'Enter'); await page.click('#spawnerPanel h2');
+    await page.click('#spStart');
+    await page.waitForFunction(id => GW.State.buildings.find(b => b.id === id).spawner.spawned >= 20, hf.id, { timeout: 15000 });
+    await page.waitForFunction(({ id, r }) => GW.Spawner.spawnedBy(GW.State.buildings.find(b => b.id === id)).every(u => Math.hypot(u.x - r.x, u.y - r.y) < 220), { id: hf.id, r: rally }, { timeout: 15000 });
+    await page.screenshot({ path: path.join(OUT, 'spawner-rally.png') });
+    await page.click('#spClose');
+    // Inventory: × closes it; the title bar drags it.
+    await page.keyboard.press('i');
+    await page.waitForSelector('#inventoryPanel:not(.hidden) #invClose');
+    const before = await page.$eval('#inventoryPanel', el => el.getBoundingClientRect().toJSON());
+    const head = await page.$eval('#inventoryPanel [data-drag-handle] h3', el => el.getBoundingClientRect().toJSON());
+    await page.mouse.move(head.x + 60, head.y + head.height / 2); await page.mouse.down();
+    for (let i = 1; i <= 5; i++) await page.mouse.move(head.x + 60 + i * 60, head.y + head.height / 2 + i * 30);
+    await page.mouse.up();
+    const after = await page.$eval('#inventoryPanel', el => el.getBoundingClientRect().toJSON());
+    assert.ok(Math.abs(after.x - before.x - 300) < 3 && Math.abs(after.y - before.y - 150) < 3, `moved by (300,150): ${after.x - before.x}, ${after.y - before.y}`);
+    const close = await page.$eval('#invClose', el => el.getBoundingClientRect().toJSON());
+    assert.ok(close.x - after.x < 40 && close.y - after.y < 40, 'close button in the top-left corner');
+    await page.screenshot({ path: path.join(OUT, 'inventory-moved.png') });
+    await page.click('#invClose');
+    assert.ok(await page.isHidden('#inventoryPanel'));
+    await page.keyboard.press('i');
+    const reopened = await page.$eval('#inventoryPanel', el => el.getBoundingClientRect().toJSON());
+    assert.ok(Math.abs(reopened.x - after.x) < 3, 'reopens where it was left');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('fabrication rally point, draggable expedition log, unit stats and enemy info', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1365, height: 900 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    // Unit windows show HP and damage.
+    await page.evaluate(() => GW.Selection.set([GW.State.heroId]));   // Vance starts selected; clicking him would deselect
+    await page.waitForTimeout(150);
+    let p;
+    assert.match(await page.textContent('#selectionPanel'), /HP 300 \/ 300 · DMG \d+ \([\d.]+\/s\) · Range \d+/);
+    await page.evaluate(() => GW.Selection.set(GW.Units.crew().map(u => u.id)));
+    await page.waitForTimeout(150);
+    assert.match(await page.textContent("#selectionPanel"), /1× Security Drone\s*HP 100 \/ 100 · DMG 12 \(16\.7\/s\) · Range 205/);
+    assert.match(await page.textContent("#selectionPanel"), /Utility Spider\s*HP 520 \/ 520 · No weapon/);
+    // Ship rally point: set it from the fabrication window with a tap.
+    const ship = await page.evaluate(() => { const s = GW.Units.ship(); return { x: s.x, y: s.y }; });
+    p = await screen(page, ship.x, ship.y);
+    await page.mouse.click(p.x, p.y);
+    await page.waitForSelector('#ezFabrication:not(.hidden) #ezRally');
+    await page.click('#ezRally');
+    const spot = await page.evaluate(({ x, y }) => GW.openPoint(x - 420, y + 380), ship);
+    p = await screen(page, spot.x, spot.y);
+    await page.mouse.click(p.x, p.y);
+    const rally = await page.evaluate(() => GW.Units.ship().rally);
+    assert.ok(rally && Math.hypot(rally.x - spot.x, rally.y - spot.y) < 30, 'ship rally point set');
+    await page.waitForSelector('#ezRallyClear');
+    await page.evaluate(() => { GW.State.resources.metal = 1000; GW.Cheats.set('instantBuild', true); GW.Fabrication.enqueue(GW.Units.ship(), 'survey_drone'); });
+    await page.waitForFunction(({ r }) => { const u = GW.State.units[GW.State.units.length - 1]; return u.type === 'survey_drone' && Math.hypot(u.x - r.x, u.y - r.y) < 200; }, { r: rally }, { timeout: 15000 });
+    await page.screenshot({ path: path.join(OUT, 'ship-rally.png') });
+    await page.click('#ezFabClose');
+    // Expedition log: drag by its title bar, close with ×.
+    await page.click('#ezToggle');
+    await page.waitForSelector('#ezPanel:not(.hidden) #ezClose');
+    const before = await page.$eval('#ezPanel', el => el.getBoundingClientRect().toJSON());
+    const head = await page.$eval('#ezPanel [data-drag-handle] h3', el => el.getBoundingClientRect().toJSON());
+    await page.mouse.move(head.x + 40, head.y + 8); await page.mouse.down();
+    for (let i = 1; i <= 5; i++) await page.mouse.move(head.x + 40 - i * 50, head.y + 8 + i * 20);
+    await page.mouse.up();
+    const after = await page.$eval('#ezPanel', el => el.getBoundingClientRect().toJSON());
+    assert.ok(Math.abs(after.x - before.x + 250) < 3 && Math.abs(after.y - before.y - 100) < 3, `moved by (-250,100): ${after.x - before.x}, ${after.y - before.y}`);
+    await page.screenshot({ path: path.join(OUT, 'expedition-moved.png') });
+    await page.click('#ezClose');
+    assert.ok(await page.isHidden('#ezPanel'));
+    // Clicking a hostile unit shows its details without changing the selection.
+    const foe = await page.evaluate(() => { const h = GW.Units.hero(), u = GW.Units.spawn('hostile_machine', h.x + 700, h.y - 250); GW.rebuildSpatial(); return { id: u.id, x: u.x, y: u.y }; });
+    const selected = await page.evaluate(() => GW.State.selected.size);
+    p = await screen(page, foe.x, foe.y);
+    await page.mouse.click(p.x, p.y);
+    await page.waitForSelector('#targetPanel:not(.hidden)');
+    const info = await page.textContent('#targetPanel');
+    assert.match(info, /HOSTILE/); assert.match(info, /Hostile Autonomous Machine/); assert.match(info, /HP 65 \/ 65 · DMG 6 \(8\.3\/s\) · Range 140/);
+    assert.equal(await page.evaluate(() => GW.State.selected.size), selected, 'selection unchanged');
+    await page.screenshot({ path: path.join(OUT, 'enemy-info.png') });
+    await page.click('#targetClose');
+    assert.ok(await page.isHidden('#targetPanel'));
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('pixel-art sprites: eight facings, engine shadows, structure states, dust terrain and the classic toggle', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  for (const renderer of ['gpu', '2d']){
+    const browser = await launch();
+    try {
+      const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+      const errors = track(page);
+      await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href + '?renderer=' + renderer);
+      const r = await page.evaluate(() => {
+        const G = GW, S = G.State, h = G.Units.hero(), T = G.CONFIG.TILE, P = G.PixelArt;
+        S.paused = true;
+        const gx = Math.floor(h.x / T) - 1, gy = Math.floor(h.y / T) + 3;
+        const hurt = G.Buildings.add('repair', gx, gy, { team: 'blue' }); hurt.hp = 100;
+        const spider = G.Units.spawn('utility_spider', h.x - 120, h.y); spider.hp = 100;
+        const drones = [];
+        for (let i = 0; i < 8; i++){ const u = G.Units.spawn('hostile_machine', h.x + 150 + i * 40, h.y - 150); u.heading = i * Math.PI / 4 - Math.PI / 2; drones.push(u); }
+        G.rebuildSpatial(); G.centerCamera(h.x, h.y, 1);
+        G.Renderer.draw();
+        const e = G.SpriteAtlas.entryFor(G.Defs.units.get('hostile_machine'), 'red');
+        const frames = drones.map(u => G.SpriteAtlas.frame(e, u, 0));
+        return {
+          enabled: P.enabled, pixel: !!e.pixel, facings: e.facings.length, shadow: !!e.shadow,
+          distinct: new Set(frames).size, facingOf: drones.map(u => P.facing(u.heading)),
+          damaged: P.stationState(hurt, 0) === P.data.sprites.repair_station.states.damaged.start,
+          dust: P.dustIds().has(S.grid.get(Math.floor(h.x / T), Math.floor(h.y / T))), gpu: G.GPU.ok, sprites: S.metrics.gpuSprites
+        };
+      });
+      assert.ok(r.enabled && r.pixel, 'pixel art is on by default');
+      assert.equal(r.facings, 8); assert.ok(r.shadow, 'shadows are drawn by the engine');
+      assert.deepEqual(r.facingOf, [0, 1, 2, 3, 4, 5, 6, 7], 'each heading picks its facing');
+      assert.equal(r.distinct, 8, 'one frame per facing');
+      assert.ok(r.damaged, 'a station below half health shows its damaged state');
+      assert.ok(r.dust, 'grass is drawn as the dust plain');
+      assert.equal(r.gpu, renderer === 'gpu');
+      if (r.gpu) assert.ok(r.sprites > 10, 'units drawn by the GPU');
+      await page.screenshot({ path: path.join(OUT, `pixel-art-${renderer}.png`) });
+      // Destroyed stations leave rubble for a while (presentation only).
+      assert.equal(await page.evaluate(() => { const b = GW.State.buildings.find(x => x.type === 'repair'); b.hp = 0; GW.State.paused = false; return new Promise(res => setTimeout(() => res(GW.PixelArt.rubble.length), 300)); }), 1);
+      // Debug panel toggles back to the classic art.
+      await page.click('#dbgBtn');
+      await page.click('#dbgPixelArt');
+      const classic = await page.evaluate(() => { GW.Renderer.draw(); return { on: GW.PixelArt.enabled, pixel: !!GW.SpriteAtlas.entryFor(GW.Defs.units.get('utility_spider'), 'blue').pixel }; });
+      assert.deepEqual(classic, { on: false, pixel: false });
+      await page.screenshot({ path: path.join(OUT, `pixel-art-${renderer}-classic.png`) });
+      assert.deepEqual(errors, []);
+    } finally { await browser.close(); }
+  }
+});
+
+test('Ore Processor window lists its three products and queues them; the top bar shows resources as they arrive', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    assert.equal(await page.$$eval('#economyBar .resource-pill:not(.power)', els => els.length), 1, 'only metal before anything else is stocked');
+    const pr = await page.evaluate(() => {
+      Object.assign(GW.State.resources, { metal: 100, copper: 12 });
+      const b = GW.State.buildings.find(b => b.type === 'ore_processor'); GW.centerCamera(b.x, b.y + 150, 0.8); return { x: b.x, y: b.y };
+    });
+    const p = await screen(page, pr.x, pr.y);
+    await page.touchscreen.tap(p.x, p.y);
+    await page.waitForSelector('#ezFabrication:not(.hidden)');
+    await page.waitForTimeout(120);
+    const opts = await page.$$eval('#ezFabrication [data-ez="fabricate"]', els => els.map(e => e.dataset.arg));
+    assert.deepEqual(opts, ['steel', 'electronics', 'fuel_rods']);
+    assert.equal(await page.$('#ezRally'), null, 'no rally point for a processor');
+    assert.ok(await page.$eval('#ezFabrication [data-arg="fuel_rods"]', e => e.disabled), 'no uranium yet');
+    await page.click('#ezFabrication [data-arg="steel"]');
+    await page.click('#ezFabrication [data-arg="electronics"]');
+    assert.equal(await page.evaluate(() => GW.State.buildings.find(b => b.type === 'ore_processor').fabQueue.length), 2);
+    assert.equal(await page.$$eval('#economyBar .resource-pill:not(.power)', els => els.length), 2, 'metal and copper');
+    await page.screenshot({ path: path.join(OUT, 'ore-processor.png') });
+    // Finished batches reach the stockpile without errors (regression: the expedition log
+    // expected every finished job to be a unit).
+    await page.evaluate(() => GW.Cheats.set('instantBuild', true));
+    await page.waitForFunction(() => GW.Economy.get('steel') >= 1 && GW.Economy.get('electronics') >= 1, null, { timeout: 8000 });
+    await page.evaluate(() => GW.Cheats.set('instantBuild', false));
+    // Power pill: supply / demand, red while the grid is short.
+    const grid = await page.evaluate(() => GW.Power.grid);
+    assert.equal((await page.textContent('#economyBar .resource-pill.power')).replace(/\s/g, ''), `ϟ${Math.round(grid.supply)}/${Math.round(grid.demand)}`);
+    await page.evaluate(() => { const G = GW, sh = G.Units.ship(); for (let i = 0; i < 3; i++){ const f = G.Buildings.add('fabricator', sh.gx + 10 + i * 3, sh.gy + 12); G.State.resources.metal += 200; G.Fabrication.enqueue(f, 'survey_drone'); } for (let i = 0; i < 2; i++){ const f = G.Buildings.add('fabricator', sh.gx + 10 + i * 3, sh.gy + 15); G.State.resources.metal += 200; G.Fabrication.enqueue(f, 'survey_drone'); } });
+    await page.waitForSelector('#economyBar .resource-pill.power.short');
+    // The pills never reach the centred DEBUG button, even with all six resources.
+    await page.evaluate(() => Object.assign(GW.State.resources, { uranium: 5, steel: 5, electronics: 5, fuel_rods: 5 }));
+    await page.waitForTimeout(200);
+    const [bar, dbg, squad] = await page.evaluate(() => ['economyBar', 'dbgBtn', 'squadBar'].map(id => document.getElementById(id).getBoundingClientRect().toJSON()));
+    assert.ok(bar.right <= dbg.left, `pills end at ${bar.right}, DEBUG starts at ${dbg.left}`);
+    assert.ok(squad.top >= bar.bottom, 'squad bar sits below the pills');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('fog of war hides enemies outside the crew\'s sight; the Debug panel turns it off and inspects any unit', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    const r = await page.evaluate(() => {
+      const G = GW, h = G.Units.hero();
+      const near = G.Units.spawn('hostile_machine', h.x + 250, h.y), far = G.Units.spawn('hostile_machine', h.x + 2400, h.y + 600);
+      near.speed = far.speed = 0; G.rebuildSpatial(); G.Fog.update(true);
+      G.centerCamera(far.x, far.y, 0.6); G.Renderer.draw();
+      const p = G.screenFromWorld(far.x, far.y);
+      return { on: G.Fog.enabled, near: G.Fog.canSee(near), far: G.Fog.canSee(far), farId: far.id, visible: G.State.metrics.visible, pickFar: !!G.Input.unitAt(far.x, far.y, true), p };
+    });
+    assert.ok(r.on, 'fog is on by default');
+    assert.ok(r.near && !r.far, 'near enemy seen, far enemy hidden');
+    assert.equal(r.pickFar, false, 'hidden enemies cannot be clicked');
+    assert.equal(r.visible, 0, 'the hidden enemy is not drawn');
+    await page.screenshot({ path: path.join(OUT, 'fog.png') });
+    // A unit walking over reveals it, and the area stays explored (dimmed) afterwards.
+    assert.ok(await page.evaluate(id => { const G = GW, f = G.Units.alive(id), s = G.State.units.find(u => u.type === 'survey_drone'); s.x = f.x - 200; s.y = f.y; G.Fog.update(true); const seen = G.Fog.canSee(f); s.x = G.Units.hero().x; s.y = G.Units.hero().y; G.Fog.update(true); return seen && !G.Fog.canSee(f) && G.Fog.seen[Math.floor(f.y / 48) * G.Fog.cols + Math.floor(f.x / 48)] === 1; }, r.farId));
+    // Debug: the Units list counts both teams, the inspector sees through fog, fog turns off.
+    await page.click('#dbgBtn');
+    assert.match(await page.textContent('#dbgUnits'), /red · 2[\s\S]*Hostile Autonomous Machine/i);
+    await page.click('#dbgInspect');
+    await page.mouse.click(r.p.x, r.p.y);
+    await page.waitForSelector('#dbgTip');
+    const tip = await page.textContent('#dbgTip');
+    assert.match(tip, /Hostile Autonomous Machine/); assert.match(tip, new RegExp('#' + r.farId)); assert.match(tip, /Fog\s*hidden/);
+    await page.click('#dbgInspect');
+    await page.click('#dbgFog');
+    assert.equal(await page.evaluate(id => { GW.Renderer.draw(); return !GW.Fog.enabled && GW.Fog.canSee(GW.Units.alive(id)) && GW.State.metrics.visible > 0; }, r.farId), true, 'fog off shows everything');
+    await page.screenshot({ path: path.join(OUT, 'fog-off.png') });
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('Shield Projector window switches the field on and off; its state survives a save', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    const at = await page.evaluate(() => {
+      const G = GW, sh = G.Units.ship(), p = G.State.grid.nearestOpen(sh.gx + 18, sh.gy + 30, 6);
+      const b = G.Buildings.add('shield_projector', p.x, p.y);
+      G.centerCamera(b.x, b.y, 0.7);
+      return { id: b.id, ...G.screenFromWorld(b.x, b.y) };
+    });
+    await page.touchscreen.tap(at.x, at.y);
+    await page.waitForSelector('#shieldPanel:not(.hidden) #shToggle');
+    await page.waitForTimeout(120);
+    assert.match(await page.textContent('#shLive'), /Off[\s\S]*0 \/ 2,500/);
+    await page.click('#shToggle');
+    assert.equal(await page.evaluate(id => GW.State.buildings.find(b => b.id === id).shieldOn, at.id), true);
+    await page.waitForFunction(id => GW.State.buildings.find(b => b.id === id).shield > 20, at.id, { timeout: 8000 });
+    assert.match(await page.textContent('#shLive'), /Charging[\s\S]*40 in use/);
+    await page.screenshot({ path: path.join(OUT, 'shield-projector.png') });
+    const saved = await page.evaluate(id => { GW.Save.save(1); const d = JSON.parse(localStorage.getItem(GW.Save.keyFor(1))); return d.buildings.find(b => b.id === id); }, at.id);
+    assert.equal(saved.shieldOn, true); assert.ok(saved.shield > 20);
+    await page.click('#shToggle');
+    assert.equal(await page.evaluate(id => GW.State.buildings.find(b => b.id === id).shieldOn, at.id), false);
+    await page.click('#shClose');
+    assert.ok(await page.isHidden('#shieldPanel'));
     await page.evaluate(() => localStorage.clear());
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }

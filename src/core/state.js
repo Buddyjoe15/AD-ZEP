@@ -11,7 +11,7 @@
   function fresh(){
     return {
       // Simulation
-      seed: 72491, time: 0, nextId: 1, paused: true, gameOver: false,
+      seed: 72491, map: null, time: 0, nextId: 1, paused: true, gameOver: false,
       units: [], buildings: [], constructionSites: [], containers: [], resourceNodes: [], shots: [],
       resources: {}, heroId: null, shipId: null,
       inventory: { items: [], equipment: G.emptyEquipment() },

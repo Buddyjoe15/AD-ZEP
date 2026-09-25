@@ -29,6 +29,7 @@
       cv.width = grid.cols; cv.height = grid.rows;
       const g = cv.getContext('2d'), img = g.createImageData(grid.cols, grid.rows), lut = [];
       for (const t of G.Defs.terrain.all()) lut[t.id] = t.minimap;
+      if (G.PixelArt.enabled) for (const id of G.PixelArt.dustIds()) lut[id] = G.PixelArt.DUST_MINIMAP;
       for (let i = 0; i < grid.size; i++){
         const c = lut[grid.tiles[i]] || lut[0], p = i * 4;
         img.data[p] = c[0]; img.data[p + 1] = c[1]; img.data[p + 2] = c[2]; img.data[p + 3] = 255;
@@ -57,10 +58,13 @@
       const cv = document.createElement('canvas'); cv.width = size * res; cv.height = size * res; cv.res = res;
       const g = cv.getContext('2d'), r = G.RNG(G.State.seed + cx * 13007 + cy * 9011);
       g.scale(res, res);
+      const P = G.PixelArt, dust = P.enabled ? P.dustIds() : null;
+      g.imageSmoothingEnabled = false;
       for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
         const gx = cx * ct + lx, gy = cy * ct + ly;
         if (gx >= grid.cols || gy >= grid.rows) continue;
         const t = grid.get(gx, gy), px = lx * T, py = ly * T;
+        if (dust && dust.has(t)){ g.drawImage(P.tile(gx, gy), px, py, T, T); continue; }   // pixel-art dust plain
         if (t === TT.PATH){
           g.fillStyle = '#73654a'; g.fillRect(px, py, T, T);
           g.fillStyle = '#8a7a58'; for (let k = 0; k < 4; k++) g.fillRect(px + 5 + r() * (T - 10), py + 5 + r() * (T - 10), 2 + r() * 3, 1 + r() * 2);

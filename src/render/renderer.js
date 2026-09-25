@@ -68,6 +68,7 @@
       g.imageSmoothingEnabled = false; g.drawImage(TC.getOverview(), 0, 0, C.WORLD_W, C.WORLD_H); g.imageSmoothingEnabled = true;
       let chunks = 0;
       if (!far){
+        g.imageSmoothingEnabled = !(G.PixelArt.enabled && z * this.dpr >= 1);   // pixel terrain stays crisp up close
         let built = 0;
         for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++){
           let cv = null;
@@ -76,6 +77,7 @@
           if (!cv) continue;
           g.drawImage(cv, cx * ct, cy * ct, ct, ct); chunks++;
         }
+        g.imageSmoothingEnabled = true;
       }
 
       // Resource nodes.
@@ -87,7 +89,7 @@
           const px = n.gx * T, py = n.gy * T;
           g.fillStyle = '#3f3a33'; g.fillRect(px + 1, py + 1, T - 2, T - 2);
           g.fillStyle = '#6f6453'; g.beginPath(); g.moveTo(px + 6, py + T - 8); g.lineTo(px + 16, py + 10); g.lineTo(px + 28, py + 20); g.lineTo(px + 40, py + 8); g.lineTo(px + T - 5, py + T - 6); g.closePath(); g.fill();
-          g.fillStyle = '#c9d4dc';
+          g.fillStyle = G.Gather.def(n).ore || '#c9d4dc';   // ore colour tells deposits apart
           for (const [ox, oy, r] of [[15, 27, 4], [27, 33, 3.2], [33, 21, 3.6], [21, 16, 2.6]]){ g.beginPath(); g.arc(px + ox, py + oy, r, 0, TAU); g.fill(); }
           g.strokeStyle = '#d0a65b'; g.lineWidth = 2 / z; g.setLineDash([5 / z, 4 / z]); g.strokeRect(px + 1, py + 1, T - 2, T - 2); g.setLineDash([]);
           if (!far){ g.fillStyle = '#e8d9b4'; g.font = (10 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(n.name, n.x, py - 5); }
@@ -117,14 +119,19 @@
       for (const site of S.constructionSites){
         if (!inView(site.x, site.y, site.w * T)) continue;
         const px = site.gx * T, py = site.gy * T, pct = 1 - site.remaining / site.buildTime;
+        if (G.PixelArt.buildingSprite(site.type)) G.PixelArt.drawSite(g, site, pct);
+        else {
         g.fillStyle = 'rgba(160,160,145,.28)'; g.strokeStyle = '#d4b96b'; g.lineWidth = 2 / z; g.setLineDash([6 / z, 5 / z]);
         g.fillRect(px + 2, py + 2, T * site.w - 4, T * site.h - 4); g.strokeRect(px + 2, py + 2, T * site.w - 4, T * site.h - 4); g.setLineDash([]);
+        }
         g.fillStyle = '#111'; g.fillRect(px + 4, py + T * site.h - 8, T * site.w - 8, 5);
         g.fillStyle = '#e0c15b'; g.fillRect(px + 5, py + T * site.h - 7, (T * site.w - 10) * G.clamp(pct, 0, 1), 3);
         g.fillStyle = '#fff0b0'; g.font = (9 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(site.remaining.toFixed(1) + 's', site.x, py - 5);
       }
-      // Structures.
+      // Structures (and, with pixel art, the rubble of recently destroyed ones).
+      if (G.PixelArt.enabled) G.PixelArt.drawRubble(g, inView);
       for (const b of S.buildings) if (inView(b.x, b.y, b.w * T)) G.Visuals.drawBuilding(g, b, z, t);
+      G.Visuals.shields(g, z, t, inView);
       // Expedition signals.
       const E = S.expedition;
       if (E) for (const p of E.sites){
@@ -135,12 +142,16 @@
         g.fillStyle = g.strokeStyle; g.font = `${11 / z}px sans-serif`; g.textAlign = 'center'; g.fillText(p.kind, p.x, p.y - 30);
       }
 
+      // Fog of war over the map and structures; hidden enemies are not drawn at all.
+      const Fog = G.Fog;
+      if (Fog.enabled){ Fog.update(); Fog.draw(g); }
+
       // Units. With WebGL2 they are drawn by the GPU on their own canvas (one instanced call);
       // the ship stays on this canvas and everything that must sit above units (selection,
       // routes, beams, gunfire, previews) goes on a 2D overlay canvas. Without WebGL2 the
       // same content is drawn here with Canvas 2D.
       const visible = [];
-      for (const u of S.units) if (inView(u.x, u.y, u.isShip ? 340 : 80)) visible.push(u);
+      for (const u of S.units) if (inView(u.x, u.y, u.isShip ? 340 : 80) && (u.team === 'blue' || Fog.visibleAt(u.x, u.y))) visible.push(u);
       const gpu = G.GPU.ok, sprites = [], bars = [];
       for (const u of visible){
         if (u.isShip) G.Visuals.drawUnit(g, u, z, t);
@@ -172,10 +183,11 @@
     // Canvas 2D unit drawing (fallback when hardware WebGL2 is unavailable). Units are
     // stamped from the sprite atlas with one transform + drawImage each; zoomed out,
     // ordinary units become team-coloured markers batched into one path per team.
+    // Pixel-art units first get their shadows, merged in one mask so they don't stack.
     drawUnits2D(g, visible, z, t){
       const S = G.State, C = G.CONFIG, lod = z < C.UNIT_LOD_ZOOM, batches = new Map();
-      const A = G.SpriteAtlas, c = S.camera, k = this.dpr * z;
-      let img = null, lv = 0;   // atlas level nearest to 1:1 for this zoom (chosen on first use)
+      const A = G.SpriteAtlas, c = S.camera, k = this.dpr * z, items = [];
+      let shadows = false;
       for (const u of visible){
         if (u.isShip) continue;
         if (lod && !u.isHero && !S.selected.has(u.id)){
@@ -187,13 +199,32 @@
         }
         const def = G.Defs.units.get(u.type);
         if (!def) continue;
-        const e = A.entryFor(def, u.team), f = A.frame(e, u, t), ang = e.upright ? 0 : u.heading;
-        // Level n holds RES / 2^n px per world px; use the most detailed level that is at
-        // most 2× the device resolution.
-        if (!img){ lv = Math.min(Math.log2(A.RES) + 1, Math.max(0, Math.ceil(Math.log2(A.RES / (2 * k))))); img = A.level(lv); }
-        const s = 1 / (1 << lv), co = Math.cos(ang) * k, si = Math.sin(ang) * k;
-        g.setTransform(co, si, -si, co, (u.x - c.x) * k, (u.y - c.y) * k);
-        g.drawImage(img, (A.cellX(f) + e.px.x) * s, (A.cellY(f) + e.px.y) * s, e.rect.w * A.RES * s, e.rect.h * A.RES * s, e.rect.x, e.rect.y, e.rect.w, e.rect.h);
+        const e = A.entryFor(def, u.team);
+        items.push(u, e, A.frame(e, u, t));
+        if (e.shadow) shadows = true;
+      }
+      if (items.length){
+        // Atlas level n holds RES / 2^n px per world px (Canvas art); use the most detailed
+        // level that is at most 2× the device resolution.
+        const lv = Math.min(Math.log2(A.RES) + 1, Math.max(0, Math.ceil(Math.log2(A.RES / (2 * k))))), s = 1 / (1 << lv);
+        const stamp = (ctx, img, u, e, f, dx, dy) => {
+          const ang = e.upright ? 0 : u.heading, co = Math.cos(ang) * k, si = Math.sin(ang) * k, at = e.at[f];
+          ctx.setTransform(co, si, -si, co, (u.x + dx - c.x) * k, (u.y + dy - c.y) * k);
+          ctx.drawImage(img, at[0] * s, at[1] * s, e.rect.w * e.scale * s, e.rect.h * e.scale * s, e.rect.x, e.rect.y, e.rect.w, e.rect.h);
+        };
+        const smooth = g.imageSmoothingEnabled;
+        g.imageSmoothingEnabled = !G.PixelArt.enabled;
+        if (shadows){
+          const mask = this.shadowMask || (this.shadowMask = document.createElement('canvas'));
+          if (mask.width !== this.cv.width || mask.height !== this.cv.height){ mask.width = this.cv.width; mask.height = this.cv.height; }
+          const m = mask.getContext('2d'), sil = A.silhouette(lv);
+          m.setTransform(1, 0, 0, 1, 0, 0); m.clearRect(0, 0, mask.width, mask.height); m.imageSmoothingEnabled = false;
+          for (let i = 0; i < items.length; i += 3){ const e = items[i + 1]; if (e.shadow) stamp(m, sil, items[i], e, items[i + 2], e.shadow[0], e.shadow[1]); }
+          g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = G.PixelArt.SHADOW_ALPHA; g.drawImage(mask, 0, 0); g.globalAlpha = 1;
+        }
+        const img = A.level(lv);
+        for (let i = 0; i < items.length; i += 3) stamp(g, img, items[i], items[i + 1], items[i + 2], 0, 0);
+        g.imageSmoothingEnabled = smooth;
       }
       g.setTransform(k, 0, 0, k, -c.x * k, -c.y * k);   // back to world space
       for (const [col, list] of batches){
@@ -239,13 +270,44 @@
           g.fillStyle = '#fff2a8'; g.font = (11 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(u.command.toUpperCase(), u.x, u.y - 40);
         }
       }
+      // Rally points: a flag for every building that produces units (red for spawners,
+      // blue for the ship and Fabricators), and a dashed line from the one whose window is
+      // open.
+      const flag = (r, from, open, color, line) => {
+        if (open){
+          g.strokeStyle = line; g.lineWidth = 2 / z; g.setLineDash([8 / z, 6 / z]);
+          g.beginPath(); g.moveTo(from.x, from.y); g.lineTo(r.x, r.y); g.stroke(); g.setLineDash([]);
+          g.beginPath(); g.arc(from.x, from.y, 10, 0, TAU); g.stroke();
+        }
+        const k = Math.max(1, 1 / z) * (open ? 1.2 : 1);
+        g.strokeStyle = '#1b1f22'; g.lineWidth = 3 * k; g.beginPath(); g.moveTo(r.x, r.y); g.lineTo(r.x, r.y - 34 * k); g.stroke();
+        g.fillStyle = color; g.beginPath(); g.moveTo(r.x, r.y - 34 * k); g.lineTo(r.x + 22 * k, r.y - 27 * k); g.lineTo(r.x, r.y - 20 * k); g.closePath(); g.fill();
+        g.globalAlpha = 0.35; g.beginPath(); g.ellipse(r.x, r.y, 12 * k, 5 * k, 0, 0, TAU); g.fill(); g.globalAlpha = 1;
+      };
+      for (const b of S.buildings){
+        if (b.hp <= 0) continue;
+        const s = b.spawner;
+        if (s && s.rally && s.hold) flag(s.rally, G.SpawnerUI.buildingId === b.id ? G.Spawner.spawnPoint(b) : b, G.SpawnerUI.buildingId === b.id, '#e0685f', 'rgba(255,120,100,.8)');
+        if (b.fabQueue && b.rally) flag(b.rally, b, G.ExpeditionUI.fabOwnerId === b.id, '#5fb7e0', 'rgba(110,190,240,.85)');
+      }
+      const ship = G.Units.ship();
+      if (ship && ship.rally) flag(ship.rally, ship, G.ExpeditionUI.fabOwnerId === ship.id, '#5fb7e0', 'rgba(110,190,240,.85)');
       G.Visuals.lasers(g, visible, t);
       if (S.shots.length){
         g.lineWidth = 2 / z;
         for (const [team, col] of [['blue', '#b9e2ff'], ['red', '#ffb08b']]){
           g.strokeStyle = col; g.beginPath();
-          for (const s of S.shots) if ((s.team === 'blue') === (team === 'blue') && inView(s.x1, s.y1, 700)){ g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); }
+          for (const s of S.shots) if (!s.kind && (s.team === 'blue') === (team === 'blue') && inView(s.x1, s.y1, 700) && (s.team === 'blue' || G.Fog.visibleAt(s.x1, s.y1))){ g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); }
           g.stroke();
+        }
+        // Heavy cannon shells and missiles: a thick trail and a blast at the target.
+        for (const s of S.shots){
+          if (!s.kind || !inView(s.x2, s.y2, 700)) continue;
+          const missile = s.kind === 'missile';
+          g.strokeStyle = missile ? '#ffc27a' : '#fff0b0'; g.lineWidth = (missile ? 3 : 5) / z;
+          g.beginPath(); g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); g.stroke();
+          g.fillStyle = missile ? 'rgba(255,140,60,.45)' : 'rgba(255,230,160,.45)';
+          g.beginPath(); g.arc(s.x2, s.y2, missile ? 70 : 40, 0, TAU); g.fill();
         }
       }
       if (S.buildPreview){
@@ -272,13 +334,14 @@
       const base = this.miniBase, W = base.width = m.width, H = base.height = m.height;
       const g = base.getContext('2d'), sx = W / C.WORLD_W, sy = H / C.WORLD_H;
       g.drawImage(G.TerrainCache.getOverview(), 0, 0, W, H);
-      for (const n of S.resourceNodes) if (n.remaining > 0){ g.fillStyle = G.Gather.isDeposit(n) ? '#c9d4dc' : '#d0a65b'; g.fillRect(n.x * sx - 1, n.y * sy - 1, 3, 3); }
+      for (const n of S.resourceNodes) if (n.remaining > 0){ g.fillStyle = G.Gather.isDeposit(n) ? G.Gather.def(n).ore || '#c9d4dc' : '#d0a65b'; g.fillRect(n.x * sx - 1, n.y * sy - 1, 3, 3); }
       for (const b of S.buildings){ g.fillStyle = '#adb5ad'; g.fillRect(b.x * sx - 1, b.y * sy - 1, 3, 3); }
       for (const s of S.constructionSites){ g.fillStyle = '#d4b96b'; g.fillRect(s.x * sx - 1, s.y * sy - 1, 3, 3); }
+      if (G.Fog.enabled && G.Fog.canvas){ G.Fog.update(); g.imageSmoothingEnabled = true; g.drawImage(G.Fog.canvas, 0, 0, W, H); }
       // Ordinary units batched per team; ship and Vance on top.
       const byTeam = new Map();
       for (const u of S.units){
-        if (u.isShip || u.isHero) continue;
+        if (u.isShip || u.isHero || !G.Fog.canSee(u)) continue;
         const col = C.COLORS[u.team] || '#ccc';
         let list = byTeam.get(col);
         if (!list) byTeam.set(col, list = []);

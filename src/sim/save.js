@@ -100,13 +100,68 @@
     return v;
   }
 
-  // Keyed by the schema each step upgrades from; add { 2: migrate_2_to_3 } and so on.
-  const MIGRATIONS = { 1: migrate_1_to_2 };
+  // Schema 2 → schema 3 (v0.7): saves record which map generator built their terrain.
+  // Every earlier save was generated as a forest Earth.
+  function migrate_2_to_3(d){
+    const v = G.copy(d);
+    v.schema = 3;
+    v.map = 'forest';
+    return v;
+  }
+
+  // Schema 3 → schema 4 (v0.7): spawners have a movable rally point. Held units used to
+  // wait wherever they spawned; the new default rally point is the one a freshly placed
+  // spawner gets (five tiles south of its edge).
+  function migrate_3_to_4(d){
+    const v = G.copy(d), T = 48;
+    v.schema = 4;
+    for (const b of v.buildings || []){
+      if (b.spawner && typeof b.spawner === 'object' && !b.spawner.rally) b.spawner.rally = { x: b.x, y: b.y + ((b.h || 0) / 2 + 5) * T };
+    }
+    return v;
+  }
+
+  // Schema 4 → schema 5 (v0.7): the ship and Fabricators have a rally point for the units
+  // they produce. Older saves have none (null): new units wait beside their fabricator,
+  // as they always did.
+  function migrate_4_to_5(d){
+    const v = G.copy(d);
+    v.schema = 5;
+    for (const o of [...(v.units || []), ...(v.buildings || [])]) if (o && Array.isArray(o.fabQueue) && o.rally === undefined) o.rally = null;
+    return v;
+  }
+
+  // Schema 5 → schema 6 (Building Additions): the Wall structure is replaced by the Defensive
+  // Wall, which has the same size, health, cost and cover aura. Walls and wall construction
+  // sites in older saves become Defensive Walls.
+  function migrate_5_to_6(d){
+    const v = G.copy(d);
+    v.schema = 6;
+    for (const b of v.buildings || []) if (b && b.type === 'wall') b.type = 'defensive_wall';
+    for (const s of v.constructionSites || []) if (s && s.type === 'wall') s.type = 'defensive_wall';
+    return v;
+  }
+
+  // Schema 6 → schema 7: Shield Projectors save whether they are switched on (`shieldOn`)
+  // and their stored field charge (`shield`). Any projector without them starts switched
+  // off and empty, which is how a newly built one starts.
+  function migrate_6_to_7(d){
+    const v = G.copy(d);
+    v.schema = 7;
+    for (const b of v.buildings || []) if (b && b.type === 'shield_projector'){
+      if (typeof b.shieldOn !== 'boolean') b.shieldOn = false;
+      if (!num(b.shield) || b.shield < 0) b.shield = 0;
+    }
+    return v;
+  }
+
+  // Keyed by the schema each step upgrades from; add { 7: migrate_7_to_8 } and so on.
+  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7 };
 
   // Applies the steps in order until the save reaches G.SAVE_SCHEMA. A current save is
   // returned as is; anything newer or unknown is rejected.
   function migrate(d){
-    if (!d || typeof d !== 'object' || d.project !== G.PROJECT) throw new Error('Not an Earth Zero Protocol expedition file');
+    if (!d || typeof d !== 'object' || d.project !== G.PROJECT) throw new Error('Not a Zero Earth Protocol expedition file');
     if (!int(d.schema) || d.schema < 1) throw new Error('Unsupported save schema ' + d.schema);
     if (d.schema > G.SAVE_SCHEMA) throw new Error('Save schema ' + d.schema + ' is newer than this version of the game (schema ' + G.SAVE_SCHEMA + ')');
     let v = d;
@@ -119,7 +174,7 @@
     return v;
   }
 
-  // ---- Validation (schema 2). Throws with a specific message on the first problem. ----
+  // ---- Validation (current schema). Throws with a specific message on the first problem. ----
   function validate(d){
     const C = G.CONFIG, D = G.Defs;
     const fail = why => { throw new Error('Invalid expedition save: ' + why); };
@@ -129,11 +184,12 @@
     const item = i => i && typeof i.id === 'string' && D.items.has(i.key) &&
       (D.items.get(i.key).stackable ? int(i.count) && i.count > 0 && i.count <= D.items.get(i.key).maxStack : num(i.durability) && num(i.maxDurability) && i.durability >= 0);
     const cost = o => o && typeof o === 'object' && Object.entries(o).every(([k, v]) => D.resources.has(k) && num(v) && v >= 0);
-    const spawner = s => typeof s.running === 'boolean' && typeof s.hold === 'boolean' && ['rate', 'amount', 'spawned', 'acc'].every(k => num(s[k]) && s[k] >= 0);
+    const spawner = s => typeof s.running === 'boolean' && typeof s.hold === 'boolean' && ['rate', 'amount', 'spawned', 'acc'].every(k => num(s[k]) && s[k] >= 0) && point(s.rally);
     const queue = q => list(q, 64) && q.every(e => D.recipes.has(e.recipe) && num(e.left) && e.left >= -1);
 
     if (!d || d.project !== G.PROJECT || d.schema !== G.SAVE_SCHEMA) fail('project or schema');
     if (!int(d.seed) || d.seed < 0 || d.seed > 4294967295) fail('seed');
+    if (typeof d.map !== 'string' || !Object.prototype.hasOwnProperty.call(G.MapGen.types, d.map)) fail('map type');
     if (!int(d.worldSize) || d.worldSize < 64 || d.worldSize > 2048) fail('world size');
     if (!num(d.time) || d.time < 0 || !int(d.nextId)) fail('clock');
     if (!list(d.units, LIMITS.units)) fail('units');
@@ -151,6 +207,7 @@
       if (u.cargo && !Object.entries(u.cargo).every(([k, v]) => D.resources.has(k) && num(v) && v >= 0)) fail('unit cargo');
       if (u.storage && (!list(u.storage.items, 1000) || !u.storage.items.every(item) || !num(u.storage.capacity))) fail('unit storage');
       if (u.fabQueue && !queue(u.fabQueue)) fail('unit fabrication queue');
+      if (u.fabQueue && !(u.rally === null || point(u.rally))) fail('unit rally point');
       if (u.isShip && (![u.gx, u.gy, u.w, u.h].every(int))) fail('ship footprint');
       if (u.team === 'red' && (u.isHero || u.isShip)) fail('hostile flags');
       for (const k of ['followId']) if (u[k] != null && !int(u[k])) fail('unit ' + k);
@@ -169,7 +226,14 @@
     if (!d.constructionSites.every(s => point(s) && D.buildables.has(s.type) && num(s.remaining) && num(s.buildTime) && [s.gx, s.gy, s.w, s.h].every(int))) fail('construction site');
     if (!d.resourceNodes.every(n => point(n) && D.nodes.has(n.type) && num(n.remaining) && n.remaining >= 0 &&
       (D.nodes.get(n.type).kind !== 'deposit' || (int(n.gx) && int(n.gy))))) fail('resource node');
+    if (!d.buildings.every(b => !b.fabQueue || b.rally === null || point(b.rally))) fail('building rally point');
     if (!d.buildings.every(b => (!b.stock || cost(b.stock)) && (b.nodeId == null || typeof b.nodeId === 'string'))) fail('building stockpile');
+    // Shield Projectors carry their switch and charge; nothing else may.
+    if (!d.buildings.every(b => {
+      const sh = D.buildables.get(b.type).shield;
+      if (!sh) return b.shieldOn === undefined && b.shield === undefined;
+      return typeof b.shieldOn === 'boolean' && num(b.shield) && b.shield >= 0 && b.shield <= sh.capacity;
+    })) fail('building shield');
     if (!d.terrainEdits.every(e => [e.x, e.y, e.w, e.h, e.t].every(int) && e.w >= 0 && e.h >= 0 && e.w * e.h <= 1 << 20)) fail('terrain edit');
     const e = d.expedition;
     if (!e) fail('expedition');
@@ -186,7 +250,7 @@
   // Builds a fresh world from validated save data.
   function apply(d, slot){
     G.setWorldSize(d.worldSize);
-    const S = G.Scenario.createWorld(d.seed, { slot });
+    const S = G.Scenario.createWorld(d.seed, { slot, map: d.map });
     for (const e of d.terrainEdits){ S.grid.fill(e.x, e.y, e.w, e.h, e.t); S.terrainEdits.push({ ...e }); }
     Object.assign(S, {
       time: d.time, nextId: d.nextId, heroId: d.heroId, shipId: d.shipId,
@@ -197,9 +261,11 @@
     });
     Object.assign(S.camera, d.camera);
     for (const u of G.copy(d.units)){
-      // Capacity upgrades in the unit definitions apply to existing units.
+      // Capacity changes in the unit definitions apply to existing units: storage only
+      // grows (items are never dropped), cargo follows the definition.
       const def = G.Defs.units.get(u.type);
       if (u.storage && def.storageSlots > u.storage.capacity) u.storage.capacity = def.storageSlots;
+      if (u.cargo && def.cargoCapacity) u.cargoCapacity = def.cargoCapacity;
       G.Units.adopt(u);
     }
     for (const b of G.copy(d.buildings)) G.Buildings.adopt(b);
@@ -221,7 +287,7 @@
       const units = S.units.filter(u => u.hp > 0).map(u => { const o = G.copy(u); o.pathPending = false; return o; });
       return {
         project: G.PROJECT, schema: G.SAVE_SCHEMA, version: G.VERSION, savedAt: G.Clock.stamp(),
-        seed: S.seed, worldSize: G.CONFIG.WORLD_TILES, time: S.time, nextId: S.nextId, heroId: S.heroId, shipId: S.shipId,
+        seed: S.seed, map: S.map, worldSize: G.CONFIG.WORLD_TILES, time: S.time, nextId: S.nextId, heroId: S.heroId, shipId: S.shipId,
         camera: { x: S.camera.x, y: S.camera.y, z: S.camera.z }, formation: S.formation, formationAngle: S.formationAngle,
         resources: G.copy(S.resources), inventory: G.copy(S.inventory), units,
         buildings: G.copy(S.buildings), constructionSites: G.copy(S.constructionSites), containers: G.copy(S.containers),

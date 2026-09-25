@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
   <meta name="theme-color" content="#111713">
-  <title>Abyssal Dawn: Earth Zero Protocol</title>
+  <title>Abyssal Dawn: Zero Earth Protocol</title>
   <!-- Development entry point: opens directly from disk, no build step.
        `npm run build` inlines everything below into dist/ad-ezp.html. -->
   <link rel="stylesheet" href="src/styles/main.css">
@@ -26,7 +26,7 @@
           <div class="ship-orbit"><div class="menu-ship"><i></i><i></i><i></i></div></div>
         </div>
       </div>
-      <div class="main-menu-title">EARTH ZERO PROTOCOL <span class="version-label"></span></div>
+      <div class="main-menu-title">ZERO EARTH PROTOCOL <span class="version-label"></span></div>
       <button id="mainMenuBackBtn" class="main-back hidden">← Back</button>
       <div id="mainMenuPanel"></div>
     </div>
@@ -42,8 +42,9 @@
       <button id="squadBtn3" title="Select Squad 3"><span>3</span></button>
       <button id="squadBtn4" title="Select Squad 4"><span>4</span></button>
     </div>
-    <div id="gameTitle">EARTH ZERO PROTOCOL <span class="version-label"></span></div>
+    <div id="gameTitle">ZERO EARTH PROTOCOL <span class="version-label"></span></div>
     <button id="dbgBtn" type="button">DEBUG</button>
+    <button id="mapEdBtn" type="button" class="hidden">MAP EDITOR</button>
     <div id="status" aria-live="polite"></div>
     <button id="ezToggle" aria-expanded="false">Expedition log</button>
     <div id="topRightControls">
@@ -54,6 +55,7 @@
 
     <div id="catalogPanel" class="panel catalog hidden"></div>
     <div id="selectionPanel" class="panel"></div>
+    <div id="targetPanel" class="panel hidden" aria-label="Enemy info"></div>
     <div id="miniSideControls"><button id="inventoryBtn">Inventory</button></div>
     <canvas id="minimap" width="220" height="220" aria-label="Minimap"></canvas>
     <button id="pauseBtn" class="mini-pause">Pause</button>
@@ -61,15 +63,17 @@
     <div id="chestPanel" class="panel rpg hidden"></div>
     <div id="devPanel" class="panel dev hidden"></div>
     <div id="dbgPanel" class="hidden"></div>
+    <div id="mapEdPanel" class="hidden"></div>
     <aside id="ezFabrication" class="hidden" aria-label="Fabrication"><div id="ezFabBody"></div></aside>
     <aside id="spawnerPanel" class="hidden" aria-label="Spawner"><div id="spawnerBody"></div></aside>
-    <aside id="ezPanel" class="hidden"><div id="ezBody"></div></aside>
+    <aside id="shieldPanel" class="hidden" aria-label="Shield Projector"><div id="shieldBody"></div></aside>
+    <aside id="ezPanel" class="hidden"><div class="panel-drag-head ezDragHead" data-drag-handle title="Drag to move"><button type="button" class="panel-close" id="ezClose" aria-label="Close expedition log">×</button><h3>Expedition log</h3></div><div id="ezBody"></div></aside>
     <div id="ezArrival" class="hidden"></div>
     <input type="file" id="ezFile" accept=".json,application/json" hidden>
 
     <div id="gameMenuOverlay" class="hidden">
       <div id="gameMenuCard">
-        <div class="game-menu-header"><div><b>EARTH ZERO PROTOCOL</b><span>Game Menu</span></div><button id="closeMenuBtn">×</button></div>
+        <div class="game-menu-header"><div><b>ZERO EARTH PROTOCOL</b><span>Game Menu</span></div><button id="closeMenuBtn">×</button></div>
         <div class="game-menu-tabs">
           <button data-menu-tab="overview" class="active">Game</button>
           <button data-menu-tab="stats">Statistics</button>
@@ -105,7 +109,9 @@
   <script src="src/world/pathfinding.js"></script>
   <script src="src/sim/entities.js"></script>
   <script src="src/sim/economy.js"></script>
+  <script src="src/sim/power.js"></script>
   <script src="src/sim/buildings.js"></script>
+  <script src="src/sim/defense.js"></script>
   <script src="src/sim/inventory.js"></script>
   <script src="src/sim/orders.js"></script>
   <script src="src/sim/swarm.js"></script>
@@ -118,9 +124,13 @@
   <script src="src/sim/expedition.js"></script>
   <script src="src/sim/scenario.js"></script>
   <script src="src/sim/save.js"></script>
+  <script src="src/sim/debugtools.js"></script>
   <!-- Presentation layer: canvas rendering, DOM interface and input. -->
+  <script src="src/render/pixel-data.js"></script>
+  <script src="src/render/pixelart.js"></script>
   <script src="src/render/visuals.js"></script>
   <script src="src/render/terrain.js"></script>
+  <script src="src/render/fog.js"></script>
   <script src="src/render/sprites.js"></script>
   <script src="src/render/gpu.js"></script>
   <script src="src/render/renderer.js"></script>
@@ -129,7 +139,9 @@
   <script src="src/ui/build.js"></script>
   <script src="src/ui/expedition.js"></script>
   <script src="src/ui/spawner.js"></script>
+  <script src="src/ui/shield.js"></script>
   <script src="src/ui/debug.js"></script>
+  <script src="src/ui/mapeditor.js"></script>
   <script src="src/ui/input.js"></script>
   <script src="src/ui/menu.js"></script>
   <script src="src/main.js"></script>

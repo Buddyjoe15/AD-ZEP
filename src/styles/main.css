@@ -767,7 +767,16 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
 .resource-pill .resource-icon{font-size:13px}.resource-pill.coins .resource-icon{color:#e4c65a}.resource-pill.metal .resource-icon{color:#aebbc3}
 .resource-pill b{font-size:10px}
 #squadBar{top:38px}
+.resource-pill.power .resource-icon{color:#f2c66a;font-weight:700}
+.resource-pill.power.short{border-color:#e85e55}.resource-pill.power.short b,.resource-pill.power.short .resource-icon{color:#ff8a7a}
+/* Narrow screens: resource pills shrink and wrap before they reach the centred DEBUG
+   button; the squad bar moves below them (hud.js). */
+@media (max-width:560px){
+  #economyBar{flex-wrap:wrap;max-width:calc(50vw - 52px)}
+  .resource-pill{min-width:0;height:23px;padding:2px 6px;gap:4px}
+}
 .catalog-art.catalog-wall{background:repeating-linear-gradient(90deg,#666 0 8px,#7b817b 8px 13px);border:2px solid #333;color:#eef0ed}
+.catalog-art.catalog-wall.reinforced{background:repeating-linear-gradient(90deg,#3e4a52 0 8px,#5b6a73 8px 13px);border-color:#1c2328}
 @media (orientation:landscape) and (max-height:420px){
   #economyBar{gap:2px}.resource-pill{height:23px;min-width:58px;padding:2px 5px;font-size:8px}.resource-pill b{font-size:8px}.resource-pill .resource-icon{font-size:10px}
   #squadBar{top:31px}
@@ -789,3 +798,9 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
 @media (orientation:landscape) and (max-height:420px){
   #catalogPanel[data-kind="truck-build"]{width:min(240px,40vw);max-height:72vh;bottom:32px}
 }
+
+/* Inventory title bar: close button on the left, drag anywhere else on the bar to move. */
+.panel-drag-head{display:flex;align-items:center;gap:8px;margin:-2px 0 6px;padding:2px 0;cursor:move;touch-action:none;user-select:none;-webkit-user-select:none}
+.panel-drag-head h3{margin:0;flex:1}
+.rpg .panel-drag-head .panel-close{flex:0 0 auto;min-width:30px;min-height:30px;padding:0;font-size:18px;line-height:1;border-radius:6px;cursor:pointer}
+#inventoryPanel.dragging{opacity:.92;box-shadow:0 8px 28px #000b}

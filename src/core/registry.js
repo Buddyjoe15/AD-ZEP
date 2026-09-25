@@ -54,7 +54,7 @@
       need(d, 'Unit', ['name', 'hp', 'speed', 'radius']);
       return {
         team: 'blue', range: 0, damage: 0, reload: 999, sight: 600, capabilities: [],
-        visual: d.key, cargoCapacity: 0, storageSlots: 0, footprint: null, fabricator: null,
+        visual: d.key, cargoCapacity: 0, storageSlots: 0, footprint: null, fabricator: null, power: null, flying: false,
         ai: null, selectable: true, ...d,
         capabilities: [...(d.capabilities || [])]
       };
@@ -69,7 +69,8 @@
       costOk(d, 'Buildable');
       return {
         hp: 500, buildTime: 2, cost: {}, description: '', behaviors: [], symbol: null, color: '#9bbcf0',
-        container: null, fabricator: null, spawner: null, team: 'blue', debugOnly: false, placeOnNode: null,
+        container: null, fabricator: null, spawner: null, team: 'blue', debugOnly: false, placeOnNode: null, power: null,
+        armor: 0, gate: null, sight: 0, shield: null, sensor: null,
         blocksMovement: !d.container, ...d
       };
     }),
@@ -78,13 +79,14 @@
       return { description: '', kind: 'scavenge', building: null, ...d };
     }),
     recipes: new Registry('fabrication recipe', d => {
-      need(d, 'Recipe', ['name', 'unit', 'time']);
+      need(d, 'Recipe', ['name', 'time']);
       costOk(d, 'Recipe');
-      return { cost: {}, blurb: '', ...d };
+      if (!d.unit === !d.produces) throw new Error(`Recipe ${d.name} needs either unit or produces`);
+      return { cost: {}, blurb: '', unit: null, produces: null, ...d };
     }),
     climates: new Registry('climate', d => {
       need(d, 'Climate', ['name', 'air']);
-      return { hazard: 0, hostiles: true, ...d };
+      return { hazard: 0, hostiles: true, solar: 1, solarNote: '', wind: 1, windNote: '', ...d };
     })
   };
 
@@ -95,13 +97,29 @@
       if (u.fabricator && !(u.fabricator.queueMax > 0)) problems.push(`unit ${u.key}: fabricator.queueMax`);
     }
     for (const r of D.recipes.all()){
-      if (!D.units.has(r.unit)) problems.push(`recipe ${r.key}: unknown unit ${r.unit}`);
+      if (r.unit && !D.units.has(r.unit)) problems.push(`recipe ${r.key}: unknown unit ${r.unit}`);
+      for (const [k, v] of Object.entries(r.produces || {})) if (!D.resources.has(k) || !(v > 0)) problems.push(`recipe ${r.key}: bad product ${k}`);
       for (const k of Object.keys(r.cost)) if (!D.resources.has(k)) problems.push(`recipe ${r.key}: unknown resource ${k}`);
     }
     for (const b of D.buildables.all()){
       for (const k of Object.keys(b.cost)) if (!D.resources.has(k)) problems.push(`buildable ${b.key}: unknown resource ${k}`);
       for (const beh of b.behaviors) if (!beh.type) problems.push(`buildable ${b.key}: behavior without type`);
       if (b.spawner && !D.units.has(b.spawner.unit)) problems.push(`buildable ${b.key}: spawner unit ${b.spawner.unit} unknown`);
+      for (const k of (b.fabricator && b.fabricator.recipes) || []) if (!D.recipes.has(k)) problems.push(`buildable ${b.key}: unknown recipe ${k}`);
+      if (!(b.armor >= 0 && b.armor < 1)) problems.push(`buildable ${b.key}: armor must be 0–1`);
+      if (b.gate && b.blocksMovement) problems.push(`buildable ${b.key}: a gate must not block movement (it blocks by itself)`);
+      for (const t of b.behaviors.filter(x => x.type === 'turret')){
+        if (!(t.range > 0 && t.damage > 0 && t.reload > 0) || !['ground', 'air', 'any'].includes(t.targets)) problems.push(`buildable ${b.key}: turret needs range, damage, reload and targets`);
+        if (t.ammo && !D.resources.has(t.ammo)) problems.push(`buildable ${b.key}: unknown ammo ${t.ammo}`);
+        if (!(t.accuracy > 0 && t.accuracy <= 1)) problems.push(`buildable ${b.key}: turret accuracy must be 0–1`);
+      }
+    }
+    for (const b of D.buildables.all()) if (D.units.has(b.key)) problems.push(`buildable ${b.key}: key also used by a unit`);
+    for (const d of [...D.units.all(), ...D.buildables.all()]){
+      const p = d.power;
+      if (p && !((p.supply > 0) !== (p.demand > 0) && [undefined, 'producing', 'extracting', 'active'].includes(p.when) && [undefined, 'solar', 'wind'].includes(p.scale))) problems.push(`${d.key}: power needs supply or demand (and a known 'when' / 'scale')`);
+      if (p && p.when === 'active' && !d.shield) problems.push(`${d.key}: power.when 'active' needs a shield`);
+      if (p && p.when === 'producing' && !d.fabricator) problems.push(`${d.key}: power.when 'producing' needs a fabricator`);
     }
     for (const n of D.nodes.all()){
       if (!D.resources.has(n.resource)) problems.push(`node ${n.key}: unknown resource ${n.resource}`);

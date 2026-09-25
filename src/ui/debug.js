@@ -1,5 +1,7 @@
 /* Debug catalog: place any structure, item, resource node or signal on the map, and
-   inspect entities with a long press. The catalog is generated from the registries. */
+   inspect entities with a long press. The catalog is generated from the registries.
+   Also: display toggles (pixel art, fog of war) and a Units section with live counts per
+   team and type, and an inspector that shows a unit's full state (it sees through fog). */
 (function(){
   'use strict';
   const G = GW;
@@ -37,7 +39,24 @@
       rows.push(['Build time', d.buildTime + 's'], ['Cost', G.Economy.describe(d.cost)]);
       if (d.container) rows.push(['Capacity', d.container.capacity + ' slots']);
       const ex = d.behaviors.find(x => x.type === 'extractor');
-      if (ex) rows.push(['Stockpile', `${Math.floor(b ? G.Gather.stockTotal(b) : 0)} / ${ex.stockCap}`], ['Placement', 'Centred on a mine deposit']);
+      if (ex){
+        const n = b && G.Gather.node(b.nodeId);
+        rows.push(['Stockpile', `${Math.floor(b ? G.Gather.stockTotal(b) : 0)} / ${ex.stockCap}`], ['Placement', 'Centred on any resource deposit']);
+        if (b) rows.push(['Mining', n ? G.Defs.resources.get(G.Gather.def(n).resource).name : 'No deposit']);
+      }
+      if (d.armor) rows.push(['Armour', Math.round(d.armor * 100) + '% less damage']);
+      if (d.gate) rows.push(['Gate', b ? (G.Gates.isOpen(b) ? 'Open' : 'Closed') : `Opens for friendly units within ${d.gate.openTiles} tiles; shuts while hostiles are within ${d.gate.hostileTiles}`]);
+      if (d.shield) rows.push(['Field', `${d.shield.radiusTiles} tiles · ${b ? Math.floor(b.shield) + ' / ' : ''}${d.shield.capacity} charge · +${d.shield.recharge}/s`], ['Switch', b ? (b.shieldOn ? 'On' : 'Off') + ' (tap to open)' : 'On/off from its window']);
+      if (d.sensor) rows.push(['Detection', `${d.sensor.detectTiles} tiles through fog, with warnings`], ['Turret boost', `+${Math.round(d.sensor.accuracyBonus * 100)}% accuracy within ${d.sensor.boostTiles} tiles`]);
+      const tu = d.behaviors.find(x => x.type === 'turret');
+      if (tu){
+        rows.push(['Accuracy', b ? Math.round(G.Turrets.accuracy(b, tu) * 100) + '%' + (G.Sensors.bonus(b) ? ' (sensor)' : '') : Math.round(tu.accuracy * 100) + '% (100% near a Defensive Sensor)']);
+        rows.push(['Weapon', `${tu.damage} dmg every ${tu.reload}s${tu.splash ? ' · blast ' + tu.splash : ''}`], ['Range', (tu.minRange ? tu.minRange + '–' : '') + tu.range], ['Targets', tu.targets === 'any' ? 'Ground and air' : tu.targets === 'air' ? 'Air only' : 'Ground only']);
+        if (tu.ammo) rows.push(['Ammunition', `${Math.floor(G.Economy.get(tu.ammo))} ${G.Defs.resources.get(tu.ammo).name.toLowerCase()} in stock (1 per shot)`]);
+        if (b?.testZone) rows.push(['Status', 'Testing zone: holds fire']);
+      }
+      if (d.power?.supply) rows.push(['Power', `${b ? Math.round(G.Power.output(b) * 10) / 10 : d.power.supply} supplied` + (d.power.scale ? ` (${Math.round(G.Power.efficiency(d.power.scale) * 100)}% ${d.power.scale} here)` : '')]);
+      else if (d.power?.demand) rows.push(['Power', `${d.power.demand} while ${d.power.when || 'on'}`]);
       if (d.spawner){ const s = b ? G.Spawner.state(b) : d.spawner; rows.push(['Spawns', G.Defs.units.get(d.spawner.unit)?.name]); if (b) rows.push(['Progress', `${s.spawned} / ${s.amount} at ${s.rate}/s${s.running ? ' (running)' : ''}`]); }
       return { title: d.name, sub: 'Building', rows, desc: d.description };
     },
@@ -78,17 +97,71 @@
       const c = G.Input.containerAt(wx, wy); if (c) return this.containerDetails(c);
       const b = G.Input.buildingAt(wx, wy); if (b) return this.buildingDetails(G.Defs.buildables.get(b.type), b);
       const n = G.Input.nodeAt(wx, wy); if (n) return this.nodeDetails(G.Defs.nodes.get(n.type), n);
-      const u = G.Input.unitAt(wx, wy, true); if (u) return this.unitDetails(G.Defs.units.get(u.type), u);
+      const u = G.Input.unitAt(wx, wy, true, true); if (u) return this.unitDetails(G.Defs.units.get(u.type), u);
       return null;
+    },
+    // Full state of one unit, for the Units inspector.
+    unitDebugDetails(u){
+      const d = G.Defs.units.get(u.type), T = G.CONFIG.TILE, name = id => { const v = id != null && G.Units.alive(id); return v ? `${v.name} #${v.id}` : '—'; };
+      const cargo = u.cargo ? Object.entries(u.cargo).filter(([, v]) => v > 0).map(([k, v]) => Math.floor(v) + ' ' + k).join(', ') : '';
+      const rows = [
+        ['ID', '#' + u.id], ['Type', u.type], ['Team', u.team], ['HP', `${Math.ceil(u.hp)} / ${u.maxHp}`],
+        ['Tile', `${Math.floor(u.x / T)}, ${Math.floor(u.y / T)}`], ['Heading', Math.round(((u.heading * 180 / Math.PI) % 360 + 450) % 360) + '°'],
+        ['Speed', u.speed], ['Sight', `${u.sight} (${Math.round(u.sight / T)} tiles)`],
+        ['Weapon', u.damage ? `${u.damage} dmg · ${u.range} range · ${u.reload}s` : '—'],
+        ['Command', u.command + (u.haulState && u.haulState !== 'idle' ? ' · ' + u.haulState : '')],
+        ['Target', name(u.targetId ?? u.aiTargetId)], ['Following', u.followId != null ? name(u.followId) : ''],
+        ['Path', u.path.length ? `${Math.max(0, u.path.length - u.pathIndex)} waypoints left` : 'none'],
+        ['AI', u.aiMode ? u.aiMode + (u.aiHold ? ' (holding)' : '') : ''], ['Spawner', u.spawnerId || ''],
+        ['Cargo', cargo || (u.cargoCapacity ? 'empty' : '')], ['Queue', u.fabQueue ? u.fabQueue.map(q => q.recipe).join(', ') || 'idle' : ''],
+        ['Fog', G.Fog.enabled ? (G.Fog.canSee(u) ? 'visible' : 'hidden') : 'off']
+      ];
+      return { title: u.name || d.name, sub: 'Unit · debug', rows, desc: '' };
+    },
+    // Live unit counts, by team then type.
+    renderUnits(){
+      const el = $('dbgUnits');
+      if (!el) return;
+      const counts = {};
+      for (const u of G.State.units) if (u.hp > 0){ const k = u.team + '|' + u.type; counts[k] = (counts[k] || 0) + 1; }
+      const keys = Object.keys(counts).sort(), sig = keys.map(k => k + counts[k]).join(',');
+      if (sig === this.unitsSig) return;
+      this.unitsSig = sig;
+      let team = null, html = '';
+      for (const k of keys){
+        const [t, type] = k.split('|');
+        if (t !== team){ team = t; html += `<div class="dbgTeam dbgTeam-${esc(t)}">${esc(t)} · ${keys.filter(x => x.startsWith(t + '|')).reduce((n, x) => n + counts[x], 0)}</div>`; }
+        html += `<button type="button" class="dbgUnitRow" data-unit="${esc(k)}"><span>${esc(G.Defs.units.get(type)?.name || type)}</span><b>${counts[k]}</b></button>`;
+      }
+      el.innerHTML = html || '<div class="dbgHelp">No units.</div>';
+    },
+    // Centres on the next unit of a team + type and shows its details.
+    focusNext(key){
+      const [team, type] = key.split('|'), list = G.State.units.filter(u => u.hp > 0 && u.team === team && u.type === type);
+      if (!list.length) return;
+      this.cycle = this.cycle || {};
+      const i = (this.cycle[key] = ((this.cycle[key] ?? -1) + 1) % list.length), u = list[i];
+      G.centerCamera(u.x, u.y);
+      const p = G.screenFromWorld(u.x, u.y);
+      this.showTip(this.unitDebugDetails(u), p.x, p.y, true);
     },
 
     // ---- Spawning ----
     spawn(e, wx, wy){
       const S = G.State, T = G.CONFIG.TILE, gx = Math.floor(wx / T), gy = Math.floor(wy / T), cx = (gx + 0.5) * T, cy = (gy + 0.5) * T;
       const free = () => G.Buildings.canPlace(gx, gy, 1, 1);
+      if (e.kind === 'inspect'){
+        // Nearest unit of any team within a generous radius (units keep moving), fog ignored.
+        let u = null, bd = 60 / G.State.camera.z;
+        for (const v of S.units){ const dd = Math.hypot(v.x - wx, v.y - wy); if (v.hp > 0 && !v.isShip && dd < bd){ bd = dd; u = v; } }
+        if (!u){ G.notify('No unit there'); return false; }
+        const p = G.screenFromWorld(u.x, u.y);
+        this.showTip(this.unitDebugDetails(u), p.x, p.y, true);
+        return true;
+      }
       if (e.kind === 'building'){
         const d = G.Defs.buildables.get(e.key), at = G.Buildings.placementAt(e.key, wx, wy);
-        if (!G.Buildings.canPlaceKey(e.key, at.gx, at.gy)){ G.notify(d.placeOnNode === 'deposit' ? 'Place it on a free mine deposit' : 'Tile is occupied'); return false; }
+        if (!G.Buildings.canPlaceKey(e.key, at.gx, at.gy)){ G.notify(d.placeOnNode === 'deposit' ? 'Place it on a free resource deposit' : 'Tile is occupied'); return false; }
         G.Buildings.add(e.key, at.gx, at.gy, { id: 'debug-' + G.newId() });
       } else if (e.kind === 'item'){
         if (!free()){ G.notify('Tile is occupied'); return false; }
@@ -127,16 +200,42 @@
       open = open ?? p.classList.contains('hidden');
       p.classList.toggle('hidden', !open); $('dbgBtn').classList.toggle('on', open);
       if (!open) this.armed = null; else this.render();
+      G.MapEditorUI.syncButton();
     },
     render(){
       const p = $('dbgPanel'), list = this.catalog(), groups = {};
       list.forEach((e, i) => { (groups[e.group] = groups[e.group] || []).push([e, i]); });
       const a = this.armed;
       p.innerHTML = `<div class="dbgHead"><b>Debug</b><button id="dbgClose" type="button">×</button></div>
-        <div class="dbgHelp">${a ? `Tap the map to place <b>${esc(a.name)}</b>. Tap it again here to stop.` : 'Select an entry, then tap the map to place it. Hold an entry for details.'}</div>
+        <div class="dbgGroup">Cheats</div>
+        <div class="medRow">${[100, 1000, 10000].map(n => `<button type="button" class="medSize" data-metal="${n}">+${n.toLocaleString()} metal</button>`).join('')}</div>
+        <button type="button" class="dbgEntry dbgToggle${G.Cheats.god ? ' active' : ''}" data-cheat="god"><span class="dbgIcon">${G.Cheats.god ? 'ON' : 'OFF'}</span>Godmode: friendly units invincible</button>
+        <button type="button" class="dbgEntry dbgToggle${G.Cheats.instantBuild ? ' active' : ''}" data-cheat="instantBuild"><span class="dbgIcon">${G.Cheats.instantBuild ? 'ON' : 'OFF'}</span>Instant build: structures and units</button>
+        <div class="dbgGroup">Display</div>
+        <button type="button" class="dbgEntry dbgToggle${G.Fog.enabled ? ' active' : ''}" id="dbgFog"><span class="dbgIcon">${G.Fog.enabled ? 'ON' : 'OFF'}</span>Fog of war</button>
+        ${G.PixelArt.data ? `<button type="button" class="dbgEntry dbgToggle${G.PixelArt.enabled ? ' active' : ''}" id="dbgPixelArt"><span class="dbgIcon">${G.PixelArt.enabled ? 'ON' : 'OFF'}</span>Pixel-art sprites and terrain</button>` : ''}
+        <div class="dbgGroup">Units</div>
+        <button type="button" class="dbgEntry dbgToggle${a && a.kind === 'inspect' ? ' active' : ''}" id="dbgInspect"><span class="dbgIcon">${a && a.kind === 'inspect' ? 'ON' : 'OFF'}</span>Inspect: tap any unit for its full state</button>
+        <div class="dbgHelp">Tap a row to jump to the next unit of that type and see its state.</div>
+        <div id="dbgUnits"></div>
+        <div class="dbgGroup">Place</div>
+        <div class="dbgHelp">${a && a.kind !== 'inspect' ? `Tap the map to place <b>${esc(a.name)}</b>. Tap it again here to stop.` : 'Select an entry, then tap the map to place it. Hold an entry for details.'}</div>
         ${Object.entries(groups).map(([g, items]) => `<div class="dbgGroup">${esc(g)}</div>${items.map(([e, i]) => `<button type="button" class="dbgEntry${a && a.kind === e.kind && a.key === e.key ? ' active' : ''}" data-i="${i}"><span class="dbgIcon dbg-${e.kind}">${esc(this.symbol(e))}</span>${esc(e.name)}</button>`).join('')}`).join('')}`;
       $('dbgClose').onclick = () => this.toggle(false);
-      p.querySelectorAll('.dbgEntry').forEach(el => {
+      p.querySelectorAll('[data-metal]').forEach(b => b.onclick = () => { G.Cheats.addResource('metal', +b.dataset.metal); G.UI.toast('+' + (+b.dataset.metal).toLocaleString() + ' metal'); });
+      p.querySelectorAll('[data-cheat]').forEach(b => b.onclick = () => {
+        const k = b.dataset.cheat; G.Cheats.set(k, !G.Cheats[k]);
+        G.UI.toast((k === 'god' ? 'Godmode ' : 'Instant build ') + (G.Cheats[k] ? 'on' : 'off')); this.render();
+      });
+      if ($('dbgPixelArt')) $('dbgPixelArt').onclick = () => {
+        G.PixelArt.set(!G.PixelArt.enabled); G.UI.toast('Pixel art ' + (G.PixelArt.enabled ? 'on' : 'off')); this.render();
+      };
+      $('dbgFog').onclick = () => { G.Fog.set(!G.Fog.enabled); G.UI.toast('Fog of war ' + (G.Fog.enabled ? 'on' : 'off')); this.render(); };
+      $('dbgInspect').onclick = () => { this.armed = a && a.kind === 'inspect' ? null : { kind: 'inspect', key: 'inspect', name: 'unit to inspect' }; this.render(); };
+      this.unitsSig = null; this.renderUnits();
+      $('dbgUnits').onclick = ev => { const row = ev.target.closest('[data-unit]'); if (row) this.focusNext(row.dataset.unit); };
+      // Catalog entries only (toggles have their own handlers above).
+      p.querySelectorAll('.dbgEntry[data-i]').forEach(el => {
         const e = list[+el.dataset.i];
         let t = null, held = false, start = null;
         el.addEventListener('pointerdown', ev => { held = false; start = { x: ev.clientX, y: ev.clientY }; t = setTimeout(() => { held = true; this.showTip(this.entryDetails(e), start.x, start.y); }, HOLD_MS); });
@@ -149,6 +248,7 @@
     },
     init(){
       $('dbgBtn').addEventListener('click', () => this.toggle());
+      setInterval(() => { if (this.isOpen()) this.renderUnits(); }, 1000);   // live unit counts
       $('dbgPanel').addEventListener('pointerdown', e => e.stopPropagation());
       addEventListener('wheel', () => { if (this.sticky) this.hideTip(); }, { capture: true, passive: true });
       document.addEventListener('pointerdown', () => { if (this.sticky) this.hideTip(); }, true);

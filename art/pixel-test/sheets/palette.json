@@ -1,0 +1,174 @@
+{
+  "colors": [
+    {
+      "name": "outline",
+      "hex": "#0d1419"
+    },
+    {
+      "name": "steel0",
+      "hex": "#1f2c34"
+    },
+    {
+      "name": "steel1",
+      "hex": "#34495a"
+    },
+    {
+      "name": "steel2",
+      "hex": "#557184"
+    },
+    {
+      "name": "steel3",
+      "hex": "#8aa7b4"
+    },
+    {
+      "name": "plate0",
+      "hex": "#7f8b86"
+    },
+    {
+      "name": "plate1",
+      "hex": "#b3bdb5"
+    },
+    {
+      "name": "plate2",
+      "hex": "#e3eae2"
+    },
+    {
+      "name": "team0",
+      "hex": "#800080"
+    },
+    {
+      "name": "team1",
+      "hex": "#c000c0"
+    },
+    {
+      "name": "team2",
+      "hex": "#ff00ff"
+    },
+    {
+      "name": "amber0",
+      "hex": "#7a4f1c"
+    },
+    {
+      "name": "amber1",
+      "hex": "#c98a2e"
+    },
+    {
+      "name": "amber2",
+      "hex": "#f2c66a"
+    },
+    {
+      "name": "cyan0",
+      "hex": "#1c5f73"
+    },
+    {
+      "name": "cyan1",
+      "hex": "#36b8ef"
+    },
+    {
+      "name": "cyan2",
+      "hex": "#aef4ff"
+    },
+    {
+      "name": "rust0",
+      "hex": "#4a2a1e"
+    },
+    {
+      "name": "rust1",
+      "hex": "#7d4630"
+    },
+    {
+      "name": "rust2",
+      "hex": "#a8653f"
+    },
+    {
+      "name": "dust0",
+      "hex": "#5e4f3d"
+    },
+    {
+      "name": "dust1",
+      "hex": "#6f5e48"
+    },
+    {
+      "name": "dust2",
+      "hex": "#7f6c53"
+    },
+    {
+      "name": "dust3",
+      "hex": "#8e7a5e"
+    },
+    {
+      "name": "dust4",
+      "hex": "#9e896b"
+    },
+    {
+      "name": "dust5",
+      "hex": "#b09c7e"
+    },
+    {
+      "name": "char0",
+      "hex": "#231f1c"
+    },
+    {
+      "name": "char1",
+      "hex": "#433a33"
+    },
+    {
+      "name": "green0",
+      "hex": "#2f8a4c"
+    },
+    {
+      "name": "green1",
+      "hex": "#6fe08e"
+    },
+    {
+      "name": "red0",
+      "hex": "#8a2a2a"
+    },
+    {
+      "name": "red1",
+      "hex": "#e85e55"
+    },
+    {
+      "name": "white",
+      "hex": "#ffffff"
+    },
+    {
+      "name": "visor",
+      "hex": "#16343e"
+    },
+    {
+      "name": "gold0",
+      "hex": "#9a7a3e"
+    },
+    {
+      "name": "gold1",
+      "hex": "#e1bd76"
+    },
+    {
+      "name": "blur",
+      "hex": "#6d7c84"
+    }
+  ],
+  "teams": {
+    "blue": [
+      "#1f5a99",
+      "#49a4ff",
+      "#a8d6ff"
+    ],
+    "red": [
+      "#8a2622",
+      "#ef5b55",
+      "#ffb0a6"
+    ],
+    "neutral": [
+      "#8a7a36",
+      "#d4c46c",
+      "#f0e6a8"
+    ]
+  },
+  "teamPlaceholders": [
+    "team0",
+    "team1",
+    "team2"
+  ]
+}

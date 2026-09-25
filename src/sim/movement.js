@@ -23,11 +23,13 @@
     }
     const step = Math.min(d, u.speed * grid.speedAt(u.x, u.y) * dt);
     let nx = u.x + dx / d * step, ny = u.y + dy / d * step;
-    if (!grid.passableWorld(nx, ny)){
+    // Closed gates (and every gate, for enemies) block like walls.
+    const Gt = G.Gates, ok = Gt.count ? (x, y) => grid.passableWorld(x, y) && !Gt.blocksWorld(u, x, y) : (x, y) => grid.passableWorld(x, y);
+    if (!ok(nx, ny)){
       // Slide along the obstacle on whichever axis is still open (units nudged against a
       // wall by the crowd keep moving); only a dead end drops the route so the owner re-plans.
-      if (grid.passableWorld(nx, u.y)) ny = u.y;
-      else if (grid.passableWorld(u.x, ny)) nx = u.x;
+      if (ok(nx, u.y)) ny = u.y;
+      else if (ok(u.x, ny)) nx = u.x;
       else { u.path = []; u.pathIndex = 0; return; }
     }
     u.x = nx; u.y = ny; u.heading = Math.atan2(dy, dx);
@@ -41,8 +43,10 @@
     const p = (min - d) * 0.5, nx = dx / d, ny = dy / d;
     const ux = u.x + nx * p, uy = u.y + ny * p, vx = v.x - nx * p, vy = v.y - ny * p;
     // passable() is false outside the map, so an accepted push always stays in bounds.
-    if (grid.passable(Math.floor(ux / T), Math.floor(uy / T))){ u.x = ux; u.y = uy; }
-    if (grid.passable(Math.floor(vx / T), Math.floor(vy / T))){ v.x = vx; v.y = vy; }
+    // Crowds can't push a unit through a gate it may not pass.
+    const Gt = G.Gates, ux0 = Math.floor(ux / T), uy0 = Math.floor(uy / T), vx0 = Math.floor(vx / T), vy0 = Math.floor(vy / T);
+    if (grid.passable(ux0, uy0) && !(Gt.count && Gt.blocks(u, ux0, uy0))){ u.x = ux; u.y = uy; }
+    if (grid.passable(vx0, vy0) && !(Gt.count && Gt.blocks(v, vx0, vy0))){ v.x = vx; v.y = vy; }
   }
 
   // Pushes overlapping units apart. Walks the occupied cells of the dense collision grid,

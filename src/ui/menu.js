@@ -119,7 +119,7 @@
     },
     showCredits(){
       this.back(true);
-      this.panel(`<h2>Credits</h2><div class="main-info-card"><p><b>Abyssal Dawn: Earth Zero Protocol</b></p><p>Built on the Groundfall prototype.</p><p>Game direction, testing, and world concept: Player.</p><p>Prototype systems and implementation developed collaboratively with AI assistants.</p></div>`);
+      this.panel(`<h2>Credits</h2><div class="main-info-card"><p><b>Abyssal Dawn: Zero Earth Protocol</b></p><p>Built on the Groundfall prototype.</p><p>Game direction, testing, and world concept: Player.</p><p>Prototype systems and implementation developed collaboratively with AI assistants.</p></div>`);
     }
   };
 
@@ -174,6 +174,7 @@
       G.UI.update();
       G.ExpeditionUI.tick();
       if (G.SpawnerUI.isOpen()) G.SpawnerUI.refresh();
+      if (G.ShieldUI.isOpen()) G.ShieldUI.refresh();
     }
   });
 })();
