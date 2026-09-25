@@ -278,7 +278,7 @@
       if (!dt) return;
       const ctx = dt.getContext('2d'), v = VIEWS[this.viewIdx], S = dt.width / v, o = this.origin(), g = this.grid;
       ctx.fillStyle = '#0a0e0b'; ctx.fillRect(0, 0, dt.width, dt.height);
-      G.WoodlandsArt.paintChunk(ctx, g, o.x, o.y, v, S);
+      G.WoodlandsArt.paintChunk(ctx, g, o.x, o.y, v, S, { trees: true });
       const mid = g.cols / 2, px = (mid - o.x) * S, py = (mid - o.y) * S;
       if (px > -S * 30 && px < dt.width + S * 30 && py > -S * 30 && py < dt.height + S * 30){
         ctx.save(); ctx.translate(px, py); ctx.scale(S, S);

@@ -148,14 +148,27 @@
       return 0;
     },
     tileCanvas(str){ return this.canvas(str, D.tileArt, D.tileArt); },
-    // A tree canopy prop with its engine shadow, drawn at world rect (x, y, size).
+    // A tree canopy prop with its engine shadow, drawn at world rect (x, y, size). Shadow and
+    // canopy are composed once per frame string and size, so each tree is a single draw.
+    propCache: new Map(),
     prop(g, str, x, y, size){
-      const k = size / D.tileArt, smooth = g.imageSmoothingEnabled, off = D.woodlands.tree.shadow.offset;
+      const key = str + '|' + size;
+      let c = this.propCache.get(key);
+      if (!c){
+        const k = Math.max(1, Math.round(size / D.tileArt)), off = D.woodlands.tree.shadow.offset, n = D.tileArt;
+        c = document.createElement('canvas'); c.width = (n + off[0]) * k; c.height = (n + off[1]) * k;
+        const cg = c.getContext('2d');
+        cg.imageSmoothingEnabled = false;
+        cg.globalAlpha = SHADOW_ALPHA;
+        cg.drawImage(this.canvas(str, n, n, null, true), off[0] * k, off[1] * k, n * k, n * k);
+        cg.globalAlpha = 1;
+        cg.drawImage(this.canvas(str, n, n, 'neutral'), 0, 0, n * k, n * k);
+        c.scale = size / (n * k);
+        this.propCache.set(key, c);
+      }
+      const smooth = g.imageSmoothingEnabled;
       g.imageSmoothingEnabled = false;
-      g.globalAlpha = SHADOW_ALPHA;
-      g.drawImage(this.canvas(str, D.tileArt, D.tileArt, null, true), x + off[0] * k, y + off[1] * k, size, size);
-      g.globalAlpha = 1;
-      g.drawImage(this.canvas(str, D.tileArt, D.tileArt, 'neutral'), x, y, size, size);
+      g.drawImage(c, x, y, c.width * c.scale, c.height * c.scale);
       g.imageSmoothingEnabled = smooth;
     }
   };

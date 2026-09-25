@@ -214,6 +214,9 @@
         <div class="dbgGroup">Display</div>
         <button type="button" class="dbgEntry dbgToggle${G.Fog.enabled ? ' active' : ''}" id="dbgFog"><span class="dbgIcon">${G.Fog.enabled ? 'ON' : 'OFF'}</span>Fog of war</button>
         ${G.PixelArt.data ? `<button type="button" class="dbgEntry dbgToggle${G.PixelArt.enabled ? ' active' : ''}" id="dbgPixelArt"><span class="dbgIcon">${G.PixelArt.enabled ? 'ON' : 'OFF'}</span>Pixel-art sprites and terrain</button>` : ''}
+        <div class="dbgGroup">Weather</div>
+        <div class="medRow">${Object.entries(G.Weather.PRESETS).map(([k, w]) => `<button type="button" class="medSize${G.Weather.key === k ? ' on' : ''}" data-weather="${k}">${esc(w.name)}</button>`).join('')}</div>
+        <div class="dbgHelp">How many Woodlands trees sway in the wind, and how fast (pixel art).</div>
         <div class="dbgGroup">Units</div>
         <button type="button" class="dbgEntry dbgToggle${a && a.kind === 'inspect' ? ' active' : ''}" id="dbgInspect"><span class="dbgIcon">${a && a.kind === 'inspect' ? 'ON' : 'OFF'}</span>Inspect: tap any unit for its full state</button>
         <div class="dbgHelp">Tap a row to jump to the next unit of that type and see its state.</div>
@@ -230,6 +233,7 @@
       if ($('dbgPixelArt')) $('dbgPixelArt').onclick = () => {
         G.PixelArt.set(!G.PixelArt.enabled); G.UI.toast('Pixel art ' + (G.PixelArt.enabled ? 'on' : 'off')); this.render();
       };
+      p.querySelectorAll('[data-weather]').forEach(b => b.onclick = () => { G.Weather.set(b.dataset.weather); G.UI.toast('Weather: ' + G.Weather.current().name); this.render(); });
       $('dbgFog').onclick = () => { G.Fog.set(!G.Fog.enabled); G.UI.toast('Fog of war ' + (G.Fog.enabled ? 'on' : 'off')); this.render(); };
       $('dbgInspect').onclick = () => { this.armed = a && a.kind === 'inspect' ? null : { kind: 'inspect', key: 'inspect', name: 'unit to inspect' }; this.render(); };
       this.unitsSig = null; this.renderUnits();

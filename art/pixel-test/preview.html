@@ -202,11 +202,16 @@ function buildSheets(){
     root.append(d);
   }
   if (want('woodlands') && D.woodlands){
-    const W = D.woodlands, [d, row] = section('woodlands pilot — 24×24 tiles and tree props', 'Grass, tall grass, water and deep water: 8 weighted, edge-matched variants each. Shoreline: 16 pieces by which sides touch land (1 N, 2 E, 4 S, 8 W). Cliffs: one tile tall, a piece per dropping side. Trees: canopy props, outline by the pipeline, engine shadow at 2,2.');
-    for (const key of ['grass', 'tall_grass', 'water', 'deep_water', 'shore', 'cliff', 'tree']){
+    const W = D.woodlands, [d, row] = section('woodlands pilot — 24×24 tiles and tree props', 'Grass, tall grass, water and deep water: 8 weighted, edge-matched variants each. Shoreline: 16 pieces by which sides touch land (1 N, 2 E, 4 S, 8 W). Cliffs: one tile tall, a piece per dropping side. Trees: oak, pine and birch canopy props with 3 sway frames each (speed set by the weather), outline by the pipeline, engine shadow at 2,2.');
+    for (const key of ['grass', 'tall_grass', 'water', 'deep_water', 'shore', 'cliff']){
       const strip = document.createElement('div'); strip.className = 'row';
       W[key].tiles.forEach((s, i) => strip.append(fig(scaled(s, 24, 24, null, 3), key === 'cliff' ? W.cliff.pieces[i] : key === 'shore' ? 'mask ' + i : W[key].weights ? `${i} w${W[key].weights[i]}` : String(i))));
       row.append(fig(strip, key.replace('_', ' ')));
+    }
+    for (const kind of W.tree.types){
+      const strip = document.createElement('div'); strip.className = 'row';
+      W.tree.variants[kind].forEach((frames, v) => frames.forEach((s, f) => strip.append(fig(scaled(s, 24, 24, null, 3), `v${v + 1} sway ${f}`))));
+      row.append(fig(strip, kind + ' tree: sway frames lean 0, 1, 2 art px downwind'));
     }
     root.append(d);
   }

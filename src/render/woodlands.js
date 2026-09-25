@@ -30,7 +30,7 @@
   const rgb = (c, k = 0) => `rgb(${Math.max(0, Math.min(255, c[0] + k)) | 0},${Math.max(0, Math.min(255, c[1] + k)) | 0},${Math.max(0, Math.min(255, c[2] + k)) | 0})`;
 
   // The grid being painted, set by each paint call; `pix` is the pixel-art set when on.
-  let grid = null, art = null, seed = 0, pix = null;
+  let grid = null, art = null, seed = 0, pix = null, bakeTrees = false;
   const tileAt = (x, y) => grid.inBounds(x, y) ? grid.tiles[y * grid.cols + x] : 255;
   const lvlAt = (x, y) => art && grid.inBounds(x, y) ? art.level[y * grid.cols + x] : -1;
   const dirAt = i => art ? art.dir[i] : 0;
@@ -466,13 +466,36 @@
     }
   }
 
+  // Which kind of tree grows on a tile: pines on high ground, birches by water, otherwise
+  // groves of oak, birch and pine. Worked out once per tile and kept with the map's art.
+  const WET_NEAR = new Set([K.WATER, K.DEEP, K.BOG, K.SWAMP, K.REEDS]);
+  function treeKind(i, gx, gy){
+    const cache = art.treeKind || (art.treeKind = new Uint8Array(grid.size));
+    if (cache[i]) return cache[i] - 1;
+    let k;
+    const types = pix.tree.types, idx = n => types.indexOf(n);
+    if (lvlAt(gx, gy) >= 3 && hash(gx, gy, 71) < .8) k = idx('pine');
+    else {
+      let wet = false;
+      for (let dy = -2; dy <= 2 && !wet; dy++) for (let dx = -2; dx <= 2; dx++) if (WET_NEAR.has(tileAt(gx + dx, gy + dy))){ wet = true; break; }
+      const n = vnoise(gx / 7, gy / 7, seed + 73);
+      k = wet && hash(gx, gy, 72) < .7 ? idx('birch') : n < .3 ? idx('birch') : n > .66 ? idx('pine') : idx('oak');
+    }
+    cache[i] = k + 1;
+    return k;
+  }
+  function treeFrame(i, gx, gy, frame){
+    const T = pix.tree, list = T.variants[T.types[treeKind(i, gx, gy)]];
+    return list[Math.floor(hash(gx, gy, 61) * list.length)][frame];
+  }
   const fenAt = (gx, gy) => [tileAt(gx + 1, gy), tileAt(gx - 1, gy), tileAt(gx, gy + 1), tileAt(gx, gy - 1)].some(q => q === K.SWAMP || q === K.BOG || q === K.REEDS);
   // Tall things drawn after the ground, row by row, so nearer objects overlap farther ones.
   function drawTop(ctx, t, gx, gy, px, py, S){
     const s = seed, h0 = hash(gx, gy, s + 7), h1 = hash(gx, gy, s + 9), h2 = hash(gx, gy, s + 17);
     if (t === K.TREE && pix && !fenAt(gx, gy)){
-      const set = pix.tree;
-      G.PixelArt.prop(ctx, set.tiles[Math.floor(hash(gx, gy, 61) * set.tiles.length)], px, py, S);
+      // Trees that sway in the current wind are drawn every frame (drawTrees); the rest are
+      // drawn at rest into the chunk.
+      if (bakeTrees || !G.Weather.sways(gx, gy)) G.PixelArt.prop(ctx, treeFrame(gy * grid.cols + gx, gx, gy, 0), px, py, S);
       return;
     }
     if (t === K.TREE){
@@ -531,6 +554,9 @@
     }
   }
 
+  // Which trees are baked into chunks depends on the wind, so a weather change repaints them.
+  G.Events.on('weather:changed', () => { if (G.TerrainCache && G.TerrainCache.grid && G.TerrainCache.grid.art) G.TerrainCache.invalidate(); });
+
   const bind = grd => { grid = grd; art = grd.art || null; seed = (art && art.seed != null ? art.seed : G.State.seed) | 0; pix = G.PixelArt ? G.PixelArt.woodlands() : null; };
 
   G.WoodlandsArt = {
@@ -538,7 +564,9 @@
     isWoodlands: grd => !!(grd && grd.art && grd.art.kind === 'woodlands'),
     // A whole chunk of a Woodlands map: tiles, ground detail, height, then tall things,
     // which may overhang the chunk edge (the neighbouring chunk draws the other part).
-    paintChunk(ctx, grd, x0, y0, ct, S){
+    // `opts.trees` draws pixel-art trees at rest into the canvas too (the preview); the game
+    // leaves them to drawTrees so they can sway.
+    paintChunk(ctx, grd, x0, y0, ct, S, opts){
       bind(grd);
       const cols = grd.cols, rows = grd.rows;
       for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
@@ -553,7 +581,24 @@
         const gx = x0 + lx, gy = y0 + ly;
         if (gx < cols && gy < rows) heightShade(ctx, gx, gy, lx * S, ly * S, S);
       }
+      bakeTrees = !!(opts && opts.trees);
       this.paintTops(ctx, grd, x0, y0, ct, S, true);
+      bakeTrees = false;
+    },
+    // Pixel-art trees in view that sway in the current wind, drawn every frame. `v` is the
+    // visible world rectangle and T the tile size.
+    drawTrees(g, grd, v, T, t){
+      if (!this.isWoodlands(grd)) return;
+      bind(grd);
+      if (!pix) return;
+      const cols = grd.cols, tiles = grd.tiles;
+      const x0 = Math.max(0, Math.floor(v.x0 / T) - 1), x1 = Math.min(cols - 1, Math.ceil(v.x1 / T) + 1);
+      const y0 = Math.max(0, Math.floor(v.y0 / T) - 1), y1 = Math.min(grd.rows - 1, Math.ceil(v.y1 / T) + 1);
+      for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++){
+        const i = gy * cols + gx;
+        if (tiles[i] !== K.TREE || !G.Weather.sways(gx, gy) || fenAt(gx, gy)) continue;
+        G.PixelArt.prop(g, treeFrame(i, gx, gy, G.Weather.swayFrame(gx, gy, t)), gx * T, gy * T, T);
+      }
     },
     // One tile of a new terrain type on any other map.
     paintTile(ctx, grd, t, gx, gy, px, py, S){

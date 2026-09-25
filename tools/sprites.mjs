@@ -370,18 +370,63 @@ export const CLIFF_KEYS = ['S', 'S2', 'SE', 'SW', 'SEW', 'N', 'E', 'W', 'NE', 'N
 function cliffPieces(){
   return CLIFF_KEYS.map(k => k === 'S2' ? cliffTile('S', 1) : cliffTile(k));
 }
-// Tree canopy props: an outline and top-left light added by the pipeline (leaf ramp).
-function treeProp(seed){
-  const r = rng(seed), g = new Grid(TILE_ART, TILE_ART), p = painter(g, 0, [11.5, 11.5]);
-  const lobes = 4 + Math.floor(r() * 3);
-  p.ellipse(0, 0, 7.5, 7.5, 'leaf1');
-  for (let i = 0; i < lobes; i++){ const a = (i / lobes) * Math.PI * 2 + r() * 0.6, d = 4.5 + r() * 1.5, rr = 3.3 + r() * 1.2; p.ellipse(Math.cos(a) * d, Math.sin(a) * d, rr, rr, 'leaf1'); }
-  for (let i = 0; i < 5; i++) p.ellipse((r() - 0.5) * 9, (r() - 0.5) * 9, 1.2 + r(), 1.2 + r(), r() < 0.35 ? 'leaf0' : 'leaf2');
-  p.ellipse(-1.5, -1.5, 2.2, 2, 'leaf2');
-  // Keep a 1 px margin for the outline.
-  for (let y = 0; y < TILE_ART; y++) for (let x = 0; x < TILE_ART; x++) if (x === 0 || y === 0 || x === TILE_ART - 1 || y === TILE_ART - 1) g.set(x, y, 0);
-  return finish(g);
+// Tree canopy props, three kinds. Each variant has 3 sway frames: at rest, then leaning
+// 1 and 2 art px downwind (east). The canopy sits 1 px left of centre at rest so the
+// furthest lean still keeps the 1 px outline margin. Outline and top-left light are added
+// by the pipeline (the leaf ramp shades); the engine draws the shadow.
+const TREE_KINDS = {
+  // Broadleaf: a round, lobed crown with lighter clumps.
+  oak(p, r){
+    const lobes = 4 + Math.floor(r() * 3);
+    p.ellipse(0, 0, 6.8, 6.8, 'leaf1');
+    for (let i = 0; i < lobes; i++){ const a = (i / lobes) * Math.PI * 2 + r() * 0.6, d = 4.2 + r() * 1.2, rr = 3 + r() * 1.1; p.ellipse(Math.cos(a) * d, Math.sin(a) * d, rr, rr, 'leaf1'); }
+    for (let i = 0; i < 5; i++) p.ellipse((r() - 0.5) * 8, (r() - 0.5) * 8, 1.1 + r(), 1.1 + r(), r() < 0.35 ? 'leaf0' : 'leaf2');
+    p.ellipse(-1.5, -1.5, 2, 1.8, 'leaf2');
+  },
+  // Conifer: a dark star of needle points around a tight centre.
+  pine(p, r){
+    const spikes = 9 + Math.floor(r() * 3), turn = r();
+    p.ellipse(0, 0, 5.2, 5.2, 'leaf0');
+    for (let i = 0; i < spikes; i++){
+      const a = ((i + turn) / spikes) * Math.PI * 2, len = 8.2 + r() * 1;
+      for (let k = 0; k <= 10; k++){ const t = k / 10, w = (1 - t) * 1.6; p.ellipse(Math.cos(a) * len * t, Math.sin(a) * len * t, w + 0.3, w + 0.3, 'leaf0'); }
+    }
+    for (let i = 0; i < spikes; i++){
+      const a = ((i + turn + 0.5) / spikes) * Math.PI * 2;
+      for (let k = 0; k <= 6; k++){ const t = k / 6; p.ellipse(Math.cos(a) * 5.2 * t, Math.sin(a) * 5.2 * t, (1 - t) * 1.1 + 0.3, (1 - t) * 1.1 + 0.3, 'leaf1'); }
+    }
+    p.ellipse(0, 0, 1.4, 1.4, 'leaf2');
+  },
+  // Birch: a small, airy crown of separate light clusters with bright leaf tips.
+  birch(p, r){
+    const n = 6 + Math.floor(r() * 2);
+    p.ellipse(0, 0, 3.4, 3.4, 'leaf2');
+    for (let i = 0; i < n; i++){ const a = (i / n) * Math.PI * 2 + r() * 0.5, d = 4.8 + r() * 1.6, rr = 2.2 + r() * 0.9; p.ellipse(Math.cos(a) * d, Math.sin(a) * d, rr, rr, 'leaf2'); }
+    for (let i = 0; i < 4; i++) p.ellipse((r() - 0.5) * 9, (r() - 0.5) * 9, 1, 1, 'leaf1');
+  }
+};
+export const TREE_TYPES = Object.keys(TREE_KINDS), TREE_FRAMES = 3;
+function treeFrames(kind, seed){
+  return Array.from({ length: TREE_FRAMES }, (_, f) => {
+    const g = new Grid(TILE_ART, TILE_ART), p = painter(g, 0, [10.5 + f, 11.5]);
+    TREE_KINDS[kind](p, rng(seed));
+    // Leaf glints shift a little between frames, as leaves turn in the wind.
+    const shimmer = rng(seed * 7 + f * 131);
+    for (let i = 0; i < 3 && f; i++){
+      const x = Math.round(10.5 + f + (shimmer() - 0.5) * 9), y = Math.round(11.5 + (shimmer() - 0.5) * 9);
+      if (g.get(x, y) && g.get(x, y) !== C.leaf0) g.set(x, y, kind === 'birch' ? C.grass3 : C.leaf2);
+    }
+    for (let y = 0; y < TILE_ART; y++) for (let x = 0; x < TILE_ART; x++) if (x === 0 || y === 0 || x === TILE_ART - 1 || y === TILE_ART - 1) g.set(x, y, 0);
+    return finish(g);
+  });
 }
+// variants[kind] = [[frame0, frame1, frame2], ...]
+function treeSet(){
+  const out = {};
+  TREE_TYPES.forEach((kind, k) => { out[kind] = [0, 1].map(v => treeFrames(kind, 301 + k * 17 + v * 5)); });
+  return out;
+}
+
 export const WOODLANDS = {
   grass: () => [{}, {}, {}, { speckles: 16 }, { clover: 1 }, { tufts: 2 }, { pebble: 1, tufts: 1 }, { clover: 2, speckles: 12 }].map((o, i) => grassTile(41 + i, o)),
   tall_grass: () => [{}, {}, {}, { blades: 38 }, { seedheads: 3 }, { blades: 24 }, { seedheads: 6 }, { blades: 44, seedheads: 2 }].map((o, i) => tallGrassTile(61 + i, o)),
@@ -389,7 +434,6 @@ export const WOODLANDS = {
   deep_water: () => [{}, {}, {}, { ripples: 7 }, { ripples: 3 }, {}, { ripples: 6 }, { ripples: 2 }].map((o, i) => waterTile(101 + i, { ...o, deep: true })),
   shore: () => Array.from({ length: 16 }, (_, m) => m ? shoreTile(m) : waterTile(31)),
   cliff: cliffPieces,
-  tree: () => [301, 302, 303, 304].map(treeProp)
 };
 
 // ---- Build everything in memory ----
@@ -433,9 +477,15 @@ export function build(){
     const meta = { name: 'woodlands_' + key, frameWidth: TILE_ART, frameHeight: TILE_ART, variants: tiles.length, ...(weights ? { weights, hash: 'mix32' } : {}) };
     if (key === 'shore') meta.index = 'land mask: 1 north, 2 east, 4 south, 8 west (0 = open water)';
     if (key === 'cliff'){ meta.pieces = CLIFF_KEYS; woodlands.cliff.pieces = CLIFF_KEYS; }
-    if (key === 'tree'){ meta.origin = [0, 0]; meta.shadow = woodlands.tree.shadow = { drawnBy: 'engine', offset: [2, 2], elevation: 'prop' }; }
     sheets['woodlands_' + key] = { meta, rows: [tiles] };
   }
+  // Trees: per kind, variants of 3 sway frames. One sheet row per kind.
+  const trees = treeSet(), shadow = { drawnBy: 'engine', offset: [2, 2], elevation: 'prop' }, sway = { start: 0, frames: TREE_FRAMES, fps: 'set by the weather' };
+  woodlands.tree = { types: TREE_TYPES, animations: { sway }, shadow, variants: Object.fromEntries(TREE_TYPES.map(k => [k, trees[k].map(fr => fr.map(g => g.encode()))])) };
+  sheets.woodlands_tree = {
+    meta: { name: 'woodlands_tree', frameWidth: TILE_ART, frameHeight: TILE_ART, origin: [0, 0], rows: TREE_TYPES, columns: 'variant 1 frames 0-2, variant 2 frames 0-2', animations: { sway }, shadow },
+    rows: TREE_TYPES.map(k => trees[k].flat())
+  };
   const data = {
     alphabet: ALPHABET, palette: PALETTE.map(([name, hex]) => ({ name, hex })), teamIndex: [C.team0, C.team1, C.team2], teams: TEAMS,
     tileArt: TILE_ART, worldPxPerArtPx: WORLD_PX_PER_ART_PX, sprites, terrain, woodlands

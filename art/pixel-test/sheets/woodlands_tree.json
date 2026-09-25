@@ -2,11 +2,23 @@
   "name": "woodlands_tree",
   "frameWidth": 24,
   "frameHeight": 24,
-  "variants": 4,
   "origin": [
     0,
     0
   ],
+  "rows": [
+    "oak",
+    "pine",
+    "birch"
+  ],
+  "columns": "variant 1 frames 0-2, variant 2 frames 0-2",
+  "animations": {
+    "sway": {
+      "start": 0,
+      "frames": 3,
+      "fps": "set by the weather"
+    }
+  },
   "shadow": {
     "drawnBy": "engine",
     "offset": [
@@ -16,6 +28,6 @@
     "elevation": "prop"
   },
   "image": "woodlands_tree.png",
-  "sheetWidth": 96,
-  "sheetHeight": 24
+  "sheetWidth": 144,
+  "sheetHeight": 72
 }
