@@ -634,3 +634,36 @@ test('fog of war hides enemies outside the crew\'s sight; the Debug panel turns 
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });
+
+test('Shield Projector window switches the field on and off; its state survives a save', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    const at = await page.evaluate(() => {
+      const G = GW, sh = G.Units.ship(), p = G.State.grid.nearestOpen(sh.gx + 18, sh.gy + 30, 6);
+      const b = G.Buildings.add('shield_projector', p.x, p.y);
+      G.centerCamera(b.x, b.y, 0.7);
+      return { id: b.id, ...G.screenFromWorld(b.x, b.y) };
+    });
+    await page.touchscreen.tap(at.x, at.y);
+    await page.waitForSelector('#shieldPanel:not(.hidden) #shToggle');
+    await page.waitForTimeout(120);
+    assert.match(await page.textContent('#shLive'), /Off[\s\S]*0 \/ 2,500/);
+    await page.click('#shToggle');
+    assert.equal(await page.evaluate(id => GW.State.buildings.find(b => b.id === id).shieldOn, at.id), true);
+    await page.waitForFunction(id => GW.State.buildings.find(b => b.id === id).shield > 20, at.id, { timeout: 8000 });
+    assert.match(await page.textContent('#shLive'), /Charging[\s\S]*40 in use/);
+    await page.screenshot({ path: path.join(OUT, 'shield-projector.png') });
+    const saved = await page.evaluate(id => { GW.Save.save(1); const d = JSON.parse(localStorage.getItem(GW.Save.keyFor(1))); return d.buildings.find(b => b.id === id); }, at.id);
+    assert.equal(saved.shieldOn, true); assert.ok(saved.shield > 20);
+    await page.click('#shToggle');
+    assert.equal(await page.evaluate(id => GW.State.buildings.find(b => b.id === id).shieldOn, at.id), false);
+    await page.click('#shClose');
+    assert.ok(await page.isHidden('#shieldPanel'));
+    await page.evaluate(() => localStorage.clear());
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});

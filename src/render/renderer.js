@@ -126,6 +126,7 @@
       // Structures (and, with pixel art, the rubble of recently destroyed ones).
       if (G.PixelArt.enabled) G.PixelArt.drawRubble(g, inView);
       for (const b of S.buildings) if (inView(b.x, b.y, b.w * T)) G.Visuals.drawBuilding(g, b, z, t);
+      G.Visuals.shields(g, z, t, inView);
       // Expedition signals.
       const E = S.expedition;
       if (E) for (const p of E.sites){

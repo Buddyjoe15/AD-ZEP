@@ -13,7 +13,7 @@ Abyssal Dawn: Zero Earth Protocol, a browser strategy game. Read `README.md` and
 
 ## Save format rules
 
-The save system is `GW.Save` in `src/sim/save.js`. The current schema is `GW.SAVE_SCHEMA` in `src/core/namespace.js` (now 6). Its tests are in `tests/save.test.mjs`, with helpers in `tests/save-support.mjs`. Full background: "Saves" in `docs/ARCHITECTURE.md`.
+The save system is `GW.Save` in `src/sim/save.js`. The current schema is `GW.SAVE_SCHEMA` in `src/core/namespace.js` (now 7). Its tests are in `tests/save.test.mjs`, with helpers in `tests/save-support.mjs`. Full background: "Saves" in `docs/ARCHITECTURE.md`.
 
 ### When a change affects saves
 

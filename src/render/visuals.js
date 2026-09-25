@@ -167,6 +167,46 @@
     if (s.noAmmo){ g.fillStyle = '#e85e55'; g.font = `bold ${10}px sans-serif`; g.textAlign = 'center'; g.fillText('NO AMMO', b.x, py - 4); }
     if (b.hp < b.maxHp) bar(g, b.x, py - (s.noAmmo ? 16 : 6), w * 0.8, b.hp / b.maxHp);
   };
+  // Shield Projector: an emitter that glows by charge. Its field is drawn by V.shields().
+  V.registerBuilding('shield_projector', (g, b, z, t, def) => {
+    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T, w = b.w * T, h = b.h * T, f = b.shield / def.shield.capacity;
+    g.fillStyle = '#2b3a40'; g.strokeStyle = '#10181b'; g.lineWidth = 2 / z;
+    g.fillRect(px + 4, py + 4, w - 8, h - 8); g.strokeRect(px + 4, py + 4, w - 8, h - 8);
+    g.fillStyle = '#3d5058'; for (const [ox, oy] of [[10, 10], [w - 26, 10], [10, h - 26], [w - 26, h - 26]]) g.fillRect(px + ox, py + oy, 16, 16);
+    g.fillStyle = '#1a262b'; g.beginPath(); g.arc(b.x, b.y, 30, 0, TAU); g.fill();
+    g.fillStyle = b.shieldOn ? `rgba(127,216,240,${0.35 + 0.6 * f})` : '#4a5a60';
+    g.beginPath(); g.arc(b.x, b.y, 12 + 12 * f, 0, TAU); g.fill();
+    g.fillStyle = b.shieldOn ? '#6fe08e' : '#e85e55'; g.fillRect(b.x - 4, py + 8, 8, 5);
+    if (b.hp < b.maxHp) bar(g, b.x, py - 6, w * 0.8, b.hp / b.maxHp);
+  });
+  // Fields of switched-on, charged projectors: a translucent dome that flashes when hit.
+  V.shields = function(g, z, t, inView){
+    const T = G.CONFIG.TILE;
+    for (const b of G.State.buildings){
+      const sh = G.Shields.def(b);
+      if (!sh || b.hp <= 0 || !b.shieldOn || b.shield <= 0) continue;
+      const r = sh.radiusTiles * T;
+      if (!inView(b.x, b.y, r)) continue;
+      const f = b.shield / sh.capacity, hit = t - (G.Shields.hitAt.get(b.id) ?? -9), flash = hit < 0.25 ? 1 - hit / 0.25 : 0;
+      g.fillStyle = `rgba(127,216,240,${0.05 + 0.08 * f + 0.15 * flash})`;
+      g.beginPath(); g.arc(b.x, b.y, r, 0, TAU); g.fill();
+      g.strokeStyle = `rgba(174,244,255,${0.35 + 0.4 * f + 0.25 * flash})`; g.lineWidth = (2 + 2 * flash) / z;
+      g.setLineDash([14 / z, 8 / z]); g.lineDashOffset = -t * 20 / z; g.stroke(); g.setLineDash([]); g.lineDashOffset = 0;
+    }
+  };
+  // Defensive Sensor: a turning dish.
+  V.registerBuilding('defensive_sensor', (g, b, z, t) => {
+    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T;
+    g.fillStyle = '#2d3a34'; g.strokeStyle = '#111a15'; g.lineWidth = 2 / z;
+    g.fillRect(px + 6, py + 6, T - 12, T - 12); g.strokeRect(px + 6, py + 6, T - 12, T - 12);
+    g.save(); g.translate(b.x, b.y); g.rotate(b.testZone ? 0 : t * 1.6);
+    g.strokeStyle = '#9fe0b0'; g.lineWidth = 3; g.beginPath(); g.arc(0, 0, 13, -0.9, 0.9); g.stroke();
+    g.fillStyle = '#9fe0b0'; g.fillRect(0, -1.5, 14, 3);
+    g.restore();
+    g.fillStyle = '#6fe08e'; g.beginPath(); g.arc(b.x, b.y, 3, 0, TAU); g.fill();
+    if (b.hp < b.maxHp) bar(g, b.x, py - 6, T * 0.8, b.hp / b.maxHp);
+  });
+
   V.registerBuilding('sentry_turret', turret({ ring: '#4e6470', head: '#7fa3b5', barrel: '#1b2226', barrels: [0], width: 4, length: 20 }));
   V.registerBuilding('heavy_turret', turret({ ring: '#46525a', head: '#6f8594', barrel: '#151b1e', barrels: [0], width: 10, length: 20 }));
   V.registerBuilding('aa_turret', turret({ ring: '#4a6a80', head: '#8fb8d8', barrel: '#1b2226', barrels: [-4, 4], width: 3, length: 22 }));

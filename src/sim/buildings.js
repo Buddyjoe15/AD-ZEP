@@ -29,6 +29,7 @@
       };
       if (d.level) b.level = d.level;
       if (d.fabricator){ b.fabQueue = b.fabQueue || []; if (b.rally === undefined) b.rally = null; }
+      if (d.shield){ if (b.shieldOn === undefined) b.shieldOn = false; if (b.shield === undefined) b.shield = 0; }   // switched off, empty
       return this.adopt(b);
     },
     adopt(b){

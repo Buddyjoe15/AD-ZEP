@@ -2,9 +2,10 @@
    by a behaviour registered with GW.Behaviors (src/sim/buildings.js, spawner.js):
      defenseAura  { radiusTiles, reduction }  – nearby friendly units take less damage
      repairAura   { radiusTiles, rate }       – heals nearby friendly units (hp per second)
-     turret       { range, damage, reload, targets: 'ground' | 'air' | 'any',
+     turret       { range, damage, reload, accuracy, targets: 'ground' | 'air' | 'any',
                     minRange?, splash?, ammo?, shot? } – fires at enemy units (src/sim/defense.js);
-                    `ammo` names a resource spent per shot from the stockpile
+                    `accuracy` is the chance to hit (Defensive Sensors add to it); `ammo`
+                    names a resource spent per shot from the stockpile
      studySignals { radiusTiles }             – studies expedition signals in range
    `container` makes the structure an item container instead of a solid building.
    `fabricator` gives the building a production queue for recipes in src/data/world.js
@@ -15,13 +16,28 @@
    `power` makes it a producer or consumer on the electricity grid (see src/sim/power.js).
    `armor` (0–1) reduces damage the structure takes. `gate` makes it a gate: friendly units
    pass while it is open, enemies never do (src/sim/defense.js). `sight` is its fog-of-war
-   vision in world px (default 240). */
+   vision in world px (default 240).
+   `shield` { radiusTiles, capacity, recharge } makes it a Shield Projector: switched on from
+   its window, its charge absorbs damage to friendly structures in range.
+   `sensor` { detectTiles, boostTiles, accuracyBonus } makes it a Defensive Sensor. */
 GW.Defs.buildables.defineAll({
   chest: {
     name: 'Chest', w: 1, h: 1, buildTime: 2, cost: {}, container: { capacity: 24 },
     description: 'A 1×1 storage chest. Player-built chests are immediately usable.'
   },
   // ---- Fortifications ----
+  shield_projector: {
+    name: 'Shield Projector', w: 3, h: 3, hp: 1500, armor: 0.2, buildTime: 20, cost: { metal: 300, steel: 25, electronics: 10 },
+    symbol: 'SHD', color: '#7fd8f0', sight: 300,
+    shield: { radiusTiles: 6, capacity: 2500, recharge: 40 }, power: { demand: 40, when: 'active' },
+    description: 'Generates a limited energy field over friendly structures within six tiles. Switch it on in its window: while on, it draws 40 power and charges up to 2,500 shield, which absorbs damage to covered structures until it runs out. Temporary protection against dangerous attacks, not a replacement for walls.'
+  },
+  defensive_sensor: {
+    name: 'Defensive Sensor', w: 1, h: 1, hp: 250, buildTime: 6, cost: { metal: 90, electronics: 3 },
+    symbol: 'SEN', color: '#9fe0b0', sight: 576,
+    sensor: { detectTiles: 12, boostTiles: 6, accuracyBonus: 0.25 }, power: { demand: 3 },
+    description: 'Short-range detection. Turrets within six tiles hit every shot (up from 75%). Sees 12 tiles through fog, and warns when enemies come within that range. Draws 3 power.'
+  },
   defensive_wall: {
     name: 'Defensive Wall', w: 1, h: 1, hp: 600, buildTime: 5, cost: { metal: 60 },
     behaviors: [{ type: 'defenseAura', radiusTiles: 1, reduction: 0.20 }],
@@ -37,25 +53,26 @@ GW.Defs.buildables.defineAll({
     gate: { openTiles: 2, hostileTiles: 6 },
     description: 'Lets Vance, Utility Spiders and other friendly units through defensive walls. Always closed; opens when a friendly unit is within two tiles, and shuts automatically while hostiles are within six. Enemies can never pass.'
   },
-  // ---- Turrets (fire automatically at enemy units; testing-zone copies stay idle) ----
+  // ---- Turrets (fire automatically at enemy units; testing-zone copies stay idle).
+  //      Each hits 75% of the time; a Defensive Sensor nearby makes that 100%. ----
   sentry_turret: {
     name: 'Sentry Turret', w: 1, h: 1, symbol: 'ST', color: '#7fa3b5', hp: 400, buildTime: 6, cost: { metal: 120 }, sight: 300,
-    behaviors: [{ type: 'turret', range: 260, damage: 9, reload: 0.5, targets: 'ground' }],
+    behaviors: [{ type: 'turret', range: 260, damage: 9, reload: 0.5, accuracy: 0.75, targets: 'ground' }],
     description: 'Basic automated defensive turret for early-game perimeter defence. Rapid light fire at ground targets within 260.'
   },
   heavy_turret: {
     name: 'Heavy Turret', w: 2, h: 2, symbol: 'HT', color: '#6f8594', hp: 1400, armor: 0.2, buildTime: 12, cost: { metal: 200, steel: 20 }, sight: 360,
-    behaviors: [{ type: 'turret', range: 340, damage: 70, reload: 3, targets: 'ground', splash: 40, shot: 'heavy' }],
+    behaviors: [{ type: 'turret', range: 340, damage: 70, reload: 3, accuracy: 0.75, targets: 'ground', splash: 40, shot: 'heavy' }],
     description: 'Slow-firing, high-damage cannon for large creatures, heavily armoured enemies and major assaults. 70 damage every 3 s to ground targets, with a small blast.'
   },
   aa_turret: {
     name: 'Anti-Air Turret', w: 1, h: 1, symbol: 'AA', color: '#8fb8d8', hp: 350, buildTime: 7, cost: { metal: 100, electronics: 2 }, sight: 400,
-    behaviors: [{ type: 'turret', range: 400, damage: 14, reload: 0.35, targets: 'air' }],
+    behaviors: [{ type: 'turret', range: 400, damage: 14, reload: 0.35, accuracy: 0.75, targets: 'air' }],
     description: 'Targets flying organisms, drones and aircraft within 400. Cannot hit ground targets.'
   },
   missile_battery: {
     name: 'Missile Battery', w: 2, h: 2, symbol: 'MB', color: '#d9906a', hp: 900, buildTime: 14, cost: { metal: 180, steel: 15, electronics: 4 }, sight: 400,
-    behaviors: [{ type: 'turret', range: 720, minRange: 160, damage: 50, reload: 4, targets: 'any', splash: 70, ammo: 'missiles', shot: 'missile' }],
+    behaviors: [{ type: 'turret', range: 720, minRange: 160, damage: 50, reload: 4, accuracy: 0.75, targets: 'any', splash: 70, ammo: 'missiles', shot: 'missile' }],
     description: 'Long-range defensive installation: 50-damage missiles with a wide blast, from 160 out to 720, at ground or air targets. Uses one Missile per shot from the stockpile (made at a Fabricator).'
   },
   generator: {

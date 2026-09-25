@@ -825,7 +825,8 @@ test('power: the Warp Drive gives 25, Solar Arrays scale with the Earth, and a s
   assert.ok(wind && wind.gy + wind.h <= ship.gy, 'wind turbine north of the ship');
   assert.equal(P.output(wind), 6, 'steady breeze on the first Earth');
   assert.equal(P.grid.supply, 39);
-  assert.equal(P.grid.demand, 5 * mines.filter(b => G.Gather.extracting(b)).length);
+  const sensors = S.buildings.filter(b => b.type === 'defensive_sensor');
+  assert.equal(P.grid.demand, 5 * mines.filter(b => G.Gather.extracting(b)).length + 3 * sensors.length, 'extractors and the always-on sensor');
   // Producing draws power.
   S.resources.metal = 10000;
   assert.ok(G.Fabrication.enqueue(fab, 'security_drone'));
@@ -958,7 +959,9 @@ test('turrets: sentry and heavy hit ground, anti-air hits flyers, and the Missil
   const S = G.State, T = 48, sh = G.Units.ship(), p = field(G, 20, 20);
   const put = (key, dx, dy) => G.Buildings.add(key, p.x + dx, p.y + dy);
   const foe = (type, dx, dy) => { const u = G.Units.spawn(type, (p.x + dx) * T, (p.y + dy) * T); u.speed = 0; u.damage = 0; u.hp = u.maxHp = 1000; return u; };
+  put('defensive_sensor', -2, 2);   // every turret here hits every shot
   const sentry = put('sentry_turret', 0, 0);
+  assert.equal(G.Turrets.accuracy(sentry, G.Defs.buildables.get('sentry_turret').behaviors[0]), 1);
   const ground = foe('hostile_machine', 4, 0), air = foe('hostile_drone', 0, 4);
   G.rebuildSpatial(); G.Sim.run(2.05);
   assert.ok(ground.hp < 1000 && air.hp === 1000, `sentry hits ground only (${ground.hp}, ${air.hp})`);
@@ -1010,4 +1013,83 @@ test('Missiles are made at a Fabricator from steel and electronics', () => {
   assert.ok(P.enqueue(fab, 'missiles'));
   G.Sim.run(10.2);
   assert.equal(G.Economy.get('missiles'), 4);
+});
+
+test('Defensive Sensor: turrets without one hit about 75% of shots; it sees 12 tiles through fog and warns', () => {
+  const G = newGame();
+  const S = G.State, T = 48, p = field(G, 22, 22);
+  const sentry = G.Buildings.add('sentry_turret', p.x, p.y);
+  const foe = G.Units.spawn('hostile_machine', (p.x + 3) * T, p.y * T);
+  foe.speed = 0; foe.damage = 0; foe.hp = foe.maxHp = 100000;
+  G.rebuildSpatial();
+  G.Sim.run(100);   // ~200 shots
+  const hits = (100000 - foe.hp) / 9, shots = G.Turrets.get(sentry).shots;
+  assert.ok(shots > 150, 'shots ' + shots);
+  assert.ok(hits / shots > 0.65 && hits / shots < 0.85, `hit rate ${(hits / shots).toFixed(2)}`);
+  // Replays are identical (the roll is deterministic).
+  const G2 = newGame(), p2 = field(G2, 22, 22), s2 = G2.Buildings.add('sentry_turret', p2.x, p2.y), f2 = G2.Units.spawn('hostile_machine', (p2.x + 3) * T, p2.y * T);
+  f2.speed = 0; f2.damage = 0; f2.hp = f2.maxHp = 100000; G2.rebuildSpatial(); G2.Sim.run(100);
+  assert.equal(f2.hp, foe.hp);
+  // A sensor within six tiles makes it 100%, and draws 3 power.
+  const sensor = G.Buildings.add('defensive_sensor', p.x - 3, p.y);
+  assert.equal(G.Sensors.bonus(sentry), 0.25);
+  assert.equal(G.Power.draw(sensor), 3);
+  const hp = foe.hp, n0 = G.Turrets.get(sentry).shots;
+  G.Sim.run(10);
+  assert.equal(hp - foe.hp, 9 * (G.Turrets.get(sentry).shots - n0), 'every shot hits');
+  // Early warning: enemies inside 12 tiles are reported once, with a direction.
+  const alerts = [];
+  G.Events.on('sensor:alert', a => alerts.push(a));
+  G.Sensors.last.clear();
+  G.Units.spawn('hostile_machine', sensor.x - 10 * T, sensor.y);
+  G.rebuildSpatial(); G.Sim.run(1);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].count, 2);
+  G.Sim.run(5);
+  assert.equal(alerts.length, 1, 'no repeat within 30 s');
+  assert.equal(G.Defs.buildables.get('defensive_sensor').sight, 576, '12 tiles of fog vision');
+});
+
+test('Shield Projector: switched on it charges, draws 40 power and absorbs damage to nearby structures', () => {
+  const G = newGame();
+  const S = G.State, T = 48, p = field(G, 18, 24);
+  const proj = G.Buildings.add('shield_projector', p.x, p.y);
+  const wall = G.Buildings.add('defensive_wall', p.x + 5, p.y + 1), far = G.Buildings.add('defensive_wall', p.x + 12, p.y + 1);
+  assert.equal(proj.shieldOn, false); assert.equal(proj.shield, 0);
+  G.Sim.run(2);
+  assert.equal(proj.shield, 0, 'no charge while off');
+  assert.equal(G.Power.draw(proj), 0);
+  assert.ok(G.Shields.set(proj, true));
+  G.Sim.run(0.1);
+  assert.equal(G.Power.draw(proj), 40, 'significant power while on');
+  // The ship's 25 + test-zone solar/wind can't cover 40 more: it charges at the grid ratio.
+  const ratio = G.Power.grid.ratio;
+  assert.ok(ratio < 1, 'ratio ' + ratio);
+  const c0 = proj.shield; G.Sim.run(10);
+  assert.ok(Math.abs(proj.shield - c0 - 400 * ratio) < 5, `charged ${proj.shield - c0} at ${ratio}`);
+  // Full power: up to capacity.
+  const extra = [];
+  for (let i = 0; i < 6; i++) extra.push(G.Buildings.add('solar_array', p.x - 20, p.y + i * 3));
+  G.Sim.run(80);
+  assert.equal(proj.shield, 2500);
+  // Hits on covered structures come off the charge; outside the field they don't.
+  const foe = G.Units.spawn('hostile_machine', wall.x, wall.y + 90);
+  foe.speed = 0; G.rebuildSpatial();
+  const strike = b => { foe.x = b.x; foe.y = b.y + 90; foe.aiTargetId = b.id; foe.aiMode = 'engage'; foe.aiHold = false; foe.cool = 0; G.rebuildSpatial(); G.SystemManager.get('combat').update(0.01); };
+  strike(wall);
+  assert.equal(wall.hp, 600, 'wall untouched');
+  assert.equal(proj.shield, 2494, 'the field took the hit');
+  strike(far);
+  assert.ok(far.hp < 600, 'outside the field: damaged');
+  // It runs out: then damage goes through.
+  proj.shield = 2; strike(wall);
+  assert.equal(proj.shield, 0); assert.equal(wall.hp, 596);
+  // Off: no draw, keeps its charge; the switch and charge are saved.
+  proj.shield = 1234; G.Shields.set(proj, false); G.Sim.run(0.1);
+  assert.equal(G.Power.draw(proj), 0); assert.equal(proj.shield, 1234);
+  G.Shields.set(proj, true);
+  const saved = G.Save.serialize();
+  G.Save.restore(saved, 1);
+  const again = S.buildings.find(b => b.id === proj.id) || G.State.buildings.find(b => b.id === proj.id);
+  assert.equal(again.shieldOn, true); assert.equal(again.shield, 1234);
 });

@@ -52,6 +52,14 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
 
 ## What changed in v0.7
 
+- **Shield Projector** (3×3; 300 metal, 25 steel, 10 electronics): a limited energy field over friendly structures within 6 tiles.
+  - Tap it and choose **Switch on**. While on, it draws 40 power and charges up to 2,500 (40/s, slower on a short grid).
+  - The charge absorbs damage to covered structures until it runs out, then damage goes through again. It keeps its charge when switched off.
+  - It's temporary protection for dangerous attacks, not a replacement for walls. A dashed dome shows the field and flashes when hit.
+- **Defensive Sensor** (1×1; 90 metal, 3 electronics; draws 3 power):
+  - Turrets now hit 75% of their shots; any turret within 6 tiles of a sensor hits every shot.
+  - It sees 12 tiles through fog and warns when enemies come within that range, e.g. "Sensor: 12 hostiles approaching from the south", at most every 30 s.
+- **Save format: schema 7.** Shield Projectors save their switch (`shieldOn`) and charge (`shield`). `migrate_6_to_7` gives any projector without them a switched-off, empty field, which is how a new one starts. Turret aim, sensor warnings and gate states are not saved.
 - **Defences.** The Wall is replaced by a set of defensive structures. All of them are in the Utility Spider's build menu and the testing zone; testing-zone turrets hold fire.
 
   | Structure | Size | Cost | What it does |

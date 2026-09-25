@@ -174,6 +174,7 @@
       G.UI.update();
       G.ExpeditionUI.tick();
       if (G.SpawnerUI.isOpen()) G.SpawnerUI.refresh();
+      if (G.ShieldUI.isOpen()) G.ShieldUI.refresh();
     }
   });
 })();

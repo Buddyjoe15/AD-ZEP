@@ -227,7 +227,7 @@ test('migrate_5_to_6: Walls in older saves become Defensive Walls with the same 
   raw.constructionSites.push({ id: 'site-legacy-wall', type: 'wall', team: 'blue', gx: walls[0].gx + 2, gy: walls[0].gy, w: 1, h: 1,
     x: (walls[0].gx + 2.5) * 48, y: (walls[0].gy + 0.5) * 48, buildTime: 5, remaining: 3, builderId: null });
   const before = JSON.stringify(raw);
-  const up = G.Save.migrate(raw);
+  const up = G.Save.migrations[5](raw);
   assert.equal(JSON.stringify(raw), before, 'the input is not modified');
   assert.equal(up.schema, 6);
   assert.ok(!JSON.stringify(up.buildings).includes('"type":"wall"'));
@@ -241,4 +241,29 @@ test('migrate_5_to_6: Walls in older saves become Defensive Walls with the same 
   }
   assert.equal(G.Defs.buildables.get('defensive_wall').behaviors[0].reduction, 0.2, 'same cover aura as the old Wall');
   assert.equal(G.Defs.buildables.has('wall'), false);
+});
+
+test('migrate_6_to_7: Shield Projectors get a switch and a charge; nothing else does', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(6));
+  // A projector saved before it had fields (as a schema 6 save would hold one).
+  const other = raw.buildings.find(b => !b.fabQueue && b.type !== 'mine_building');
+  raw.buildings.push({ id: 'legacy-shield', type: 'shield_projector', team: 'blue', gx: other.gx, gy: other.gy + 30, w: 3, h: 3,
+    x: (other.gx + 1.5) * 48, y: (other.gy + 31.5) * 48, hp: 1500, maxHp: 1500 });
+  const before = JSON.stringify(raw);
+  const up = G.Save.migrations[6](raw);
+  assert.equal(JSON.stringify(raw), before, 'the input is not modified');
+  assert.equal(up.schema, 7);
+  const p = up.buildings.find(b => b.id === 'legacy-shield');
+  assert.equal(p.shieldOn, false); assert.equal(p.shield, 0);
+  assert.ok(up.buildings.filter(b => b.type !== 'shield_projector').every(b => !('shieldOn' in b)));
+  G.Save.validate(G.Save.migrate(raw));
+  // Validation rejects malformed shield data.
+  const bad = readJSON(fixtureFile(7));
+  const sp = bad.buildings.find(b => b.type === 'shield_projector');
+  assert.ok(sp, 'the schema 7 fixture has a Shield Projector');
+  sp.shield = 1e9;
+  assert.throws(() => G.Save.validate(bad), /building shield/);
+  sp.shield = 10; sp.shieldOn = 'yes';
+  assert.throws(() => G.Save.validate(bad), /building shield/);
 });

@@ -70,7 +70,7 @@
       return {
         hp: 500, buildTime: 2, cost: {}, description: '', behaviors: [], symbol: null, color: '#9bbcf0',
         container: null, fabricator: null, spawner: null, team: 'blue', debugOnly: false, placeOnNode: null, power: null,
-        armor: 0, gate: null, sight: 0,
+        armor: 0, gate: null, sight: 0, shield: null, sensor: null,
         blocksMovement: !d.container, ...d
       };
     }),
@@ -111,12 +111,14 @@
       for (const t of b.behaviors.filter(x => x.type === 'turret')){
         if (!(t.range > 0 && t.damage > 0 && t.reload > 0) || !['ground', 'air', 'any'].includes(t.targets)) problems.push(`buildable ${b.key}: turret needs range, damage, reload and targets`);
         if (t.ammo && !D.resources.has(t.ammo)) problems.push(`buildable ${b.key}: unknown ammo ${t.ammo}`);
+        if (!(t.accuracy > 0 && t.accuracy <= 1)) problems.push(`buildable ${b.key}: turret accuracy must be 0–1`);
       }
     }
     for (const b of D.buildables.all()) if (D.units.has(b.key)) problems.push(`buildable ${b.key}: key also used by a unit`);
     for (const d of [...D.units.all(), ...D.buildables.all()]){
       const p = d.power;
-      if (p && !((p.supply > 0) !== (p.demand > 0) && [undefined, 'producing', 'extracting'].includes(p.when) && [undefined, 'solar', 'wind'].includes(p.scale))) problems.push(`${d.key}: power needs supply or demand (and a known 'when' / 'scale')`);
+      if (p && !((p.supply > 0) !== (p.demand > 0) && [undefined, 'producing', 'extracting', 'active'].includes(p.when) && [undefined, 'solar', 'wind'].includes(p.scale))) problems.push(`${d.key}: power needs supply or demand (and a known 'when' / 'scale')`);
+      if (p && p.when === 'active' && !d.shield) problems.push(`${d.key}: power.when 'active' needs a shield`);
       if (p && p.when === 'producing' && !d.fabricator) problems.push(`${d.key}: power.when 'producing' needs a fabricator`);
     }
     for (const n of D.nodes.all()){

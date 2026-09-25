@@ -1,5 +1,6 @@
-/* Gates and turrets. Nothing here is saved: gate states follow from where units stand,
-   and a turret's cooldown and aim restart when a game loads.
+/* Gates, turrets, Shield Projectors and Defensive Sensors. Gate states follow from where
+   units stand, and a turret's cooldown and aim and a sensor's last warning restart when a
+   game loads; only a Shield Projector's switch (`shieldOn`) and charge (`shield`) are saved.
 
    Gates don't stamp the grid, so paths lead through them. Movement asks G.Gates.blocks():
    enemy units can never enter a gate tile; friendly units only while the gate is open.
@@ -9,7 +10,14 @@
    Turrets (`turret` behaviour) pick the nearest enemy unit they can hit (ground, air or
    any) between `minRange` and `range`, and fire every `reload` seconds. `splash` also
    hits other enemies that close to the target; `ammo` spends one of that resource per shot
-   from the stockpile and holds fire without it. Testing-zone copies never fire. */
+   from the stockpile and holds fire without it. Testing-zone copies never fire. Each shot
+   hits with the turret's `accuracy`, raised by a Defensive Sensor within its boostTiles;
+   the roll is G.hashRandom of the tick, turret and target, so replays are identical.
+
+   Shield Projectors charge while switched on (slower on a short power grid). Damage to a
+   friendly structure inside a charged field comes off the field's charge first.
+   Defensive Sensors see through fog (their `sight`) and raise a warning, at most every
+   30 s each, when enemies come within detectTiles. */
 (function(){
   'use strict';
   const G = GW;
@@ -73,6 +81,8 @@
       return s;
     },
     canHit(cfg, u){ return cfg.targets === 'any' || (cfg.targets === 'air') === flying(u); },
+    // Chance to hit: the turret's own accuracy plus the best nearby Defensive Sensor.
+    accuracy(b, cfg){ return Math.min(1, (cfg.accuracy ?? 1) + G.Sensors.bonus(b)); },
     // Nearest enemy unit this turret can hit, or null.
     target(b, cfg){
       const S = G.State, min2 = (cfg.minRange || 0) ** 2, max2 = cfg.range * cfg.range;
@@ -88,7 +98,14 @@
       return best;
     },
     fire(b, cfg, t){
-      const S = G.State;
+      const S = G.State, s = this.get(b);
+      s.shots = (s.shots || 0) + 1;
+      if (G.hashRandom(Math.round(S.time * 60), s.seed ?? (s.seed = G.hashString(b.id)), t.id, s.shots) >= this.accuracy(b, cfg)){
+        // A miss: the round lands beside the target.
+        const a = s.shots * 2.39996, off = 18 + (t.radius || 10);
+        S.shots.push({ x1: b.x, y1: b.y, x2: t.x + Math.cos(a) * off, y2: t.y + Math.sin(a) * off, life: cfg.shot ? 0.18 : 0.09, team: b.team, kind: cfg.shot || null, miss: true });
+        return false;
+      }
       const hit = u => { u.hp -= cfg.damage; G.Events.emit('combat:hit', { attacker: b, target: u, damage: cfg.damage }); };
       hit(t);
       if (cfg.splash){
@@ -96,6 +113,7 @@
         for (const u of hash ? hash.query(t.x, t.y, cfg.splash) : []) if (u !== t && u.hp > 0 && this.canHit(cfg, u) && G.dist2(u, t) <= cfg.splash * cfg.splash) hit(u);
       }
       S.shots.push({ x1: b.x, y1: b.y, x2: t.x, y2: t.y, life: cfg.shot ? 0.18 : 0.09, team: b.team, kind: cfg.shot || null });
+      return true;
     },
     update(b, cfg, dt){
       if (b.testZone) return;
@@ -114,7 +132,89 @@
     }
   };
 
+  G.Shields = {
+    hitAt: new Map(),
+    def(b){ return G.Defs.buildables.get(b.type)?.shield || null; },
+    // Switches a projector on or off (from its window). Charge is kept either way.
+    set(b, on){
+      if (!this.def(b) || b.hp <= 0) return false;
+      b.shieldOn = !!on;
+      G.Events.emit('shield:changed', b);
+      return true;
+    },
+    // The live projector covering a structure with the most charge, or null.
+    cover(t){
+      const S = G.State, T = G.CONFIG.TILE;
+      let best = null;
+      for (const p of S.buildings){
+        const sh = p.hp > 0 && p.team === t.team && p.shieldOn && p.shield > 0 && this.def(p);
+        if (!sh) continue;
+        const r = sh.radiusTiles * T;
+        if (G.dist2(p, t) <= r * r && (!best || p.shield > best.shield)) best = p;
+      }
+      return best;
+    },
+    // Damage left after the covering field (if any) takes what it can.
+    absorb(t, dmg){
+      if (!(dmg > 0) || !t || t.radius) return dmg;   // structures only
+      const p = this.cover(t);
+      if (!p) return dmg;
+      const took = Math.min(p.shield, dmg);
+      p.shield = G.round6(p.shield - took);
+      this.hitAt.set(p.id, G.State.time);              // presentation: flash the field (not saved)
+      return dmg - took;
+    },
+    update(dt){
+      for (const b of G.State.buildings){
+        const sh = this.def(b);
+        if (!sh || b.hp <= 0 || !b.shieldOn || b.shield >= sh.capacity) continue;
+        b.shield = G.round6(Math.min(sh.capacity, b.shield + sh.recharge * dt * G.Power.factor(b)));
+      }
+    }
+  };
+
+  G.Sensors = {
+    last: new Map(),   // sensor id → time of its last warning (not saved)
+    def(b){ return G.Defs.buildables.get(b.type)?.sensor || null; },
+    // Accuracy bonus a turret gets from the best friendly sensor in range.
+    bonus(b){
+      const T = G.CONFIG.TILE;
+      let best = 0;
+      for (const s of G.State.buildings){
+        const d = s.hp > 0 && s.team === b.team && this.def(s);
+        if (!d) continue;
+        const r = (d.boostTiles + Math.max(b.w, b.h) / 2) * T;
+        if (G.dist2(s, b) <= r * r) best = Math.max(best, d.accuracyBonus);
+      }
+      return best;
+    },
+    // Enemies within a sensor's detection range.
+    detect(b){
+      const S = G.State, d = this.def(b), r = d.detectTiles * G.CONFIG.TILE, out = [];
+      for (const [team, hash] of Object.entries(S.teamSpatial)){
+        if (team === b.team || !hash.count) continue;
+        for (const u of hash.query(b.x, b.y, r)) if (u.hp > 0 && G.dist2(u, b) <= r * r) out.push(u);
+      }
+      return out;
+    },
+    update(){
+      const S = G.State;
+      for (const b of S.buildings){
+        if (b.hp <= 0 || b.testZone || !this.def(b)) continue;
+        if (S.time - (this.last.get(b.id) ?? -Infinity) < 30) continue;
+        const found = this.detect(b);
+        if (!found.length) continue;
+        this.last.set(b.id, S.time);
+        const cx = found.reduce((a, u) => a + u.x, 0) / found.length, cy = found.reduce((a, u) => a + u.y, 0) / found.length;
+        const dir = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'][((Math.round(Math.atan2(cy - b.y, cx - b.x) / (Math.PI / 4)) % 8) + 8) % 8];
+        G.notify(`Sensor: ${found.length} hostile${found.length === 1 ? '' : 's'} approaching from the ${dir}`);
+        G.Events.emit('sensor:alert', { sensor: b, count: found.length, x: cx, y: cy, direction: dir });
+      }
+    }
+  };
+
   G.Behaviors.register('turret', { update(b, cfg, dt){ G.Turrets.update(b, cfg, dt); } });
+  G.SystemManager.register('shields', { update(dt){ G.Shields.update(dt); G.Sensors.update(); }, reset(){ G.Sensors.last.clear(); G.Shields.hitAt.clear(); } });
   G.SystemManager.register('gates', { update(){ G.Gates.update(); }, reset(){ G.Gates.reset(); G.Turrets.state.clear(); } });
   G.Events.on('building:removed', b => G.Turrets.state.delete(b.id));
 })();

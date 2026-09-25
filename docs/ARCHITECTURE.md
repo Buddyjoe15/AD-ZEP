@@ -84,7 +84,10 @@ GW.Defs.buildables.define('refinery', {
   - `ammo` spends one of that resource per shot and holds fire without it.
 - `armor` on a buildable reduces the damage it takes.
 - A `gate` buildable doesn't stamp the grid, so paths lead through it. Movement asks `G.Gates.blocks(u, tx, ty)` instead: enemies are always blocked, and friendly units only while the gate is closed.
-- Gate states and turret cooldowns are rebuilt each tick and never saved.
+- Turrets hit with `accuracy` (0–1). A Defensive Sensor (`sensor`) within its `boostTiles` adds `accuracyBonus`. The hit roll is `G.hashRandom(tick, turret, target, shot)`, so replays stay identical.
+- A Defensive Sensor's `sight` reveals fog, and `G.Sensors` warns (`sensor:alert`) when enemies come within `detectTiles`.
+- A Shield Projector (`shield`) is switched on with `G.Shields.set(b, on)`. While on it charges by `recharge` × the power ratio up to `capacity`, and draws power with `when: 'active'`. `G.Shields.absorb()` in combat takes damage to covered structures off its charge first.
+- `shieldOn` and `shield` are the only saved defence state (schema 7). Gate states, turret cooldowns and aim, and sensor warnings are rebuilt and never saved.
 
 **Fog of war** (`src/render/fog.js`) is presentation only. Each rendered frame (throttled to about 7 Hz) it stamps circles of `sight` around friendly units, of the buildable's `sight` (default 240) around structures, and a small circle around construction sites. The renderer draws the fog image over the map and skips enemy units and gunfire outside the visible set. `G.Input.unitAt` won't pick hidden enemies. The explored set lives only in memory, and it's never saved.
 
