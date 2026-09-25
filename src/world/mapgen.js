@@ -140,7 +140,10 @@
   // landing zone and testing zone (not needed where everything is already open ground).
   G.MapGen = {
     forest, grass,
-    types: { forest: { generate: forest, clearLanding: true }, grass: { generate: grass, clearLanding: false } },
+    types: {
+      forest: { name: 'Forest', generate: forest, clearLanding: true },
+      grass: { name: 'Test map', generate: grass, clearLanding: false }
+    },
     DEFAULT: 'grass'
   };
 })();

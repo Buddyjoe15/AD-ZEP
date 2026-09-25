@@ -23,10 +23,11 @@
       cv.width = grid.cols; cv.height = grid.rows;
       const g = cv.getContext('2d'), img = g.createImageData(grid.cols, grid.rows), lut = [];
       for (const t of G.Defs.terrain.all()) lut[t.id] = t.minimap;
-      if (G.PixelArt.enabled) for (const id of G.PixelArt.dustIds()) lut[id] = G.PixelArt.DUST_MINIMAP;
+      const WA = G.WoodlandsArt, wood = WA.isWoodlands(grid);
+      if (G.PixelArt.enabled && !wood) for (const id of G.PixelArt.dustIds()) lut[id] = G.PixelArt.DUST_MINIMAP;
       for (let i = 0; i < grid.size; i++){
-        const c = lut[grid.tiles[i]] || lut[0], p = i * 4;
-        img.data[p] = c[0]; img.data[p + 1] = c[1]; img.data[p + 2] = c[2]; img.data[p + 3] = 255;
+        const c = lut[grid.tiles[i]] || lut[0], p = i * 4, k = wood ? WA.overviewShade(grid, i) : 1;
+        img.data[p] = c[0] * k; img.data[p + 1] = c[1] * k; img.data[p + 2] = c[2] * k; img.data[p + 3] = 255;
       }
       g.putImageData(img, 0, 0);
       this.overview = cv; this.overviewDirty = false;
@@ -47,12 +48,15 @@
       const C = G.CONFIG, T = C.TILE, ct = C.CHUNK_TILES, size = ct * T, grid = this.grid;
       const cv = document.createElement('canvas'); cv.width = size; cv.height = size;
       const g = cv.getContext('2d'), r = G.RNG(G.State.seed + cx * 13007 + cy * 9011);
-      const P = G.PixelArt, dust = P.enabled ? P.dustIds() : null;
+      const P = G.PixelArt, dust = P.enabled ? P.dustIds() : null, WA = G.WoodlandsArt;
       g.imageSmoothingEnabled = false;
+      // A Woodlands map draws every tile in its own style, with height and ground detail.
+      if (WA.isWoodlands(grid)){ WA.paintChunk(g, grid, cx * ct, cy * ct, ct, T); return cv; }
       for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
         const gx = cx * ct + lx, gy = cy * ct + ly;
         if (gx >= grid.cols || gy >= grid.rows) continue;
         const t = grid.get(gx, gy), px = lx * T, py = ly * T;
+        if (t >= WA.FIRST_ID){ WA.paintTile(g, grid, t, gx, gy, px, py, T); continue; }   // Woodlands terrain painted in the editor
         if (dust && dust.has(t)){ g.drawImage(P.tile(gx, gy), px, py, T, T); continue; }   // pixel-art dust plain
         if (t === TT.PATH){
           g.fillStyle = '#73654a'; g.fillRect(px, py, T, T);
@@ -98,6 +102,7 @@
           if (r() < 0.06){ g.strokeStyle = '#758761'; g.lineWidth = 1; g.beginPath(); const ax = px + 8 + r() * 32, ay = py + 10 + r() * 28; g.moveTo(ax, ay + 4); g.lineTo(ax - 2, ay); g.moveTo(ax, ay + 4); g.lineTo(ax + 2, ay); g.stroke(); }
         }
       }
+      WA.paintTops(g, grid, cx * ct, cy * ct, ct, T, false);
       return cv;
     }
   };

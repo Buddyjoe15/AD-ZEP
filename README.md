@@ -22,7 +22,7 @@ Choose **New Game → Save Slot → Launch expedition**. The same seed always ge
 | Process | Click the **Ore Processor** and pick Steel, Electronics or Fuel Rods | Tap the Ore Processor |
 | Follow | Select any friendly unit(s) → **Follow** → click the unit to follow · **Stop** cancels | Same, with taps |
 | Inspect | Long-press anything | Long-press anything |
-| Debug & Map Editor | **DEBUG** (top bar): add metal, godmode, instant build, fog of war and pixel-art toggles, unit counts and an inspector, and place anything. **MAP EDITOR** (shown in debug mode): paint terrain with a 1–9 tile brush, place structures, deposits and signals, erase objects, reset the map to grass | Same; two fingers still pan and zoom while editing |
+| Debug & Map Editor | **DEBUG** (top bar): add metal, godmode, instant build, fog of war and pixel-art toggles, unit counts and an inspector, and place anything. **MAP EDITOR** (shown in debug mode): paint terrain with a 1–9 tile brush, place structures, deposits and signals, erase objects, reset the map to grass, load the test map or a Woodlands map, and save named maps to reload later | Same; two fingers still pan and zoom while editing |
 | Load test | Click the red **HF** Hostile Fabricator in the testing zone (or place one from DEBUG): set spawn speed and count, choose *Gather at rally point* or *Advance on Vance*, **Move rally point** then tap the map, press Start | Same |
 | Inventory, Expedition log | I / the Inventory button, or Expedition log; **×** (top left) closes them; drag a title bar to move the window | Same |
 | Enemy info | Click a hostile unit: its HP, damage, range, speed and what it is doing | Tap a hostile unit |
@@ -52,6 +52,9 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
 
 ## What changed in v0.7
 
+- **Woodlands map** (new map type, `woodlands`). A generated 512 × 512 woodland over five height levels. Cliffs mark every step between levels and block movement; grassy slopes and carved steps cross them. Rivers only run downhill, so there is a waterfall wherever one drops a level. It also has a lake and creek, a sunken swamp, villages of standing and ruined buildings, logging camps with a log hut and sawhorse, 2–4 caves (rarely 7–8), boulders, thickets, mushrooms, alien plants and crystals, a geothermal field, and scattered ground detail such as pebbles, leaves and tracks. The ship lands on a flat clearing 48 tiles across. Height, cliff faces and ground detail are drawn only; the game map stays flat.
+- **Map Editor: Maps tab.** Load the test map (open grass) or a Woodlands map from any seed under the game in progress. Units, structures and resources stay, with open ground cleared under them. **Save current map** keeps the map type, seed and edits under a name in this browser, to reload later. The terrain palette gains the 27 Woodlands terrain types.
+- **Saves are unchanged (still schema 7).** A save records the map type (`map`) and seed as before, and a Woodlands map's terrain, heights and ground detail are rebuilt from them. `woodlands` is a new accepted value for `map`, and terrain edits can use the new terrain ids 12–38. Saved maps are kept apart from save slots.
 - **Shield Projector** (3×3; 300 metal, 25 steel, 10 electronics): a limited energy field over friendly structures within 6 tiles.
   - Tap it and choose **Switch on**. While on, it draws 40 power and charges up to 2,500 (40/s, slower on a short grid).
   - The charge absorbs damage to covered structures until it runs out, then damage goes through again. It keeps its charge when switched off.
