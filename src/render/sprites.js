@@ -5,7 +5,7 @@
    Two kinds of entry share the atlas:
    - Canvas art from visuals.js, one 512 px cell per frame at 4 atlas px per world px,
      rotated to the unit's heading when drawn.
-   - Pixel art (pixelart.js), 64 px slots at 2 atlas px per art px, one frame per facing
+   - Pixel art (pixelart.js), 128 px slots at 2 atlas px per art px, one frame per facing
      and animation step; never rotated, the facing is picked from the heading instead. */
 (function(){
   'use strict';
@@ -14,8 +14,10 @@
   // Canvas art stays sharp at maximum zoom on high-DPI screens.
   const BOX = 128, RES = 4, CELL = BOX * RES, ATLAS_W = 4096, PER_ROW = ATLAS_W / CELL;
   const ORIGIN_X = 64, ORIGIN_Y = 76;   // unit position inside the box (tall art reaches up)
-  // Pixel art is magnified with nearest-neighbour, so it needs no more than 2 atlas px per art px.
-  const SLOT = 64, SLOTS_PER_CELL = (CELL / SLOT) ** 2, PIXEL_RES = 2;   // pixel art: atlas px per art px
+  // Pixel art: 2 atlas px per art px (1 art px = 1 world px), so the half-size atlas level
+  // the Canvas 2D fallback uses around zoom 1 still keeps every art pixel. A slot holds
+  // frames up to 64 art px (the 49×49 Spider and Vance).
+  const SLOT = 128, SLOTS_PER_CELL = (CELL / SLOT) ** 2, PIXEL_RES = 2;   // pixel art: atlas px per art px
 
   G.SpriteAtlas = {
     RES, CELL,

@@ -1,7 +1,7 @@
 {
   "name": "repair_station",
-  "frameWidth": 48,
-  "frameHeight": 48,
+  "frameWidth": 96,
+  "frameHeight": 96,
   "origin": [
     0,
     0
@@ -10,7 +10,7 @@
     2,
     2
   ],
-  "worldPxPerArtPx": 2,
+  "worldPxPerArtPx": 1,
   "rows": "single row",
   "states": {
     "foundation": {
@@ -53,6 +53,6 @@
   },
   "team": "team0..team2 (magenta ramp)",
   "image": "repair_station.png",
-  "sheetWidth": 480,
-  "sheetHeight": 48
+  "sheetWidth": 960,
+  "sheetHeight": 96
 }

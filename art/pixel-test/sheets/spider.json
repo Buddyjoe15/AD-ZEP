@@ -1,12 +1,12 @@
 {
   "name": "spider",
-  "frameWidth": 25,
-  "frameHeight": 25,
+  "frameWidth": 49,
+  "frameHeight": 49,
   "origin": [
-    12,
-    12
+    24,
+    24
   ],
-  "worldPxPerArtPx": 2,
+  "worldPxPerArtPx": 1,
   "rows": "facing",
   "facings": [
     "up",
@@ -42,13 +42,13 @@
   "shadow": {
     "drawnBy": "engine",
     "offset": [
-      1,
-      2
+      2,
+      4
     ],
     "elevation": "ground"
   },
   "team": "team0..team2 (magenta ramp)",
   "image": "spider.png",
-  "sheetWidth": 250,
-  "sheetHeight": 200
+  "sheetWidth": 490,
+  "sheetHeight": 392
 }
