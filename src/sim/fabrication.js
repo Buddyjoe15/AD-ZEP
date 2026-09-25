@@ -1,6 +1,8 @@
-/* Unit production. Any unit or structure whose definition has `fabricator` owns a queue
-   ({ recipe, left }) and builds recipes from src/data/world.js. Costs are paid on
-   enqueue and refunded if the owner is destroyed. */
+/* Production queues. Any unit or structure whose definition has `fabricator` owns a queue
+   ({ recipe, left }) and builds recipes from src/data/world.js: units (the ship and
+   Fabricators) or construction resources (the Ore Processor, whose `fabricator.recipes`
+   lists what it makes). Costs are paid on enqueue and refunded if the owner is
+   destroyed. */
 (function(){
   'use strict';
   const G = GW;
@@ -22,14 +24,25 @@
       return out;
     },
     queueMax(owner){ return this.defOf(owner)?.fabricator?.queueMax || 0; },
+    // Recipes this owner can build: its own list, or every unit recipe.
+    recipesFor(owner){
+      const list = this.defOf(owner)?.fabricator?.recipes;
+      return list ? list.map(k => G.Defs.recipes.get(k)).filter(Boolean) : G.Defs.recipes.all().filter(r => r.unit);
+    },
+    makesUnits(owner){ return this.recipesFor(owner).some(r => r.unit); },
     totalQueued(){ return this.owners().reduce((n, o) => n + o.fabQueue.length, 0); },
-    population(){ return G.Units.countTeam('blue') + this.totalQueued(); },
+    // Friendly units plus units still in production (processing does not count).
+    population(){
+      let queued = 0;
+      for (const o of this.owners()) for (const q of o.fabQueue) if (G.Defs.recipes.get(q.recipe)?.unit) queued++;
+      return G.Units.countTeam('blue') + queued;
+    },
     // Reason the recipe cannot be queued, or '' when it can.
     blocker(owner, key){
       const r = G.Defs.recipes.get(key);
-      if (!owner || !owner.fabQueue || !r) return 'Unavailable';
+      if (!owner || !owner.fabQueue || !r || !this.recipesFor(owner).includes(r)) return 'Unavailable';
       if (owner.fabQueue.length >= this.queueMax(owner)) return 'Queue full';
-      if (this.population() >= G.CONFIG.POPULATION_CAP) return 'Fabrication capacity reached';
+      if (r.unit && this.population() >= G.CONFIG.POPULATION_CAP) return 'Fabrication capacity reached';
       if (!G.Economy.canAfford(r.cost)) return 'Need ' + G.Economy.describe(r.cost);
       return '';
     },
@@ -71,11 +84,16 @@
       for (const owner of this.owners()){
         const q = owner.fabQueue[0];
         if (!q) continue;
-        q.left = G.Cheats.instantBuild ? 0 : q.left - dt;
+        q.left = G.Cheats.instantBuild ? 0 : q.left - dt * G.Power.factor(owner);   // slower on a short grid
         if (q.left > 0) continue;
         const r = G.Defs.recipes.get(q.recipe);
         owner.fabQueue.shift();
         if (!r) continue;
+        if (r.produces){
+          for (const [k, v] of Object.entries(r.produces)) G.Economy.add(k, v, 'processing');
+          G.Events.emit('fabrication:completed', { owner, recipe: q.recipe, produced: r.produces });
+          continue;
+        }
         const p = this.deployPoint(owner), u = G.Units.spawn(r.unit, p.x, p.y);
         this.toRally(owner, u);
         G.Events.emit('fabrication:completed', { owner, unit: u, recipe: q.recipe });

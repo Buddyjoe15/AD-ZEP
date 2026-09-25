@@ -18,10 +18,11 @@ Choose **New Game → Save Slot → Launch expedition**. The same seed always ge
 | Camera | WASD / arrows, mouse wheel, minimap | Drag empty ground, pinch |
 | Fabricate | Click the ship (or a Fabricator) · **Set rally point** in its window, then tap the map, sends new units there | Tap the ship |
 | Build | Select a Utility Spider → Build | Same |
-| Mine | Build a **Mine Building** on a Metal Mine deposit (it snaps on), then right-click the building with a Spider selected | Tap the building with a Spider selected |
+| Mine | Build a **Resource Extractor** on a Metal Mine, Copper Deposit or Uranium Deposit (it snaps on), then right-click the building with a Spider selected | Tap the building with a Spider selected |
+| Process | Click the **Ore Processor** and pick Steel, Electronics or Fuel Rods | Tap the Ore Processor |
 | Follow | Select any friendly unit(s) → **Follow** → click the unit to follow · **Stop** cancels | Same, with taps |
 | Inspect | Long-press anything | Long-press anything |
-| Debug & Map Editor | **DEBUG** (top bar): add metal, godmode, instant build, and place anything. **MAP EDITOR** (shown in debug mode): paint terrain with a 1–9 tile brush, place structures, deposits and signals, erase objects, reset the map to grass | Same; two fingers still pan and zoom while editing |
+| Debug & Map Editor | **DEBUG** (top bar): add metal, godmode, instant build, fog of war and pixel-art toggles, unit counts and an inspector, and place anything. **MAP EDITOR** (shown in debug mode): paint terrain with a 1–9 tile brush, place structures, deposits and signals, erase objects, reset the map to grass | Same; two fingers still pan and zoom while editing |
 | Load test | Click the red **HF** Hostile Fabricator in the testing zone (or place one from DEBUG): set spawn speed and count, choose *Gather at rally point* or *Advance on Vance*, **Move rally point** then tap the map, press Start | Same |
 | Inventory, Expedition log | I / the Inventory button, or Expedition log; **×** (top left) closes them; drag a title bar to move the window | Same |
 | Enemy info | Click a hostile unit: its HP, damage, range, speed and what it is doing | Tap a hostile unit |
@@ -51,6 +52,25 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
 
 ## What changed in v0.7
 
+- **Fog of war.** Friendly units reveal a circle of their sight, structures 5 tiles and construction sites 3. Ground you've seen stays dimmed with its terrain and structures; ground you haven't seen is dark. Enemies show only inside your crew's sight, and hidden enemies can't be clicked. The minimap follows the fog. It's display only: enemies still fight as before, and the explored area isn't saved but rebuilds from what the crew can see after loading. `?fog=0` turns it off.
+- **Debug panel additions.**
+  - *Display → Fog of war* turns fog on or off.
+  - *Units* lists live counts by team and type. Tap a row to jump to the next unit of that type.
+  - *Inspect* shows any unit's full state when tapped, even under fog: ID, HP, tile, heading, sight, weapon, command, target, path, AI mode, cargo and queue.
+- **Wind Turbine** (2×2, 90 metal): supplies 6 power in a steady breeze, scaled by the Earth's wind. Temperate 100%, Frozen 180% (polar storms), Silent 5% (stagnant air), Irradiated 130%. A test turbine stands north of the ship beside the Solar Array. The Expedition log shows each Earth's wind rating.
+- **Resource Extractor** replaces the Mine Building. It's the single 3×3 automated mining structure: placed over any deposit, it mines whatever is underneath and shows the material's name and colour. Existing saves keep their mines, which are now Resource Extractors.
+- **Electricity and the Solar Array.** Power is a rate shared by all your structures (no wires). The ship's Warp Drive always supplies 25.
+  - **Solar Array** (3×2, 60 metal): supplies up to 8, scaled by the Earth's solar efficiency. Temperate 100%, Frozen 60%, Silent 125%, Irradiated 40%. The Expedition log shows the current Earth's rating.
+  - **Structures that use power:** the Fabricator draws 10 only while producing, the Ore Processor 15 only while processing, and a Mine Building 5 while extracting.
+  - **When demand exceeds supply,** all of them slow to the same fraction (supply ÷ demand) instead of stopping. The ship's own fabrication runs on the Warp Drive and never slows.
+  - **Top bar:** a ϟ pill shows supply/demand and turns red when short.
+  - A test Solar Array stands north of the ship. Saves are unchanged: power is recalculated from your structures.
+- **Ore Processor and new resources.** Copper Deposits and Uranium Deposits are mined like Metal Mines: build a Mine Building on one and haul with Spiders. Uranium extracts at half the rate. Each Earth has one of each, further from the ship than the metal. A new 3×3 structure, the **Ore Processor** (250 metal), turns raw material into construction resources. Tap it and pick what to make:
+  - **Steel**: 2 metal → 1 steel, 5 s.
+  - **Electronics**: 6 copper → 1 electronics, 12 s.
+  - **Fuel Rods**: 6 uranium → 6 fuel rods, 30 s.
+
+  Inputs come from the stockpile when queued (up to 10), and products go back to it. The top bar shows each resource once you have some. Transit carries up to 300 copper, 150 uranium, 150 steel, 50 electronics and 60 fuel rods. Saves are unchanged. Existing saves get the new deposits on their next Earth.
 - **Pixel art (test).** Spiders, drones, Vance, the Repair Station and the grass terrain now use top-down pixel sprites with 8 facings and shadows drawn by the engine. `?art=classic` or the Debug panel switches back to the original art. This is presentation only; saves are unchanged.
 - **Renamed** to *Abyssal Dawn: Zero Earth Protocol* (AD-ZEP). Saves keep their internal `AD-EZP` identifier, so existing saves still load.
 - **Test map.** New games start on open grass with no terrain at all. The testing zone, ship, deposits and signals are placed as before. Add water, trees, mountains, paths and ruins with the Map Editor.

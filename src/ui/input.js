@@ -55,11 +55,12 @@
     // ---- Hit tests (world coordinates) ----
     enemyAt(wx, wy){ const u = this.unitAt(wx, wy, true); return u && u.team !== 'blue' ? u : null; },
     radius(){ return 28 / G.State.camera.z; },
-    unitAt(wx, wy, anyTeam = false){
+    // Units hidden by fog of war can't be picked unless `ignoreFog` (debug inspection).
+    unitAt(wx, wy, anyTeam = false, ignoreFog = false){
       const S = G.State, r = this.radius();
       let best = null, bd = r;
       for (const u of S.spatial.query(wx, wy, r + 20)){
-        if (u.hp <= 0 || u.isShip || (!anyTeam && u.team !== 'blue')) continue;
+        if (u.hp <= 0 || u.isShip || (!anyTeam && u.team !== 'blue') || (!ignoreFog && !G.Fog.canSee(u))) continue;
         const d = Math.hypot(u.x - wx, u.y - wy);
         if (d < bd){ bd = d; best = u; }
       }

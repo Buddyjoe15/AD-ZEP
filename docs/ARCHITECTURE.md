@@ -72,7 +72,20 @@ GW.Defs.buildables.define('refinery', {
 });
 ```
 
-**A resource** (`src/data/resources.js`) appears in the resource bar, the ledger and cost checks automatically. `transitCap` limits how much of it crosses to the next Earth.
+**A resource** (`src/data/resources.js`) appears in the resource bar, the ledger and cost checks automatically. `transitCap` limits how much of it crosses to the next Earth. The top bar always shows resources marked `always` and shows the rest once the stockpile holds some.
+
+**A processing recipe** makes resources instead of a unit: give it `produces: { steel: 1 }` in place of `unit`. A structure makes only the recipes listed in its `fabricator.recipes`, like the Ore Processor. Without that list, a fabricator makes every unit recipe. Processing uses the same queue as unit fabrication: inputs are paid when queued, the product goes to the stockpile, and a destroyed processor refunds its queue. Processing doesn't count toward the crew cap.
+
+**Fog of war** (`src/render/fog.js`) is presentation only. Each rendered frame (throttled to about 7 Hz) it stamps circles of `sight` around friendly units, of the buildable's `sight` (default 240) around structures, and a small circle around construction sites. The renderer draws the fog image over the map and skips enemy units and gunfire outside the visible set. `G.Input.unitAt` won't pick hidden enemies. The explored set lives only in memory, and it's never saved.
+
+**Power** (`src/sim/power.js`) is a rate, not a stockpile. A unit or buildable definition joins the grid with `power`:
+- `{ supply: n }` produces n constantly (the ship's Warp Drive).
+- `{ supply: n, scale: 'solar' | 'wind' }` produces n scaled by the climate's `solar` or `wind` (Solar Array, Wind Turbine).
+- `{ demand: n, when: 'producing' | 'extracting' }` draws n only while its queue runs or its mine extracts. Leave out `when` to draw n all the time.
+
+The `power` system runs before production each tick and sets `G.Power.grid.ratio` = supply ÷ demand (at most 1). Consumers multiply their progress by `G.Power.factor(o)`. It's rebuilt from structures every tick, so it's never saved.
+
+**A deposit** (`src/data/world.js`, `kind: 'deposit'`) is mined by the Resource Extractor (key `mine_building`), which takes the deposit's resource, and hauled like metal. `ore` sets its colour on the map. Add its placement offsets to `GW.EXPEDITION_RULES` and to the list in `Expedition` that places deposits on each new Earth.
 
 **Resource nodes, climates and expedition balance** live in `src/data/world.js` (`GW.EXPEDITION_RULES`). A node is either `kind: 'scavenge'` (collected directly by gatherers) or `kind: 'deposit'` (a 1×1 tile that needs its `building` built centred on it). Add a new mine type by defining a deposit node, then either reuse `mine_building` or add a buildable with `placeOnNode: 'deposit'`, an odd footprint and an `extractor` behaviour.
 

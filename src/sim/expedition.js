@@ -62,9 +62,11 @@
         const p = G.openPoint(sh.x + dx, sh.y + dy, region);
         G.Gather.addNode('scrap_mine', p.x, p.y);
       }
-      for (const [dx, dy] of rules.metalMines){
-        const site = this.mineSite(sh.x + dx, sh.y + dy, region);
-        if (site) G.Gather.addNode('metal_mine', (site.x + 0.5) * T, (site.y + 0.5) * T);
+      for (const [type, spots] of [['metal_mine', rules.metalMines], ['copper_mine', rules.copperMines || []], ['uranium_mine', rules.uraniumMines || []]]){
+        for (const [dx, dy] of spots){
+          const site = this.mineSite(sh.x + dx, sh.y + dy, region);
+          if (site) G.Gather.addNode(type, (site.x + 0.5) * T, (site.y + 0.5) * T);
+        }
       }
       E.waveAt = rules.firstWave;
     },
@@ -84,11 +86,13 @@
       return null;
     },
     // One of every buildable and item, left of the ship, for testing, plus a metal deposit
-    // with a working Mine Building beneath the grid.
+    // with a working Mine Building beneath the grid. The grid has 3-tile cells, so
+    // structures larger than 2×2 go in the bottom row beside the mine instead.
     testingZone(){
-      const S = G.State, sh = G.Units.ship(), T = G.CONFIG.TILE;
+      const S = G.State, sh = G.Units.ship(), T = G.CONFIG.TILE, north = new Set(R().testNorth || []);
+      const small = d => d.w <= 2 && d.h <= 2 && !north.has(d.key), large = d => !small(d) && !north.has(d.key);
       const entries = [
-        ...G.Defs.buildables.all().filter(d => !d.placeOnNode).map(d => ({ kind: 'building', key: d.key })),
+        ...G.Defs.buildables.all().filter(d => !d.placeOnNode && small(d)).map(d => ({ kind: 'building', key: d.key })),
         ...G.Defs.items.keys().map(key => ({ kind: 'item', key }))
       ];
       const cols = 4, x0 = sh.gx - 16, y0 = sh.gy + 1, rows = Math.ceil(entries.length / cols);
@@ -107,6 +111,17 @@
         G.Gather.addNode(node.key, (gx + Math.floor(d.w / 2) + 0.5) * T, (gy + Math.floor(d.h / 2) + 0.5) * T);
         G.Buildings.add(d.key, gx, gy, { id: 'test-' + G.newId(), extra: { testZone: true } });
         break;
+      }
+      G.Defs.buildables.all().filter(d => !d.placeOnNode && large(d)).forEach((d, i) => {
+        G.Buildings.add(d.key, x0 + 4 * (i + 1), y0 + rows * 3, { id: 'test-' + G.newId(), extra: { testZone: true } });
+      });
+      // Power structures stand in a row just north of the ship.
+      let nx = sh.gx;
+      for (const key of north){
+        const d = G.Defs.buildables.get(key), gy = sh.gy - d.h - 2;
+        if (G.MapGen.types[S.map].clearLanding) this.editTerrain(nx - 1, gy - 1, d.w + 2, d.h + 2);
+        G.Buildings.add(key, nx, gy, { id: 'test-' + G.newId(), extra: { testZone: true } });
+        nx += d.w + 1;
       }
     },
 
@@ -301,8 +316,9 @@
 
   G.Events.on('cargo:delivered', ({ amount }) => { const E = G.State.expedition; if (E) E.progress.delivered = G.round6(E.progress.delivered + amount); });
   G.Events.on('construction:completed', () => { const E = G.State.expedition; if (E){ E.built++; E.progress.built++; } });
+  // Units deployed go in the log; processing batches (no unit) are too frequent to log.
   G.Events.on('fabrication:completed', ({ unit, owner }) => {
-    if (G.State.expedition) G.Expedition.log('ARIA: ' + unit.name + ' deployed' + (owner.isShip ? '.' : ' from Fabricator.'));
+    if (unit && G.State.expedition) G.Expedition.log('ARIA: ' + unit.name + ' deployed' + (owner.isShip ? '.' : ' from Fabricator.'));
   });
 
   G.Behaviors.register('studySignals', {});   // read by studySignals() above

@@ -551,3 +551,86 @@ test('pixel-art sprites: eight facings, engine shadows, structure states, dust t
     } finally { await browser.close(); }
   }
 });
+
+test('Ore Processor window lists its three products and queues them; the top bar shows resources as they arrive', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    assert.equal(await page.$$eval('#economyBar .resource-pill:not(.power)', els => els.length), 1, 'only metal before anything else is stocked');
+    const pr = await page.evaluate(() => {
+      Object.assign(GW.State.resources, { metal: 100, copper: 12 });
+      const b = GW.State.buildings.find(b => b.type === 'ore_processor'); GW.centerCamera(b.x, b.y + 150, 0.8); return { x: b.x, y: b.y };
+    });
+    const p = await screen(page, pr.x, pr.y);
+    await page.touchscreen.tap(p.x, p.y);
+    await page.waitForSelector('#ezFabrication:not(.hidden)');
+    await page.waitForTimeout(120);
+    const opts = await page.$$eval('#ezFabrication [data-ez="fabricate"]', els => els.map(e => e.dataset.arg));
+    assert.deepEqual(opts, ['steel', 'electronics', 'fuel_rods']);
+    assert.equal(await page.$('#ezRally'), null, 'no rally point for a processor');
+    assert.ok(await page.$eval('#ezFabrication [data-arg="fuel_rods"]', e => e.disabled), 'no uranium yet');
+    await page.click('#ezFabrication [data-arg="steel"]');
+    await page.click('#ezFabrication [data-arg="electronics"]');
+    assert.equal(await page.evaluate(() => GW.State.buildings.find(b => b.type === 'ore_processor').fabQueue.length), 2);
+    assert.equal(await page.$$eval('#economyBar .resource-pill:not(.power)', els => els.length), 2, 'metal and copper');
+    await page.screenshot({ path: path.join(OUT, 'ore-processor.png') });
+    // Finished batches reach the stockpile without errors (regression: the expedition log
+    // expected every finished job to be a unit).
+    await page.evaluate(() => GW.Cheats.set('instantBuild', true));
+    await page.waitForFunction(() => GW.Economy.get('steel') >= 1 && GW.Economy.get('electronics') >= 1, null, { timeout: 8000 });
+    await page.evaluate(() => GW.Cheats.set('instantBuild', false));
+    // Power pill: supply / demand, red while the grid is short.
+    const grid = await page.evaluate(() => GW.Power.grid);
+    assert.equal((await page.textContent('#economyBar .resource-pill.power')).replace(/\s/g, ''), `ϟ${Math.round(grid.supply)}/${Math.round(grid.demand)}`);
+    await page.evaluate(() => { const G = GW, sh = G.Units.ship(); for (let i = 0; i < 3; i++){ const f = G.Buildings.add('fabricator', sh.gx + 10 + i * 3, sh.gy + 12); G.State.resources.metal += 200; G.Fabrication.enqueue(f, 'survey_drone'); } for (let i = 0; i < 2; i++){ const f = G.Buildings.add('fabricator', sh.gx + 10 + i * 3, sh.gy + 15); G.State.resources.metal += 200; G.Fabrication.enqueue(f, 'survey_drone'); } });
+    await page.waitForSelector('#economyBar .resource-pill.power.short');
+    // The pills never reach the centred DEBUG button, even with all six resources.
+    await page.evaluate(() => Object.assign(GW.State.resources, { uranium: 5, steel: 5, electronics: 5, fuel_rods: 5 }));
+    await page.waitForTimeout(200);
+    const [bar, dbg, squad] = await page.evaluate(() => ['economyBar', 'dbgBtn', 'squadBar'].map(id => document.getElementById(id).getBoundingClientRect().toJSON()));
+    assert.ok(bar.right <= dbg.left, `pills end at ${bar.right}, DEBUG starts at ${dbg.left}`);
+    assert.ok(squad.top >= bar.bottom, 'squad bar sits below the pills');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('fog of war hides enemies outside the crew\'s sight; the Debug panel turns it off and inspects any unit', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    const r = await page.evaluate(() => {
+      const G = GW, h = G.Units.hero();
+      const near = G.Units.spawn('hostile_machine', h.x + 250, h.y), far = G.Units.spawn('hostile_machine', h.x + 2400, h.y + 600);
+      near.speed = far.speed = 0; G.rebuildSpatial(); G.Fog.update(true);
+      G.centerCamera(far.x, far.y, 0.6); G.Renderer.draw();
+      const p = G.screenFromWorld(far.x, far.y);
+      return { on: G.Fog.enabled, near: G.Fog.canSee(near), far: G.Fog.canSee(far), farId: far.id, visible: G.State.metrics.visible, pickFar: !!G.Input.unitAt(far.x, far.y, true), p };
+    });
+    assert.ok(r.on, 'fog is on by default');
+    assert.ok(r.near && !r.far, 'near enemy seen, far enemy hidden');
+    assert.equal(r.pickFar, false, 'hidden enemies cannot be clicked');
+    assert.equal(r.visible, 0, 'the hidden enemy is not drawn');
+    await page.screenshot({ path: path.join(OUT, 'fog.png') });
+    // A unit walking over reveals it, and the area stays explored (dimmed) afterwards.
+    assert.ok(await page.evaluate(id => { const G = GW, f = G.Units.alive(id), s = G.State.units.find(u => u.type === 'survey_drone'); s.x = f.x - 200; s.y = f.y; G.Fog.update(true); const seen = G.Fog.canSee(f); s.x = G.Units.hero().x; s.y = G.Units.hero().y; G.Fog.update(true); return seen && !G.Fog.canSee(f) && G.Fog.seen[Math.floor(f.y / 48) * G.Fog.cols + Math.floor(f.x / 48)] === 1; }, r.farId));
+    // Debug: the Units list counts both teams, the inspector sees through fog, fog turns off.
+    await page.click('#dbgBtn');
+    assert.match(await page.textContent('#dbgUnits'), /red · 2[\s\S]*Hostile Autonomous Machine/i);
+    await page.click('#dbgInspect');
+    await page.mouse.click(r.p.x, r.p.y);
+    await page.waitForSelector('#dbgTip');
+    const tip = await page.textContent('#dbgTip');
+    assert.match(tip, /Hostile Autonomous Machine/); assert.match(tip, new RegExp('#' + r.farId)); assert.match(tip, /Fog\s*hidden/);
+    await page.click('#dbgInspect');
+    await page.click('#dbgFog');
+    assert.equal(await page.evaluate(id => { GW.Renderer.draw(); return !GW.Fog.enabled && GW.Fog.canSee(GW.Units.alive(id)) && GW.State.metrics.visible > 0; }, r.farId), true, 'fog off shows everything');
+    await page.screenshot({ path: path.join(OUT, 'fog-off.png') });
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});

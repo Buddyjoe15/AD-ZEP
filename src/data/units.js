@@ -17,7 +17,8 @@ GW.Defs.units.defineAll({
   },
   ship: {
     name: 'UES Aster Vale', hp: 5000, speed: 0, radius: 144, sight: 900, footprint: { w: 6, h: 6 },
-    capabilities: ['fabricate', 'dropoff'], fabricator: { queueMax: 5 }, visual: 'ship', selectable: true
+    capabilities: ['fabricate', 'dropoff'], fabricator: { queueMax: 5 }, visual: 'ship', selectable: true,
+    power: { supply: 25 }   // Warp Drive: constant output
   },
   survey_drone: {
     name: 'Survey Drone', hp: 260, speed: 175, radius: 15, sight: 800,
