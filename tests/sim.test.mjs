@@ -41,7 +41,7 @@ test('grid occupancy and regions follow structures', () => {
   const G = newGame();
   const S = G.State, p = openTileNear(G, 4, 3);
   assert.ok(S.grid.passable(p.x, p.y));
-  const b = G.Buildings.add('wall', p.x, p.y);
+  const b = G.Buildings.add('defensive_wall', p.x, p.y);
   assert.equal(S.grid.passable(p.x, p.y), false);
   assert.equal(S.grid.regionAt(p.x, p.y), 0);
   G.Buildings.remove(b);
@@ -74,7 +74,7 @@ test('pathfinder: valid routes, stand-in goals and partial paths', () => {
 test('pathfinder: an enclosed goal region is rejected without a full search', () => {
   const G = newGame();
   const S = G.State, p = openTileNear(G, 8, 6);
-  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (dx || dy) G.Buildings.add('wall', p.x + dx, p.y + dy);
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (dx || dy) G.Buildings.add('defensive_wall', p.x + dx, p.y + dy);
   const hero = G.Units.hero(), before = S.metrics.pathCalls;
   const route = S.paths.find(hero.x, hero.y, (p.x + 0.5) * T, (p.y + 0.5) * T);
   assert.equal(S.metrics.pathCalls, before + 1);
@@ -176,13 +176,13 @@ test('construction completes, blocks the tile and refunds when cancelled', () =>
   // Cancelling through a new order refunds the cost.
   const q = openTileNear(G, -2, 6);
   S.resources.metal = 100;
-  assert.ok(G.Construction.order(spider, 'wall', q.x, q.y));
+  assert.ok(G.Construction.order(spider, 'defensive_wall', q.x, q.y));
   assert.equal(G.Economy.get('metal'), 40);
   G.Orders.move([spider], spider.x + 100, spider.y);
   assert.equal(G.Economy.get('metal'), 100);
   assert.equal(S.constructionSites.length, 0);
   // A dead builder's site is refunded rather than blocking departure forever.
-  assert.ok(G.Construction.order(spider, 'wall', q.x, q.y));
+  assert.ok(G.Construction.order(spider, 'defensive_wall', q.x, q.y));
   spider.hp = 0;
   G.Sim.run(0.2);
   assert.equal(S.constructionSites.length, 0);
@@ -232,7 +232,7 @@ test('hostile waves fight, walls reduce damage and repair stations heal', () => 
   G.Sim.run(3);
   assert.ok(guard.hp < hp || foes[0].hp < 65);
   // Wall aura.
-  const b = S.buildings.find(b => b.type === 'wall');
+  const b = S.buildings.find(b => b.type === 'defensive_wall');
   const probe = { team: 'blue', x: b.x + 20, y: b.y, radius: 10 };
   assert.equal(G.Buildings.damageReduction(probe), 0.2);
   // Repair aura.
@@ -301,7 +301,7 @@ test('v0.5 (schema 1) saves migrate and keep playing', () => {
   assert.equal(S.resources.coins, undefined);
   G.Sim.run(20);
   assert.equal(S.constructionSites.length, 0, 'the in-progress wall finishes');
-  assert.equal(S.buildings.filter(b => b.type === 'wall').length, 2);
+  assert.equal(S.buildings.filter(b => b.type === 'defensive_wall').length, 2);
   G.Save.validate(G.Save.serialize());
 });
 
@@ -471,7 +471,7 @@ test('metal mines need a centred 3×3 Mine Building, then extract slowly into a 
   assert.equal(G.Buildings.canPlaceKey('mine_building', free.gx - 1, free.gy - 1), true, 'centred');
   const snap = G.Buildings.placementAt('mine_building', free.x + 40, free.y - 30);
   assert.deepEqual([snap.gx, snap.gy], [free.gx - 1, free.gy - 1], 'snaps onto the nearby deposit');
-  assert.equal(G.Buildings.canPlaceKey('wall', free.gx, free.gy), false, 'other structures cannot cover a deposit');
+  assert.equal(G.Buildings.canPlaceKey('defensive_wall', free.gx, free.gy), false, 'other structures cannot cover a deposit');
   // Build it with the Spider.
   S.resources.metal = 500;
   assert.ok(G.Construction.order(spider, 'mine_building', free.gx - 1, free.gy - 1));
@@ -584,7 +584,7 @@ test('swarm: aggro engages anything friendly within 10 tiles, including structur
   // Structures: a player wall with no units around draws fire; testing-zone fixtures never do.
   drone.hp = 0; near.hp = 0; far.hp = 0; G.Sim.run(0.1);
   const wspot = S.grid.nearestOpen(Math.floor(hero.x / T) + 40, Math.floor(hero.y / T) + 30, 10);
-  const wall = G.Buildings.add('wall', wspot.x, wspot.y);
+  const wall = G.Buildings.add('defensive_wall', wspot.x, wspot.y);
   const e = G.Units.spawn('hostile_machine', ...Object.values(G.openPoint(wall.x + 6 * T, wall.y, 0, 4)));
   G.rebuildSpatial();
   G.Sim.run(4);
@@ -683,8 +683,8 @@ test('map editor: paint terrain around structures, erase objects, and keep it al
   G.MapEdit.paint(ux, uy, 9, TT.FOREST);
   assert.equal(S.terrainEdits.length, edits, 'the covered stroke was dropped');
   // Erase: a structure, a resource node, a signal.
-  const wall = G.Buildings.add('wall', ux + 8, uy);
-  assert.equal(G.MapEdit.removeAt(wall.x, wall.y), 'Wall');
+  const wall = G.Buildings.add('defensive_wall', ux + 8, uy);
+  assert.equal(G.MapEdit.removeAt(wall.x, wall.y), 'Defensive Wall');
   assert.ok(!S.buildings.includes(wall));
   assert.equal(grid.passable(ux + 8, uy), true);
   const node = S.resourceNodes.find(n => n.type === 'scrap_mine');
@@ -825,7 +825,8 @@ test('power: the Warp Drive gives 25, Solar Arrays scale with the Earth, and a s
   assert.ok(wind && wind.gy + wind.h <= ship.gy, 'wind turbine north of the ship');
   assert.equal(P.output(wind), 6, 'steady breeze on the first Earth');
   assert.equal(P.grid.supply, 39);
-  assert.equal(P.grid.demand, 5 * mines.filter(b => G.Gather.extracting(b)).length);
+  const sensors = S.buildings.filter(b => b.type === 'defensive_sensor');
+  assert.equal(P.grid.demand, 5 * mines.filter(b => G.Gather.extracting(b)).length + 3 * sensors.length, 'extractors and the always-on sensor');
   // Producing draws power.
   S.resources.metal = 10000;
   assert.ok(G.Fabrication.enqueue(fab, 'security_drone'));
@@ -897,4 +898,198 @@ test('the Resource Extractor mines whatever deposit it stands on', () => {
   // It will not stand anywhere but centred on a deposit.
   const sh = G.Units.ship();
   assert.equal(G.Buildings.canPlaceKey('mine_building', sh.gx + 10, sh.gy + 12), false);
+});
+
+// An open field east of the ship, away from the testing zone and deposits.
+const field = (G, dx = 14, dy = 16) => { const sh = G.Units.ship(); return G.State.grid.nearestOpen(sh.gx + dx, sh.gy + dy, 6); };
+
+test('walls: Reinforced Walls take less damage; both block movement like the old Wall', () => {
+  const G = newGame();
+  const S = G.State, T = 48, p = field(G);
+  const plain = G.Buildings.add('defensive_wall', p.x, p.y), strong = G.Buildings.add('reinforced_wall', p.x + 2, p.y);
+  assert.equal(S.grid.passable(p.x, p.y), false); assert.equal(S.grid.passable(p.x + 2, p.y), false);
+  assert.equal(strong.maxHp, 1600); assert.ok(strong.maxHp > plain.maxHp);
+  const foe = G.Units.spawn('hostile_machine', (p.x + 1.5) * T, (p.y + 2.5) * T);
+  foe.speed = 0; G.rebuildSpatial();
+  const hit = b => { const hp = b.hp; foe.aiMode = null; foe.targetId = null; foe.cool = 0; foe.x = b.x; foe.y = b.y + 90; G.Units.rebuildIndex?.(); G.rebuildSpatial();
+    // Fire once through the combat system at this structure.
+    foe.aiTargetId = b.id; foe.aiMode = 'engage'; foe.aiHold = false; G.SystemManager.get('combat').update(0.01); return hp - b.hp; };
+  const dPlain = hit(plain), dStrong = hit(strong);
+  assert.ok(dPlain > 0, 'wall damaged: ' + dPlain);
+  assert.ok(Math.abs(dStrong - dPlain * 0.65) < 1e-6, `reinforced takes 35% less (${dStrong} vs ${dPlain})`);
+});
+
+test('gate: friendly units pass when it opens; enemies never do, and it shuts while they are near', () => {
+  const G = newGame();
+  const S = G.State, T = 48, p = field(G, 16, 18);
+  // A wall line with a 2×1 gate in the middle.
+  for (let x = p.x - 6; x <= p.x + 7; x++) if (x < p.x || x > p.x + 1) G.Buildings.add('defensive_wall', x, p.y);
+  const gate = G.Buildings.add('gate', p.x, p.y);
+  assert.equal(gate.w, 2); assert.equal(gate.h, 1);
+  assert.equal(S.grid.passable(p.x, p.y), true, 'the grid (and so the pathfinder) sees the gate as a way through');
+  assert.equal(G.Buildings.canPlace(p.x, p.y, 1, 1), false, 'nothing can be built on a gate');
+  G.Sim.run(0.1);
+  assert.equal(G.Gates.isOpen(gate), false, 'closed with nobody around');
+  // A friendly Spider walks through.
+  const sp = find(G, 'utility_spider');
+  G.Units.clearOrders(sp); sp.x = gate.x; sp.y = gate.y + 4 * T;
+  G.rebuildSpatial();
+  G.Orders.move([sp], gate.x, gate.y - 4 * T);
+  G.Sim.run(6);
+  assert.ok(sp.y < gate.y - T, 'spider passed through: y ' + sp.y + ' gate ' + gate.y);
+  // A hostile nearby keeps it shut, and even friendly units stop at it.
+  const foe = G.Units.spawn('hostile_machine', gate.x + 3 * T, gate.y - 3 * T);
+  foe.speed = 0; foe.damage = 0;
+  G.Units.clearOrders(sp); sp.x = gate.x; sp.y = gate.y - 2 * T; G.rebuildSpatial();
+  G.Sim.run(0.1);
+  assert.equal(G.Gates.isOpen(gate), false, 'shut while a hostile is within six tiles');
+  assert.equal(G.Gates.blocksWorld(sp, gate.x, gate.y), true);
+  // Enemies are blocked even when it is open.
+  foe.hp = 0; G.Sim.run(0.1);
+  assert.equal(G.Gates.isOpen(gate), true, 'reopens for the waiting spider');
+  const raider = G.Units.spawn('hostile_machine', gate.x + 20 * T, gate.y);
+  assert.equal(G.Gates.blocksWorld(raider, gate.x, gate.y), true, 'enemies can never enter a gate tile');
+  assert.equal(G.Gates.blocksWorld(sp, gate.x, gate.y), false);
+  // Gate state is not saved.
+  assert.ok(!JSON.stringify(G.Save.serialize()).includes('"open"'));
+});
+
+test('turrets: sentry and heavy hit ground, anti-air hits flyers, and the Missile Battery needs missiles', () => {
+  const G = newGame();
+  const S = G.State, T = 48, sh = G.Units.ship(), p = field(G, 20, 20);
+  const put = (key, dx, dy) => G.Buildings.add(key, p.x + dx, p.y + dy);
+  const foe = (type, dx, dy) => { const u = G.Units.spawn(type, (p.x + dx) * T, (p.y + dy) * T); u.speed = 0; u.damage = 0; u.hp = u.maxHp = 1000; return u; };
+  put('defensive_sensor', -2, 2);   // every turret here hits every shot
+  const sentry = put('sentry_turret', 0, 0);
+  assert.equal(G.Turrets.accuracy(sentry, G.Defs.buildables.get('sentry_turret').behaviors[0]), 1);
+  const ground = foe('hostile_machine', 4, 0), air = foe('hostile_drone', 0, 4);
+  G.rebuildSpatial(); G.Sim.run(2.05);
+  assert.ok(ground.hp < 1000 && air.hp === 1000, `sentry hits ground only (${ground.hp}, ${air.hp})`);
+  sentry.hp = 0; G.Sim.run(0.1);
+  // Anti-air: flyers only.
+  ground.hp = air.hp = 1000;
+  const aa = put('aa_turret', 0, 0);
+  G.Sim.run(2);
+  assert.ok(air.hp < 1000 && ground.hp === 1000, `anti-air hits air only (${ground.hp}, ${air.hp})`);
+  aa.hp = 0; G.Sim.run(0.1);
+  // Heavy turret: 70 per shell, every 3 s, with a blast that also catches a neighbour.
+  ground.hp = 1000; air.hp = 1000;
+  const buddy = foe('hostile_machine', 4.5, 0.4);
+  G.rebuildSpatial();
+  const heavy = put('heavy_turret', -3, -3);
+  G.Sim.run(3.1);
+  assert.equal(1000 - ground.hp, 140, 'two shells in 3.1 s');
+  assert.equal(1000 - buddy.hp, 140, 'the blast hit the neighbour too');
+  assert.equal(air.hp, 1000);
+  heavy.hp = 0; ground.hp = 0; buddy.hp = 0; G.Sim.run(0.1);
+  // Missile Battery: out to 720, not inside 160, ground or air, one missile per shot.
+  const mb = put('missile_battery', 0, 0), far = foe('hostile_drone', 12, 0);
+  air.hp = 0; G.rebuildSpatial();
+  S.resources.missiles = 0;
+  G.Sim.run(2);
+  assert.equal(far.hp, 1000, 'no missiles, no fire');
+  assert.equal(G.Turrets.get(mb).noAmmo, true);
+  S.resources.missiles = 2;
+  G.Sim.run(8.2);
+  assert.equal(far.hp, 900, 'two missiles, two hits');
+  assert.equal(G.Economy.get('missiles'), 0);
+  const close = foe('hostile_machine', 1, 1);
+  S.resources.missiles = 5; far.hp = 0; G.rebuildSpatial(); G.Sim.run(4.5);
+  assert.equal(close.hp, 1000, 'too close for missiles');
+  // Testing-zone turrets stay idle.
+  const tz = S.buildings.find(b => b.type === 'sentry_turret' && b.testZone);
+  assert.ok(tz, 'a sentry stands in the testing zone');
+  const near = foe('hostile_machine', 0, 0); near.x = tz.x + 100; near.y = tz.y; G.rebuildSpatial(); G.Sim.run(2);
+  assert.equal(near.hp, 1000);
+});
+
+test('Missiles are made at a Fabricator from steel and electronics', () => {
+  const G = newGame();
+  const S = G.State, fab = S.buildings.find(b => b.type === 'fabricator'), P = G.Fabrication;
+  assert.ok(P.recipesFor(fab).some(r => r.key === 'missiles'));
+  assert.ok(P.recipesFor(fab).some(r => r.key === 'utility_spider'), 'still builds units');
+  assert.ok(!P.recipesFor(G.Units.ship()).some(r => r.key === 'missiles'), 'not the ship');
+  Object.assign(S.resources, { steel: 2, electronics: 1 });
+  assert.ok(P.enqueue(fab, 'missiles'));
+  G.Sim.run(10.2);
+  assert.equal(G.Economy.get('missiles'), 4);
+});
+
+test('Defensive Sensor: turrets without one hit about 75% of shots; it sees 12 tiles through fog and warns', () => {
+  const G = newGame();
+  const S = G.State, T = 48, p = field(G, 22, 22);
+  const sentry = G.Buildings.add('sentry_turret', p.x, p.y);
+  const foe = G.Units.spawn('hostile_machine', (p.x + 3) * T, p.y * T);
+  foe.speed = 0; foe.damage = 0; foe.hp = foe.maxHp = 100000;
+  G.rebuildSpatial();
+  G.Sim.run(100);   // ~200 shots
+  const hits = (100000 - foe.hp) / 9, shots = G.Turrets.get(sentry).shots;
+  assert.ok(shots > 150, 'shots ' + shots);
+  assert.ok(hits / shots > 0.65 && hits / shots < 0.85, `hit rate ${(hits / shots).toFixed(2)}`);
+  // Replays are identical (the roll is deterministic).
+  const G2 = newGame(), p2 = field(G2, 22, 22), s2 = G2.Buildings.add('sentry_turret', p2.x, p2.y), f2 = G2.Units.spawn('hostile_machine', (p2.x + 3) * T, p2.y * T);
+  f2.speed = 0; f2.damage = 0; f2.hp = f2.maxHp = 100000; G2.rebuildSpatial(); G2.Sim.run(100);
+  assert.equal(f2.hp, foe.hp);
+  // A sensor within six tiles makes it 100%, and draws 3 power.
+  const sensor = G.Buildings.add('defensive_sensor', p.x - 3, p.y);
+  assert.equal(G.Sensors.bonus(sentry), 0.25);
+  assert.equal(G.Power.draw(sensor), 3);
+  const hp = foe.hp, n0 = G.Turrets.get(sentry).shots;
+  G.Sim.run(10);
+  assert.equal(hp - foe.hp, 9 * (G.Turrets.get(sentry).shots - n0), 'every shot hits');
+  // Early warning: enemies inside 12 tiles are reported once, with a direction.
+  const alerts = [];
+  G.Events.on('sensor:alert', a => alerts.push(a));
+  G.Sensors.last.clear();
+  G.Units.spawn('hostile_machine', sensor.x - 10 * T, sensor.y);
+  G.rebuildSpatial(); G.Sim.run(1);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].count, 2);
+  G.Sim.run(5);
+  assert.equal(alerts.length, 1, 'no repeat within 30 s');
+  assert.equal(G.Defs.buildables.get('defensive_sensor').sight, 576, '12 tiles of fog vision');
+});
+
+test('Shield Projector: switched on it charges, draws 40 power and absorbs damage to nearby structures', () => {
+  const G = newGame();
+  const S = G.State, T = 48, p = field(G, 18, 24);
+  const proj = G.Buildings.add('shield_projector', p.x, p.y);
+  const wall = G.Buildings.add('defensive_wall', p.x + 5, p.y + 1), far = G.Buildings.add('defensive_wall', p.x + 12, p.y + 1);
+  assert.equal(proj.shieldOn, false); assert.equal(proj.shield, 0);
+  G.Sim.run(2);
+  assert.equal(proj.shield, 0, 'no charge while off');
+  assert.equal(G.Power.draw(proj), 0);
+  assert.ok(G.Shields.set(proj, true));
+  G.Sim.run(0.1);
+  assert.equal(G.Power.draw(proj), 40, 'significant power while on');
+  // The ship's 25 + test-zone solar/wind can't cover 40 more: it charges at the grid ratio.
+  const ratio = G.Power.grid.ratio;
+  assert.ok(ratio < 1, 'ratio ' + ratio);
+  const c0 = proj.shield; G.Sim.run(10);
+  assert.ok(Math.abs(proj.shield - c0 - 400 * ratio) < 5, `charged ${proj.shield - c0} at ${ratio}`);
+  // Full power: up to capacity.
+  const extra = [];
+  for (let i = 0; i < 6; i++) extra.push(G.Buildings.add('solar_array', p.x - 20, p.y + i * 3));
+  G.Sim.run(80);
+  assert.equal(proj.shield, 2500);
+  // Hits on covered structures come off the charge; outside the field they don't.
+  const foe = G.Units.spawn('hostile_machine', wall.x, wall.y + 90);
+  foe.speed = 0; G.rebuildSpatial();
+  const strike = b => { foe.x = b.x; foe.y = b.y + 90; foe.aiTargetId = b.id; foe.aiMode = 'engage'; foe.aiHold = false; foe.cool = 0; G.rebuildSpatial(); G.SystemManager.get('combat').update(0.01); };
+  strike(wall);
+  assert.equal(wall.hp, 600, 'wall untouched');
+  assert.equal(proj.shield, 2494, 'the field took the hit');
+  strike(far);
+  assert.ok(far.hp < 600, 'outside the field: damaged');
+  // It runs out: then damage goes through.
+  proj.shield = 2; strike(wall);
+  assert.equal(proj.shield, 0); assert.equal(wall.hp, 596);
+  // Off: no draw, keeps its charge; the switch and charge are saved.
+  proj.shield = 1234; G.Shields.set(proj, false); G.Sim.run(0.1);
+  assert.equal(G.Power.draw(proj), 0); assert.equal(proj.shield, 1234);
+  G.Shields.set(proj, true);
+  const saved = G.Save.serialize();
+  G.Save.restore(saved, 1);
+  const again = S.buildings.find(b => b.id === proj.id) || G.State.buildings.find(b => b.id === proj.id);
+  assert.equal(again.shieldOn, true); assert.equal(again.shield, 1234);
 });

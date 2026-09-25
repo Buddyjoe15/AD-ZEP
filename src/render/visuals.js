@@ -127,14 +127,90 @@
   };
   V.bar = bar;
 
-  V.registerBuilding('wall', (g, b, z) => {
+  // Wall sections. Neighbouring sections join up so a line of walls reads as one wall.
+  const wall = (colors) => (g, b, z) => {
     const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T;
-    g.fillStyle = '#626963'; g.strokeStyle = '#272d29'; g.lineWidth = 2 / z;
-    g.fillRect(px + 2, py + 5, T - 4, T - 10); g.strokeRect(px + 2, py + 5, T - 4, T - 10);
-    g.fillStyle = '#7b837c'; for (let i = 0; i < 3; i++) g.fillRect(px + 5 + i * 14, py + 8, 10, T - 16);
-    if (G.State.selected.size){ g.strokeStyle = 'rgba(120,200,255,.10)'; g.lineWidth = 1 / z; g.beginPath(); g.arc(b.x, b.y, T, 0, TAU); g.stroke(); }
-    bar(g, b.x, py + 2, 38, b.hp / b.maxHp);
+    const joins = (dx, dy) => { const n = G.Buildings.at(b.gx + dx, b.gy + dy); return n && n !== b && /_wall$|^gate$/.test(n.type); };
+    const l = joins(-1, 0) ? 0 : 3, r = joins(1, 0) ? 0 : 3, t = joins(0, -1) ? 0 : 3, bt = joins(0, 1) ? 0 : 3;
+    g.fillStyle = colors.base; g.fillRect(px + l, py + t, T - l - r, T - t - bt);
+    g.strokeStyle = colors.edge; g.lineWidth = 2 / z; g.strokeRect(px + 2, py + 2, T - 4, T - 4);
+    g.fillStyle = colors.block; for (let i = 0; i < 3; i++) g.fillRect(px + 6 + i * 13, py + 8, 10, T - 16);
+    if (colors.rivet){ g.fillStyle = colors.rivet; for (const [ox, oy] of [[8, 8], [T - 10, 8], [8, T - 10], [T - 10, T - 10]]) g.fillRect(px + ox, py + oy, 3, 3); }
+    if (b.hp < b.maxHp) bar(g, b.x, py + 2, 38, b.hp / b.maxHp);
+  };
+  V.registerBuilding('defensive_wall', wall({ base: '#626963', edge: '#272d29', block: '#7b837c' }));
+  V.registerBuilding('reinforced_wall', wall({ base: '#3e4a52', edge: '#161c20', block: '#5b6a73', rivet: '#b9c6cc' }));
+
+  // Gate: two leaves that slide apart while it is open.
+  V.registerBuilding('gate', (g, b, z) => {
+    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T, w = b.w * T, h = b.h * T, open = G.Gates.isOpen(b);
+    g.fillStyle = '#3b423d'; g.fillRect(px, py + 4, w, h - 8);
+    g.fillStyle = '#262c28'; g.fillRect(px, py + 2, 8, h - 4); g.fillRect(px + w - 8, py + 2, 8, h - 4);
+    const leaf = open ? 8 : (w - 16) / 2;
+    g.fillStyle = open ? '#5f6b62' : '#8f9c8a'; g.fillRect(px + 8, py + 8, leaf, h - 16); g.fillRect(px + w - 8 - leaf, py + 8, leaf, h - 16);
+    g.fillStyle = open ? '#6fe08e' : '#e85e55'; g.fillRect(b.x - 3, py + 3, 6, 4);
+    if (b.hp < b.maxHp) bar(g, b.x, py - 6, w * 0.8, b.hp / b.maxHp);
   });
+
+  // Turrets: a base, and a head that turns toward what it last aimed at.
+  const turret = (style) => (g, b, z, t, def) => {
+    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T, w = b.w * T, h = b.h * T, s = G.Turrets.get(b), k = b.w;
+    g.fillStyle = '#2d3438'; g.strokeStyle = '#11171a'; g.lineWidth = 2 / z;
+    g.fillRect(px + 3, py + 3, w - 6, h - 6); g.strokeRect(px + 3, py + 3, w - 6, h - 6);
+    g.fillStyle = style.ring; g.beginPath(); g.arc(b.x, b.y, 13 * k, 0, TAU); g.fill();
+    g.save(); g.translate(b.x, b.y); g.rotate(s.aim);
+    g.fillStyle = style.barrel;
+    if (style.missiles){ for (const oy of [-9, -3, 3, 9]) g.fillRect(-4, oy * k / 2 - 2.5, 22 * k / 2, 5); }
+    else for (const oy of style.barrels) g.fillRect(0, oy - style.width / 2, style.length * k, style.width);
+    g.fillStyle = style.head; g.beginPath(); g.arc(0, 0, 8 * k, 0, TAU); g.fill();
+    g.restore();
+    if (s.noAmmo){ g.fillStyle = '#e85e55'; g.font = `bold ${10}px sans-serif`; g.textAlign = 'center'; g.fillText('NO AMMO', b.x, py - 4); }
+    if (b.hp < b.maxHp) bar(g, b.x, py - (s.noAmmo ? 16 : 6), w * 0.8, b.hp / b.maxHp);
+  };
+  // Shield Projector: an emitter that glows by charge. Its field is drawn by V.shields().
+  V.registerBuilding('shield_projector', (g, b, z, t, def) => {
+    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T, w = b.w * T, h = b.h * T, f = b.shield / def.shield.capacity;
+    g.fillStyle = '#2b3a40'; g.strokeStyle = '#10181b'; g.lineWidth = 2 / z;
+    g.fillRect(px + 4, py + 4, w - 8, h - 8); g.strokeRect(px + 4, py + 4, w - 8, h - 8);
+    g.fillStyle = '#3d5058'; for (const [ox, oy] of [[10, 10], [w - 26, 10], [10, h - 26], [w - 26, h - 26]]) g.fillRect(px + ox, py + oy, 16, 16);
+    g.fillStyle = '#1a262b'; g.beginPath(); g.arc(b.x, b.y, 30, 0, TAU); g.fill();
+    g.fillStyle = b.shieldOn ? `rgba(127,216,240,${0.35 + 0.6 * f})` : '#4a5a60';
+    g.beginPath(); g.arc(b.x, b.y, 12 + 12 * f, 0, TAU); g.fill();
+    g.fillStyle = b.shieldOn ? '#6fe08e' : '#e85e55'; g.fillRect(b.x - 4, py + 8, 8, 5);
+    if (b.hp < b.maxHp) bar(g, b.x, py - 6, w * 0.8, b.hp / b.maxHp);
+  });
+  // Fields of switched-on, charged projectors: a translucent dome that flashes when hit.
+  V.shields = function(g, z, t, inView){
+    const T = G.CONFIG.TILE;
+    for (const b of G.State.buildings){
+      const sh = G.Shields.def(b);
+      if (!sh || b.hp <= 0 || !b.shieldOn || b.shield <= 0) continue;
+      const r = sh.radiusTiles * T;
+      if (!inView(b.x, b.y, r)) continue;
+      const f = b.shield / sh.capacity, hit = t - (G.Shields.hitAt.get(b.id) ?? -9), flash = hit < 0.25 ? 1 - hit / 0.25 : 0;
+      g.fillStyle = `rgba(127,216,240,${0.05 + 0.08 * f + 0.15 * flash})`;
+      g.beginPath(); g.arc(b.x, b.y, r, 0, TAU); g.fill();
+      g.strokeStyle = `rgba(174,244,255,${0.35 + 0.4 * f + 0.25 * flash})`; g.lineWidth = (2 + 2 * flash) / z;
+      g.setLineDash([14 / z, 8 / z]); g.lineDashOffset = -t * 20 / z; g.stroke(); g.setLineDash([]); g.lineDashOffset = 0;
+    }
+  };
+  // Defensive Sensor: a turning dish.
+  V.registerBuilding('defensive_sensor', (g, b, z, t) => {
+    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T;
+    g.fillStyle = '#2d3a34'; g.strokeStyle = '#111a15'; g.lineWidth = 2 / z;
+    g.fillRect(px + 6, py + 6, T - 12, T - 12); g.strokeRect(px + 6, py + 6, T - 12, T - 12);
+    g.save(); g.translate(b.x, b.y); g.rotate(b.testZone ? 0 : t * 1.6);
+    g.strokeStyle = '#9fe0b0'; g.lineWidth = 3; g.beginPath(); g.arc(0, 0, 13, -0.9, 0.9); g.stroke();
+    g.fillStyle = '#9fe0b0'; g.fillRect(0, -1.5, 14, 3);
+    g.restore();
+    g.fillStyle = '#6fe08e'; g.beginPath(); g.arc(b.x, b.y, 3, 0, TAU); g.fill();
+    if (b.hp < b.maxHp) bar(g, b.x, py - 6, T * 0.8, b.hp / b.maxHp);
+  });
+
+  V.registerBuilding('sentry_turret', turret({ ring: '#4e6470', head: '#7fa3b5', barrel: '#1b2226', barrels: [0], width: 4, length: 20 }));
+  V.registerBuilding('heavy_turret', turret({ ring: '#46525a', head: '#6f8594', barrel: '#151b1e', barrels: [0], width: 10, length: 20 }));
+  V.registerBuilding('aa_turret', turret({ ring: '#4a6a80', head: '#8fb8d8', barrel: '#1b2226', barrels: [-4, 4], width: 3, length: 22 }));
+  V.registerBuilding('missile_battery', turret({ ring: '#6a4a3a', head: '#d9906a', barrel: '#2a1d16', missiles: true }));
 
   V.registerBuilding('symbol', (g, b, z, t, def) => {
     const T = G.CONFIG.TILE, w = b.w * T - 8, h = b.h * T - 8;

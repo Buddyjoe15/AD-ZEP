@@ -249,6 +249,7 @@
         if (b && !this.unitAt(q.x, q.y)){
           if (b.fabQueue) G.ExpeditionUI.openFabrication(b.id);
           else if (G.Spawner.def(b)) G.SpawnerUI.open(b.id);
+          else if (G.Shields.def(b) && b.team === 'blue') G.ShieldUI.open(b.id);
           else G.DebugUI.showTip(G.DebugUI.buildingDetails(G.Defs.buildables.get(b.type), b), e.clientX, e.clientY, true);
           this.box = null; finish(); return;
         }

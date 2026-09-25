@@ -39,6 +39,8 @@
     }
     const aura = G.Buildings.damageReduction(t);
     if (aura > 0) dmg *= 1 - aura;
+    dmg *= 1 - G.Buildings.armor(t);   // structures such as Reinforced Walls resist damage
+    dmg = G.Shields.absorb(t, dmg);    // a Shield Projector's field takes it first
     t.hp -= dmg;
     u.cool = u.reload;
     S.shots.push({ x1: u.x, y1: u.y, x2: t.x, y2: t.y, life: 0.09, team: u.team });

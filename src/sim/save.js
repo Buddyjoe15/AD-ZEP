@@ -131,8 +131,32 @@
     return v;
   }
 
-  // Keyed by the schema each step upgrades from; add { 5: migrate_5_to_6 } and so on.
-  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5 };
+  // Schema 5 → schema 6 (Building Additions): the Wall structure is replaced by the Defensive
+  // Wall, which has the same size, health, cost and cover aura. Walls and wall construction
+  // sites in older saves become Defensive Walls.
+  function migrate_5_to_6(d){
+    const v = G.copy(d);
+    v.schema = 6;
+    for (const b of v.buildings || []) if (b && b.type === 'wall') b.type = 'defensive_wall';
+    for (const s of v.constructionSites || []) if (s && s.type === 'wall') s.type = 'defensive_wall';
+    return v;
+  }
+
+  // Schema 6 → schema 7: Shield Projectors save whether they are switched on (`shieldOn`)
+  // and their stored field charge (`shield`). Any projector without them starts switched
+  // off and empty, which is how a newly built one starts.
+  function migrate_6_to_7(d){
+    const v = G.copy(d);
+    v.schema = 7;
+    for (const b of v.buildings || []) if (b && b.type === 'shield_projector'){
+      if (typeof b.shieldOn !== 'boolean') b.shieldOn = false;
+      if (!num(b.shield) || b.shield < 0) b.shield = 0;
+    }
+    return v;
+  }
+
+  // Keyed by the schema each step upgrades from; add { 7: migrate_7_to_8 } and so on.
+  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7 };
 
   // Applies the steps in order until the save reaches G.SAVE_SCHEMA. A current save is
   // returned as is; anything newer or unknown is rejected.
@@ -204,6 +228,12 @@
       (D.nodes.get(n.type).kind !== 'deposit' || (int(n.gx) && int(n.gy))))) fail('resource node');
     if (!d.buildings.every(b => !b.fabQueue || b.rally === null || point(b.rally))) fail('building rally point');
     if (!d.buildings.every(b => (!b.stock || cost(b.stock)) && (b.nodeId == null || typeof b.nodeId === 'string'))) fail('building stockpile');
+    // Shield Projectors carry their switch and charge; nothing else may.
+    if (!d.buildings.every(b => {
+      const sh = D.buildables.get(b.type).shield;
+      if (!sh) return b.shieldOn === undefined && b.shield === undefined;
+      return typeof b.shieldOn === 'boolean' && num(b.shield) && b.shield >= 0 && b.shield <= sh.capacity;
+    })) fail('building shield');
     if (!d.terrainEdits.every(e => [e.x, e.y, e.w, e.h, e.t].every(int) && e.w >= 0 && e.h >= 0 && e.w * e.h <= 1 << 20)) fail('terrain edit');
     const e = d.expedition;
     if (!e) fail('expedition');

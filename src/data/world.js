@@ -35,7 +35,9 @@ GW.Defs.recipes.defineAll({
   // Ore Processor
   steel:       { name: 'Steel',       produces: { steel: 1 },       cost: { metal: 2 },   time: 5,  blurb: '2 metal → 1 steel' },
   electronics: { name: 'Electronics', produces: { electronics: 1 }, cost: { copper: 6 },  time: 12, blurb: '6 copper → 1 electronics' },
-  fuel_rods:   { name: 'Fuel Rods',   produces: { fuel_rods: 6 },   cost: { uranium: 6 }, time: 30, blurb: '6 uranium → 6 fuel rods' }
+  fuel_rods:   { name: 'Fuel Rods',   produces: { fuel_rods: 6 },   cost: { uranium: 6 }, time: 30, blurb: '6 uranium → 6 fuel rods' },
+  // Fabricator
+  missiles:    { name: 'Missiles',    produces: { missiles: 4 },    cost: { steel: 2, electronics: 1 }, time: 10, blurb: 'Ammunition for Missile Batteries: 4 per batch' }
 });
 
 // Order matters: Earth n uses climate (n-1) % count.

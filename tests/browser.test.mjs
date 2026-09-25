@@ -88,7 +88,7 @@ for (const target of ['index.html', 'dist/ad-ezp.html']){
       p = await screen(page, spider.x, spider.y);
       await page.mouse.click(p.x, p.y);
       await page.click('#truckBuildBtn');
-      await page.click('[data-build-pick="wall"]');
+      await page.click('[data-build-pick="defensive_wall"]');
       const tile = await page.evaluate(() => { const u = GW.State.units.find(u => u.type === 'utility_spider'), T = 48, g = GW.State.grid;
         for (let r = 3; r < 9; r++) for (let dx = -r; dx <= r; dx++){ const x = Math.floor(u.x / T) + dx, y = Math.floor(u.y / T) + r; if (GW.Buildings.canPlace(x, y, 1, 1)) return { x: (x + 0.5) * T, y: (y + 0.5) * T }; } });
       p = await screen(page, tile.x, tile.y);
@@ -372,11 +372,11 @@ test('debug cheats and the Map Editor work from the interface', { skip, timeout:
     await page.screenshot({ path: path.join(OUT, 'map-editor.png') });
     // Objects: place a wall; Erase: remove it.
     await page.click('#mapEdPanel [data-tab="objects"]');
-    const wallIndex = await page.evaluate(() => GW.MapEditorUI.objects().findIndex(e => e.key === 'wall'));
+    const wallIndex = await page.evaluate(() => GW.MapEditorUI.objects().findIndex(e => e.key === 'defensive_wall'));
     await page.click(`#mapEdPanel [data-obj="${wallIndex}"]`);
     const w = await screen(page, (tiles.gx + 0.5) * tiles.T, (tiles.gy + 4.5) * tiles.T);
     await page.mouse.click(w.x, w.y);
-    assert.equal(await page.evaluate(({ gx, gy }) => GW.Buildings.at(gx, gy + 4)?.type, tiles), 'wall');
+    assert.equal(await page.evaluate(({ gx, gy }) => GW.Buildings.at(gx, gy + 4)?.type, tiles), 'defensive_wall');
     await page.click('#mapEdPanel [data-tab="erase"]');
     await page.mouse.click(w.x, w.y);
     assert.equal(await page.evaluate(({ gx, gy }) => GW.Buildings.at(gx, gy + 4), tiles), null);
@@ -631,6 +631,39 @@ test('fog of war hides enemies outside the crew\'s sight; the Debug panel turns 
     await page.click('#dbgFog');
     assert.equal(await page.evaluate(id => { GW.Renderer.draw(); return !GW.Fog.enabled && GW.Fog.canSee(GW.Units.alive(id)) && GW.State.metrics.visible > 0; }, r.farId), true, 'fog off shows everything');
     await page.screenshot({ path: path.join(OUT, 'fog-off.png') });
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('Shield Projector window switches the field on and off; its state survives a save', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    const at = await page.evaluate(() => {
+      const G = GW, sh = G.Units.ship(), p = G.State.grid.nearestOpen(sh.gx + 18, sh.gy + 30, 6);
+      const b = G.Buildings.add('shield_projector', p.x, p.y);
+      G.centerCamera(b.x, b.y, 0.7);
+      return { id: b.id, ...G.screenFromWorld(b.x, b.y) };
+    });
+    await page.touchscreen.tap(at.x, at.y);
+    await page.waitForSelector('#shieldPanel:not(.hidden) #shToggle');
+    await page.waitForTimeout(120);
+    assert.match(await page.textContent('#shLive'), /Off[\s\S]*0 \/ 2,500/);
+    await page.click('#shToggle');
+    assert.equal(await page.evaluate(id => GW.State.buildings.find(b => b.id === id).shieldOn, at.id), true);
+    await page.waitForFunction(id => GW.State.buildings.find(b => b.id === id).shield > 20, at.id, { timeout: 8000 });
+    assert.match(await page.textContent('#shLive'), /Charging[\s\S]*40 in use/);
+    await page.screenshot({ path: path.join(OUT, 'shield-projector.png') });
+    const saved = await page.evaluate(id => { GW.Save.save(1); const d = JSON.parse(localStorage.getItem(GW.Save.keyFor(1))); return d.buildings.find(b => b.id === id); }, at.id);
+    assert.equal(saved.shieldOn, true); assert.ok(saved.shield > 20);
+    await page.click('#shToggle');
+    assert.equal(await page.evaluate(id => GW.State.buildings.find(b => b.id === id).shieldOn, at.id), false);
+    await page.click('#shClose');
+    assert.ok(await page.isHidden('#shieldPanel'));
+    await page.evaluate(() => localStorage.clear());
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

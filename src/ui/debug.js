@@ -44,6 +44,17 @@
         rows.push(['Stockpile', `${Math.floor(b ? G.Gather.stockTotal(b) : 0)} / ${ex.stockCap}`], ['Placement', 'Centred on any resource deposit']);
         if (b) rows.push(['Mining', n ? G.Defs.resources.get(G.Gather.def(n).resource).name : 'No deposit']);
       }
+      if (d.armor) rows.push(['Armour', Math.round(d.armor * 100) + '% less damage']);
+      if (d.gate) rows.push(['Gate', b ? (G.Gates.isOpen(b) ? 'Open' : 'Closed') : `Opens for friendly units within ${d.gate.openTiles} tiles; shuts while hostiles are within ${d.gate.hostileTiles}`]);
+      if (d.shield) rows.push(['Field', `${d.shield.radiusTiles} tiles · ${b ? Math.floor(b.shield) + ' / ' : ''}${d.shield.capacity} charge · +${d.shield.recharge}/s`], ['Switch', b ? (b.shieldOn ? 'On' : 'Off') + ' (tap to open)' : 'On/off from its window']);
+      if (d.sensor) rows.push(['Detection', `${d.sensor.detectTiles} tiles through fog, with warnings`], ['Turret boost', `+${Math.round(d.sensor.accuracyBonus * 100)}% accuracy within ${d.sensor.boostTiles} tiles`]);
+      const tu = d.behaviors.find(x => x.type === 'turret');
+      if (tu){
+        rows.push(['Accuracy', b ? Math.round(G.Turrets.accuracy(b, tu) * 100) + '%' + (G.Sensors.bonus(b) ? ' (sensor)' : '') : Math.round(tu.accuracy * 100) + '% (100% near a Defensive Sensor)']);
+        rows.push(['Weapon', `${tu.damage} dmg every ${tu.reload}s${tu.splash ? ' · blast ' + tu.splash : ''}`], ['Range', (tu.minRange ? tu.minRange + '–' : '') + tu.range], ['Targets', tu.targets === 'any' ? 'Ground and air' : tu.targets === 'air' ? 'Air only' : 'Ground only']);
+        if (tu.ammo) rows.push(['Ammunition', `${Math.floor(G.Economy.get(tu.ammo))} ${G.Defs.resources.get(tu.ammo).name.toLowerCase()} in stock (1 per shot)`]);
+        if (b?.testZone) rows.push(['Status', 'Testing zone: holds fire']);
+      }
       if (d.power?.supply) rows.push(['Power', `${b ? Math.round(G.Power.output(b) * 10) / 10 : d.power.supply} supplied` + (d.power.scale ? ` (${Math.round(G.Power.efficiency(d.power.scale) * 100)}% ${d.power.scale} here)` : '')]);
       else if (d.power?.demand) rows.push(['Power', `${d.power.demand} while ${d.power.when || 'on'}`]);
       if (d.spawner){ const s = b ? G.Spawner.state(b) : d.spawner; rows.push(['Spawns', G.Defs.units.get(d.spawner.unit)?.name]); if (b) rows.push(['Progress', `${s.spawned} / ${s.amount} at ${s.rate}/s${s.running ? ' (running)' : ''}`]); }

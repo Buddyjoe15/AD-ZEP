@@ -9,6 +9,7 @@
      { supply: 8, scale: 'solar' }        – output × the current Earth's `solar` (or `wind`)
      { demand: 10, when: 'producing' }    – draws only while its production queue runs
      { demand: 5, when: 'extracting' }    – draws only while a Resource Extractor is extracting
+     { demand: 40, when: 'active' }       – draws only while a Shield Projector is switched on
      { demand: 2 }                        – draws all the time
    Everything here is recomputed from saved state every tick, so nothing is saved. */
 (function(){
@@ -38,6 +39,7 @@
       if (!p || !p.demand || o.hp <= 0) return false;
       if (p.when === 'producing') return !!(o.fabQueue && o.fabQueue.length);
       if (p.when === 'extracting') return G.Gather.extracting(o);
+      if (p.when === 'active') return !!o.shieldOn;
       return true;
     },
     // Current draw of one consumer.

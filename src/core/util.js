@@ -18,6 +18,8 @@
     h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909);
     return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
   };
+  // 32-bit FNV-1a hash of a string (e.g. a structure id), for use as a hashRandom input.
+  G.hashString = str => { let h = 2166136261; for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619); return h | 0; };
   // Wall clock, injected by the presentation layer (src/main.js). The simulation may only
   // use it for diagnostics timings and save timestamps, never for game logic, and it reads
   // as zero headless so tests stay deterministic.

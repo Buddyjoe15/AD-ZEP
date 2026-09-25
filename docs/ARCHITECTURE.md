@@ -76,6 +76,19 @@ GW.Defs.buildables.define('refinery', {
 
 **A processing recipe** makes resources instead of a unit: give it `produces: { steel: 1 }` in place of `unit`. A structure makes only the recipes listed in its `fabricator.recipes`, like the Ore Processor. Without that list, a fabricator makes every unit recipe. Processing uses the same queue as unit fabrication: inputs are paid when queued, the product goes to the stockpile, and a destroyed processor refunds its queue. Processing doesn't count toward the crew cap.
 
+**Defences** (`src/sim/defense.js`):
+- A buildable with a `turret` behaviour fires at the nearest enemy it can hit:
+  - `targets` is `'ground'`, `'air'` or `'any'`, matched against a unit's `flying`.
+  - It fires between `minRange` and `range`, every `reload` seconds.
+  - `splash` damages other enemies near the target.
+  - `ammo` spends one of that resource per shot and holds fire without it.
+- `armor` on a buildable reduces the damage it takes.
+- A `gate` buildable doesn't stamp the grid, so paths lead through it. Movement asks `G.Gates.blocks(u, tx, ty)` instead: enemies are always blocked, and friendly units only while the gate is closed.
+- Turrets hit with `accuracy` (0–1). A Defensive Sensor (`sensor`) within its `boostTiles` adds `accuracyBonus`. The hit roll is `G.hashRandom(tick, turret, target, shot)`, so replays stay identical.
+- A Defensive Sensor's `sight` reveals fog, and `G.Sensors` warns (`sensor:alert`) when enemies come within `detectTiles`.
+- A Shield Projector (`shield`) is switched on with `G.Shields.set(b, on)`. While on it charges by `recharge` × the power ratio up to `capacity`, and draws power with `when: 'active'`. `G.Shields.absorb()` in combat takes damage to covered structures off its charge first.
+- `shieldOn` and `shield` are the only saved defence state (schema 7). Gate states, turret cooldowns and aim, and sensor warnings are rebuilt and never saved.
+
 **Fog of war** (`src/render/fog.js`) is presentation only. Each rendered frame (throttled to about 7 Hz) it stamps circles of `sight` around friendly units, of the buildable's `sight` (default 240) around structures, and a small circle around construction sites. The renderer draws the fog image over the map and skips enemy units and gunfire outside the visible set. `G.Input.unitAt` won't pick hidden enemies. The explored set lives only in memory, and it's never saved.
 
 **Power** (`src/sim/power.js`) is a rate, not a stockpile. A unit or buildable definition joins the grid with `power`:

@@ -8,5 +8,6 @@ GW.Defs.resources.defineAll({
   uranium:     { name: 'Uranium',     icon: '◆', color: '#8fe36a', transitCap: 150 },
   steel:       { name: 'Steel',       icon: '▰', color: '#9fb4c4', transitCap: 150 },
   electronics: { name: 'Electronics', icon: '▣', color: '#6fd3e8', transitCap: 50 },
-  fuel_rods:   { name: 'Fuel Rods',   icon: '▮', color: '#b6f06a', transitCap: 60 }
+  fuel_rods:   { name: 'Fuel Rods',   icon: '▮', color: '#b6f06a', transitCap: 60 },
+  missiles:    { name: 'Missiles',    icon: '➤', color: '#ff9f5a', transitCap: 40 }
 });

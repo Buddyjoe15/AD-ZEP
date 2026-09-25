@@ -51,23 +51,28 @@ body.in-game #ezToggle, body.in-game #status, body.in-game #dbgBtn { display: bl
 .ezTransit:disabled { background: #253944 !important; color: #8ca5ae !important; cursor: not-allowed; }
 
 /* Fabrication window */
-#ezFabrication, #spawnerPanel {
+#ezFabrication, #spawnerPanel, #shieldPanel {
   position: fixed; left: 8px; top: 76px; width: min(264px, calc(100vw - 16px)); z-index: 46;
   background: #101e27f7; border: 1px solid #51818d; border-radius: 12px; color: #dce9ee;
   box-shadow: 0 12px 80px #0009; font: 12px/1.5 system-ui;
 }
-#ezFabrication.ezOpening, #spawnerPanel.ezOpening { pointer-events: none; }
-#ezFabBody, #spawnerBody { box-sizing: border-box; max-height: min(320px, calc(100vh - 94px)); overflow: auto; touch-action: pan-y; padding: 10px; }
-#ezFabBody h3, #spawnerBody h3 { margin: 12px 0 4px; color: #8ed6d3; font-size: 11px; text-transform: uppercase; letter-spacing: 1.6px; }
+#ezFabrication.ezOpening, #spawnerPanel.ezOpening, #shieldPanel.ezOpening { pointer-events: none; }
+#ezFabBody, #spawnerBody, #shieldBody { box-sizing: border-box; max-height: min(320px, calc(100vh - 94px)); overflow: auto; touch-action: pan-y; padding: 10px; }
+#ezFabBody h3, #spawnerBody h3, #shieldBody h3 { margin: 12px 0 4px; color: #8ed6d3; font-size: 11px; text-transform: uppercase; letter-spacing: 1.6px; }
 .ezFabHeader { display: flex; justify-content: space-between; align-items: center; }
 .ezFabHeader h2 { margin: 0; font-size: 22px; }
 .ezFabOptions { display: grid; gap: 5px; }
-#ezFabrication button, #spawnerPanel button { min-height: 44px; border: 1px solid #46616d; border-radius: 6px; padding: 6px 8px; background: #203743; color: #e6f6ff; text-align: left; }
+#ezFabrication button, #spawnerPanel button, #shieldPanel button { min-height: 44px; border: 1px solid #46616d; border-radius: 6px; padding: 6px 8px; background: #203743; color: #e6f6ff; text-align: left; }
 #ezFabrication button:disabled, #spawnerPanel button:disabled { opacity: .45; cursor: not-allowed; }
 .ezFabOptions b, .ezFabOptions span, .ezFabOptions small { display: block; }
 .ezFabOptions span { color: #9ed6d4; }
 .ezFabOptions small { color: #9bb3be; }
-#ezFabClose, #spClose { min-width: 44px; font-size: 22px; text-align: center !important; }
+#ezFabClose, #spClose, #shClose { min-width: 44px; font-size: 22px; text-align: center !important; }
+
+/* Shield Projector window */
+#shieldPanel .shToggle { width: 100%; margin-top: 8px; text-align: center; font-weight: 700; background: #7fd8f0; color: #06212b; border-color: #7fd8f0; }
+#shieldPanel .shToggle.on { background: #203743; color: #e6f6ff; border-color: #46616d; }
+#shieldPanel #shBar { background: #7fd8f0; }
 
 /* Spawner window */
 #spawnerPanel { width: min(300px, calc(100vw - 16px)); }
