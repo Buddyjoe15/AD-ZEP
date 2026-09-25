@@ -35,6 +35,22 @@
 
   G.MainMenu = {
     selectedSlot: 1, expeditionSeed: 72491,
+    backgroundVideo(){ return $('mainMenuBackgroundVideo'); },
+    playBackground(){
+      const v = this.backgroundVideo();
+      if (!v) return;
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+        v.pause();
+        try { v.currentTime = 0; } catch (_) {}
+        return;
+      }
+      const play = v.play();
+      if (play && typeof play.catch === 'function') play.catch(() => {});
+    },
+    pauseBackground(){
+      const v = this.backgroundVideo();
+      if (v) v.pause();
+    },
     init(){
       $('mainMenuBackBtn').addEventListener('click', () => this.showHome());
       $('introSkipBtn').addEventListener('click', () => this.finishIntro(true));
@@ -52,6 +68,7 @@
     },
     showHome(){
       $('mainMenuOverlay').classList.remove('hidden');
+      this.playBackground();
       this.back(false);
       const n = G.Save.newestSlot();
       this.panel(`<div class="main-buttons">
@@ -125,7 +142,7 @@
 
   G.SceneManager.register('mainMenu', {
     enter(){ G.Game.setPaused(true, true); G.MainMenu.showHome(); },
-    exit(){ $('mainMenuOverlay').classList.add('hidden'); },
+    exit(){ G.MainMenu.pauseBackground(); $('mainMenuOverlay').classList.add('hidden'); },
     render(){}
   });
 

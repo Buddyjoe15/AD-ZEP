@@ -9,7 +9,7 @@ const out = path.resolve(ROOT, process.argv[2] || 'dist/ad-ezp.html');
 const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 let html = read('index.html');
-let scripts = 0, styles = 0;
+let scripts = 0, styles = 0, media = 0;
 html = html.replace(/<!-- Development entry point:[\s\S]*?-->\n?/, '');
 html = html.replace(/<link rel="stylesheet" href="([^"]+)">/g, (_, href) => {
   styles++;
@@ -20,8 +20,13 @@ html = html.replace(/<script src="([^"]+)"><\/script>/g, (_, src) => {
   // Keep a closing script tag inside a source string from terminating the block.
   return `<script>/* ${src} */\n${read(src).replace(/<\/script/gi, '<\\/script')}\n</script>`;
 });
-if (/<(script|link)[^>]+(src|href)="(?!data:)/.test(html)) throw new Error('Unresolved external reference left in bundle');
+html = html.replace(/<source src="([^"]+)" type="video\/mp4">/g, (_, src) => {
+  media++;
+  const data = fs.readFileSync(path.join(ROOT, src)).toString('base64');
+  return `<source src="data:video/mp4;base64,${data}" type="video/mp4">`;
+});
+if (/<(script|link|source)[^>]+(src|href)="(?!data:)/.test(html)) throw new Error('Unresolved external reference left in bundle');
 
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, html);
-console.log(`Built ${path.relative(ROOT, out)} — ${scripts} scripts, ${styles} stylesheets, ${(html.length / 1024).toFixed(0)} KB`);
+console.log(`Built ${path.relative(ROOT, out)} — ${scripts} scripts, ${styles} stylesheets, ${media} media asset, ${(html.length / 1024).toFixed(0)} KB`);

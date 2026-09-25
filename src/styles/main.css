@@ -804,3 +804,26 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
 .panel-drag-head h3{margin:0;flex:1}
 .rpg .panel-drag-head .panel-close{flex:0 0 auto;min-width:30px;min-height:30px;padding:0;font-size:18px;line-height:1;border-radius:6px;cursor:pointer}
 #inventoryPanel.dragging{opacity:.92;box-shadow:0 8px 28px #000b}
+
+
+/* GPT Bot Branch: animated main-menu background.
+   The original CSS space scene remains underneath as an offline/failure fallback. */
+#mainMenuOverlay .space-art{z-index:0}
+#mainMenuOverlay .space-art > :not(.menu-background-video){z-index:0}
+#mainMenuOverlay .menu-background-video{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 50%;
+  z-index:1;pointer-events:none;background:#010307
+}
+#mainMenuOverlay .space-art::after{
+  content:"";position:absolute;inset:0;z-index:2;pointer-events:none;
+  background:
+    linear-gradient(90deg,rgba(0,0,0,.04) 0%,rgba(0,0,0,.08) 45%,rgba(2,5,10,.52) 66%,rgba(2,5,10,.78) 100%),
+    linear-gradient(180deg,rgba(0,0,0,.22) 0%,transparent 32%,rgba(0,0,0,.18) 100%)
+}
+#mainMenuOverlay .main-menu-title,#mainMenuOverlay #mainMenuPanel,#mainMenuOverlay #mainMenuBackBtn{z-index:3}
+@media (orientation:portrait){
+  #mainMenuOverlay .menu-background-video{object-position:42% 50%}
+}
+@media (prefers-reduced-motion:reduce){
+  #mainMenuOverlay .star-layer,#mainMenuOverlay .twinkle-star{animation:none!important}
+}
