@@ -3,17 +3,21 @@
    Canvas 2D fallback stamps it with drawImage. Stamping pre-drawn sprites costs one or two
    calls per unit instead of ~10 path commands.
    Two kinds of entry share the atlas:
-   - Canvas art from visuals.js, one 256 px cell per frame at 2 atlas px per world px,
+   - Canvas art from visuals.js, one 512 px cell per frame at 4 atlas px per world px,
      rotated to the unit's heading when drawn.
-   - Pixel art (pixelart.js), 64 px slots at 2 atlas px per art px, one frame per facing
+   - Pixel art (pixelart.js), 128 px slots at 2 atlas px per art px, one frame per facing
      and animation step; never rotated, the facing is picked from the heading instead. */
 (function(){
   'use strict';
   const G = GW;
-  // Atlas cell: a 128×128 world-px box around the unit, stored at 2 px per world px.
-  const BOX = 128, RES = 2, CELL = BOX * RES, ATLAS_W = 2048, PER_ROW = ATLAS_W / CELL;
+  // Atlas cell: a 128×128 world-px box around the unit, stored at 4 px per world px so
+  // Canvas art stays sharp at maximum zoom on high-DPI screens.
+  const BOX = 128, RES = 4, CELL = BOX * RES, ATLAS_W = 4096, PER_ROW = ATLAS_W / CELL;
   const ORIGIN_X = 64, ORIGIN_Y = 76;   // unit position inside the box (tall art reaches up)
-  const SLOT = 64, SLOTS_PER_CELL = (CELL / SLOT) ** 2, PIXEL_RES = 2;   // pixel art: atlas px per art px
+  // Pixel art: 2 atlas px per art px (1 art px = 1 world px), so the half-size atlas level
+  // the Canvas 2D fallback uses around zoom 1 still keeps every art pixel. A slot holds
+  // frames up to 64 art px (the 49×49 Spider and Vance).
+  const SLOT = 128, SLOTS_PER_CELL = (CELL / SLOT) ** 2, PIXEL_RES = 2;   // pixel art: atlas px per art px
 
   G.SpriteAtlas = {
     RES, CELL,
@@ -37,8 +41,9 @@
     allocCell(){
       const idx = this.next++, row = Math.floor(idx / PER_ROW);
       if ((row + 1) * CELL > this.canvas.height){
+        // One row at a time: rows are large at this resolution, so doubling would waste memory.
         const old = this.canvas, grown = document.createElement('canvas');
-        grown.width = ATLAS_W; grown.height = Math.min(8192, old.height * 2);
+        grown.width = ATLAS_W; grown.height = Math.min(8192, (row + 1) * CELL);
         const gg = grown.getContext('2d', { willReadFrequently: true });
         gg.drawImage(old, 0, 0);
         this.canvas = grown; this.g = gg;

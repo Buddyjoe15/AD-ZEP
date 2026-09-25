@@ -62,15 +62,20 @@
       const TC = G.TerrainCache, ct = C.CHUNK_TILES * T;
       const cx0 = Math.max(0, Math.floor(v.x0 / ct)), cy0 = Math.max(0, Math.floor(v.y0 / ct));
       const cx1 = Math.min(Math.ceil(C.WORLD_W / ct) - 1, Math.floor(v.x1 / ct)), cy1 = Math.min(Math.ceil(C.WORLD_H / ct) - 1, Math.floor(v.y1 / ct));
-      const far = z < C.LOD_ZOOM || (cx1 - cx0 + 1) * (cy1 - cy0 + 1) > C.CHUNK_CACHE_MAX;
+      const count = (cx1 - cx0 + 1) * (cy1 - cy0 + 1), far = z < C.LOD_ZOOM || count > C.CHUNK_CACHE_MAX;
+      // High-res chunks once a world px covers more than one device px, if they fit the cache.
+      const R = C.TERRAIN_RES, res = this.dpr * z > 1 && count * R * R <= C.CHUNK_CACHE_MAX ? R : 1, alt = res === 1 ? R : 1;
       g.imageSmoothingEnabled = false; g.drawImage(TC.getOverview(), 0, 0, C.WORLD_W, C.WORLD_H); g.imageSmoothingEnabled = true;
       let chunks = 0;
       if (!far){
         g.imageSmoothingEnabled = !(G.PixelArt.enabled && z * this.dpr >= 1);   // pixel terrain stays crisp up close
         let built = 0;
         for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++){
-          if (!TC.has(cx, cy)){ if (built >= C.CHUNKS_BUILT_PER_FRAME) continue; built++; }
-          g.drawImage(TC.chunk(cx, cy), cx * ct, cy * ct); chunks++;
+          let cv = null;
+          if (TC.has(cx, cy, res) || built < C.CHUNKS_BUILT_PER_FRAME){ if (!TC.has(cx, cy, res)) built++; cv = TC.chunk(cx, cy, res); }
+          else cv = TC.peek(cx, cy, alt);   // the other resolution until this one is painted
+          if (!cv) continue;
+          g.drawImage(cv, cx * ct, cy * ct, ct, ct); chunks++;
         }
         g.imageSmoothingEnabled = true;
       }
@@ -171,7 +176,7 @@
         const x = Math.min(box.x0, box.x1), y = Math.min(box.y0, box.y1), w = Math.abs(box.x1 - box.x0), h = Math.abs(box.y1 - box.y0);
         o.fillStyle = 'rgba(80,170,255,.12)'; o.fillRect(x, y, w, h); o.strokeStyle = '#7dc0ff'; o.lineWidth = 1; o.strokeRect(x + 0.5, y + 0.5, w, h);
       }
-      Object.assign(S.metrics, { lod: far ? 'overview' : 'detail', cached: TC.chunks.size, visible: visible.length, chunks, drawMs: now() - t0 });
+      Object.assign(S.metrics, { lod: far ? 'overview' : 'detail', cached: TC.used, visible: visible.length, chunks, drawMs: now() - t0 });
       if (now() - this.minimapAt > 1000 / C.MINIMAP_HZ){ this.minimapAt = now(); this.drawMinimap(); }
       else this.drawMinimapCamera();
     },
@@ -199,7 +204,9 @@
         if (e.shadow) shadows = true;
       }
       if (items.length){
-        const lv = k >= 1 ? 0 : k >= 0.5 ? 1 : 2, s = 1 / (1 << lv);   // atlas level nearest to 1:1 for this zoom
+        // Atlas level n holds RES / 2^n px per world px (Canvas art); use the most detailed
+        // level that is at most 2× the device resolution.
+        const lv = Math.min(Math.log2(A.RES) + 1, Math.max(0, Math.ceil(Math.log2(A.RES / (2 * k))))), s = 1 / (1 << lv);
         const stamp = (ctx, img, u, e, f, dx, dy) => {
           const ang = e.upright ? 0 : u.heading, co = Math.cos(ang) * k, si = Math.sin(ang) * k, at = e.at[f];
           ctx.setTransform(co, si, -si, co, (u.x + dx - c.x) * k, (u.y + dy - c.y) * k);

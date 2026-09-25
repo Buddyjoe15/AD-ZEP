@@ -1,7 +1,7 @@
 {
   "name": "dust_plain_v1",
-  "frameWidth": 24,
-  "frameHeight": 24,
+  "frameWidth": 48,
+  "frameHeight": 48,
   "variants": 4,
   "hash": "linear",
   "formula": "(3*x + 5*y) & 3",
@@ -12,6 +12,6 @@
     1
   ],
   "image": "dust_plain_v1.png",
-  "sheetWidth": 96,
-  "sheetHeight": 24
+  "sheetWidth": 192,
+  "sheetHeight": 48
 }
