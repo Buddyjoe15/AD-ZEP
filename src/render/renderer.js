@@ -184,8 +184,11 @@
     // stamped from the sprite atlas with one transform + drawImage each; zoomed out,
     // ordinary units become team-coloured markers batched into one path per team.
     // Pixel-art units first get their shadows, merged in one mask so they don't stack.
+    // Zoom below which ordinary units are drawn as team squares. Pixel-art units stay
+    // readable further out than the Canvas art.
+    unitLodZoom(){ return G.PixelArt.enabled ? G.CONFIG.UNIT_LOD_ZOOM_PIXEL : G.CONFIG.UNIT_LOD_ZOOM; },
     drawUnits2D(g, visible, z, t){
-      const S = G.State, C = G.CONFIG, lod = z < C.UNIT_LOD_ZOOM, batches = new Map();
+      const S = G.State, C = G.CONFIG, lod = z < this.unitLodZoom(), batches = new Map();
       const A = G.SpriteAtlas, c = S.camera, k = this.dpr * z, items = [];
       let shadows = false;
       for (const u of visible){
@@ -249,7 +252,7 @@
       }
       for (const u of visible) if (u.isShip) G.Visuals.bar(g, u.x, u.gy * T - 15, u.w * T * 0.72, u.hp / u.maxHp, '#6fd27a');
       // Spider cargo gauges (the atlas art shows an empty hold).
-      if (!lod2d) for (const u of visible) if (u.cargo && u.cargoCapacity && z >= C.UNIT_LOD_ZOOM){
+      if (!lod2d) for (const u of visible) if (u.cargo && u.cargoCapacity && z >= this.unitLodZoom()){
         const f = Math.min(1, G.Units.cargoTotal(u) / u.cargoCapacity);
         if (f > 0){ g.fillStyle = '#213039'; g.fillRect(u.x - 12, u.y + 22, 24, 3); g.fillStyle = '#e5bf65'; g.fillRect(u.x - 12, u.y + 22, 24 * f, 3); }
       }
