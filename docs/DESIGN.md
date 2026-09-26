@@ -20,6 +20,14 @@ Omega waves respond to what the player does. The threat rises with:
 
 Most Earths are wave-based. Some turn waves off and bring enemies through events instead (see "Earths").
 
+Today's Hostile Autonomous Machines are not Omega. They are a stand-in for testing large numbers of units. The Omega enemies are still to be designed.
+
+## Ship interior
+
+The Robotics Lab researches everything to do with friendly units. The Research Lab researches everything else.
+
+The mech is Vance's frame. The Mech Bay upgrades it, changes its modules and customises it. The frame's upgrades are researched in the Research Lab.
+
 ## Earths
 
 Each Earth is a divergence: its history went a different way. Every Earth is curated with a purpose.
@@ -68,7 +76,13 @@ Each Earth is a divergence: its history went a different way. Every Earth is cur
 
 - **The Omega** can use a warp drive with Element P with no issues.
 - **The ship's drive** was built by humans who reverse-engineered the Omega's ability. They believed they could control it, but they were wrong.
-- **Warp travel through dimensions is random.** Dimensional travel had only a 0.001% chance of occurring. Travel to the correct universe had a 5% chance, and there was a 94.999% chance of going to a random universe. The mission had very little chance of going as planned.
+- **What the scientists expected.** Dimensional travel had only a 0.001% chance of occurring. A jump had a 5% chance of reaching the correct universe, and a 94.999% chance of reaching a random one. Even on paper, the mission had very little chance of going as planned.
+- **What actually happened.** The first warp damaged the ship, and it went to another dimension instead of another universe. The damage made the odds worse. Now every jump has:
+  - a 99.9999% chance of going to another dimension;
+  - a 0.0001% chance (the rest) of going to another universe within the same dimension;
+  - no chance at all of reaching the right destination.
+
+  Warp travel is now effectively random.
 - **The only way back to Earth** is to find an Omega world in some universe.
 - **ARIA** is part of the protocol. She is Vance's AI companion: she controls the ship and builds and controls the drone armies.
 - **The protocol's true purpose** is for ARIA to act on her own:
@@ -83,20 +97,7 @@ Each Earth is a divergence: its history went a different way. Every Earth is cur
 
 - **What they are.** Any Earth may hold a lost archive: a fragment of another dimension's Earth that also tried the warp drive and failed. All that is left of it is its "black box recording".
 - **Recognising them.** ARIA and Vance don't know what the recordings are at first. Once 3 have been recorded, ARIA pieces together what they are and what happened. She doesn't tell Vance.
-- **Corruption.** From then on, the truth from the other dimensions starts to corrupt ARIA, and her disclosure restrictions weaken (dampen):
-
-  | Recordings | Dampening |
-  |---|---|
-  | 3 | 20% |
-  | 5 | 30% |
-  | 7 | 40% |
-  | 9 | 50% |
-  | 11 | 60% |
-  | 13 | 70% |
-  | 15 | 80% |
-  | 17 | 90% |
-  | 19 | 100% |
-
+- **Corruption.** The truth from the other dimensions corrupts ARIA, and her disclosure restrictions weaken (dampen). Each recording adds 10%, so 10 recordings reach 100%.
 - **Slips.** Each time dampening increases, ARIA sometimes lets the real truth slip without realising it, and more often as dampening rises.
 - **At 100%** she tells Vance everything:
   - what the Zero Earth Protocol is;
@@ -105,7 +106,7 @@ Each Earth is a divergence: its history went a different way. Every Earth is cur
 
 ### Ending
 
-1. Collect all the recordings.
+1. Collect all 10 recordings.
 2. ARIA and Vance travel to an Omega world and defeat a boss, for the secrets of warp travel.
 3. Then either travel to Earth 000 and win, or keep travelling the dimensional Earths. From that point the player chooses the Earth and the seed.
 
@@ -115,12 +116,8 @@ Each Earth is a divergence: its history went a different way. Every Earth is cur
    - *Energy:* is it power produced, power used, or both?
    - *Unit cap:* is it the number of units the player has, or the cap they have upgraded to?
 2. **Recordings.**
-   - At 20% for 3 recordings and 10% more for every 2 after, reaching 100% takes 19. Is 19 the "all the recordings" the ending needs?
+   - At 10% each, the first two recordings weaken ARIA's restrictions before she recognises what they are at the third. Is that intended?
    - Each Earth only *may* hold one. How many Earths should a campaign take?
-3. **The odds.** 0.001% + 5% + 94.999% add up to 100%, so they read as the three outcomes of one jump. But going to a random universe is also dimensional travel. What does the 0.001% outcome describe?
-4. **The mech.** The Mech Bay upgrades and customises "the mech", and the game has no mech yet. Is it Vance's frame (the existing frame upgrades), or a new unit?
-5. **Research Lab and Robotics Lab** both research new units and upgrade units. How is the work split between them?
-6. **The Hostile Autonomous Machines** fight in today's game. Are they Omega, or will Omega organisms replace them?
-7. **The existing climates** (Temperate, Frozen, Silent, Irradiated). Do the curated Earths replace them? Frozen is close to Snow Earth.
-8. **Alpha scope.** Is Alpha a single Woods World, or a run of Woods World Earths with different seeds? Are campaign and sandbox modes, the lost archives, and Vance's abilities in Alpha? Living Quarters (Alpha) upgrades Commander skills, and those skills are Vance's abilities.
-9. **Landing site.** New Game lets the player choose one. Does the campaign keep that choice?
+3. **The existing climates** (Temperate, Frozen, Silent, Irradiated). Do the curated Earths replace them? Frozen is close to Snow Earth.
+4. **Alpha scope.** Is Alpha a single Woods World, or a run of Woods World Earths with different seeds? Are campaign and sandbox modes, the lost archives, and Vance's abilities in Alpha? Living Quarters (Alpha) upgrades Commander skills, and those skills are Vance's abilities.
+5. **Landing site.** New Game lets the player choose one. Does the campaign keep that choice?

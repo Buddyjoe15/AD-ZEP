@@ -17,6 +17,7 @@ Alpha is the starter / demo build, set on Woods World.
 ### Threat
 Woods World is wave-based, so Alpha needs this.
 - [ ] Omega waves that grow with energy, the unit cap and, possibly, the Element P stored aboard the ship.
+- [ ] Omega enemy units. Today's Hostile Autonomous Machines are only a stand-in for testing unit numbers.
 
 ### Terrain features
 - [ ] **Crystal formations** are where Element P comes from. A Survey Drone studies them.
@@ -41,10 +42,10 @@ Woods World is wave-based, so Alpha needs this.
 
 ### Ship interior
 Six sections:
-- [ ] **Mech Bay:** upgrade the mech, change its modules, customise it.
-- [ ] **Research Lab:** research anomalies, new units, unit upgrades, mech upgrades, defence upgrades, new buildings and building upgrades.
+- [ ] **Mech Bay:** upgrade Vance's frame (the mech), change its modules, customise it.
+- [ ] **Research Lab:** all research except friendly units: anomalies, frame upgrades, defence upgrades, new buildings and building upgrades.
 - [ ] **Living Quarters:** upgrade the Commander's skills, health and speed.
-- [ ] **Robotics Lab:** upgrade units, research new units, upgrade the unit cap.
+- [ ] **Robotics Lab:** all research for friendly units: new units, unit upgrades and the unit cap.
 - [ ] **Command Deck:** upgrade the ship. See the history of past Earths visited, and statistics.
 - [ ] **Storage Room:** its size can be upgraded.
 
@@ -57,7 +58,6 @@ Six sections:
   - defeat the boss on an Omega world;
   - then Earth 000 and a win, or keep travelling and choose the Earth and seed.
 - [ ] **Vance's abilities.**
-- [ ] **Frame upgrades.**
 - [ ] **Suit hazard upgrades.**
 
 ## Wish list (after Alpha)
