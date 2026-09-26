@@ -31,11 +31,16 @@ Alpha is the starter / demo build: a sandbox mode on one Woods World, where the 
 
 ### Resource loops
 - [ ] **Ship power** (DESIGN.md, "Ship power"): the Warp Drive's siphon to the power grid starts broken, so the ship's backup fusion generator runs on Fuel Rods. Element P is the main fuel.
+- [ ] **Siphon repair:** 1,000 steel and 1,000 electronics. Afterwards, Element P can be spent on energy (using it up), on boosting the warp, or on research.
 - [ ] **Fuel Rods** are also transit fuel.
 - [ ] **Fusion Generator:** a building that burns Fuel Rods for power.
 - [ ] **Element P** shortens stabilisation. The Expedition log's boost action already does this, but Element P can't be found yet.
 - [ ] **Fabricator levels:** upgrading with steel and electronics unlocks new units.
-- [ ] **Transit cap as a choice:** the ship's cargo hold is upgraded between Earths (see Storage Room).
+- [ ] **Transit cap:** set by the Storage Room's level (see Storage Room).
+
+### Story
+- [ ] **Lost archives and ARIA's weakening disclosure restrictions** (DESIGN.md, "Lost archives"). In Alpha, all 10 recordings are on the one Woods World.
+- [ ] **Planet names:** show "Planet 001" where the game now says "EARTH-0001". It becomes "Earth 001" when Vance learns the truth; in Alpha, when all 10 recordings are found.
 
 ### Vance
 - [ ] **Vance's abilities.**
@@ -52,11 +57,10 @@ Six sections:
 - [ ] **Living Quarters:** upgrade the Commander's skills, health and speed.
 - [ ] **Robotics Lab:** all research for friendly units: new units, unit upgrades and the unit cap.
 - [ ] **Command Deck:** upgrade the ship. See the history of past Earths visited, and statistics. For now the history holds only the current Earth, Planet 001.
-- [ ] **Storage Room:** its size can be upgraded.
+- [ ] **Storage Room:** its size can be upgraded, and its level sets the transit cap. Level 1 uses today's caps (DESIGN.md, "Ship interior").
 
 ## To-do, target not yet set
 
-- [ ] **Lost archives and ARIA's weakening disclosure restrictions** (DESIGN.md, "Lost archives").
 - [ ] **Suit hazard upgrades.**
 
 ## After Alpha

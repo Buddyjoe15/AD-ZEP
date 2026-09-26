@@ -29,7 +29,12 @@ Today's Hostile Autonomous Machines are not Omega. They are a stand-in for testi
 
 - **Element P** is the ship's main fuel, and lasts much longer than Fuel Rods.
 - **The siphon is broken.** The part of the Warp Drive that siphons energy off to the power grid is broken at the start of the game.
+- **Repairing the siphon** costs 1,000 steel and 1,000 electronics. This is separate from the 100-metal drive repair needed before transit.
 - **Until then, Fuel Rods run the ship.** The ship's backup fusion generator burns them. They are also transit fuel.
+- **The backup generator still matters after the repair.** Element P is very rare, and the player chooses what to spend it on:
+  - energy, through the repaired siphon (this uses the Element P up);
+  - boosting the warp (shortening stabilisation);
+  - research items, to be added later.
 - **Fusion Generator:** a building that also burns Fuel Rods for power.
 - **This changes current behaviour:** today the Warp Drive supplies a steady 25 power from the start.
 
@@ -47,7 +52,25 @@ The mech is Vance's frame. The Mech Bay upgrades it, changes its modules and cus
 
 Ship modules and blueprints are in Alpha, so the ship and its upgrades can be tested.
 
-For now, the Command Deck's history of past Earths holds only the current Earth: "Planet 001". In the story, Vance doesn't know it is an Earth.
+For now, the Command Deck's history of past Earths holds only the current one, Planet 001.
+
+The Storage Room sets the transit cap: how much of each resource crosses to the next Earth. The rest is left behind. Its level 1 caps are today's values:
+
+| Resource | Level 1 cap |
+|---|---|
+| Metal | 300 |
+| Copper | 300 |
+| Uranium | 150 |
+| Steel | 150 |
+| Electronics | 50 |
+| Fuel Rods | 60 |
+| Missiles | 40 |
+
+## Planet names
+
+Vance doesn't know that the worlds he lands on are Earths, so the game calls them planets: "Planet 001", "Planet 002" and so on. They become "Earth 001" and so on only when Vance learns the truth from ARIA:
+- in the campaign, later in the story;
+- in Alpha, when all 10 recordings have been found.
 
 ## Earths
 
@@ -132,8 +155,3 @@ Each Earth is a divergence: its history went a different way. Every Earth is cur
 1. Collect all 10 recordings.
 2. ARIA and Vance travel to an Omega world and defeat a boss, for the secrets of warp travel.
 3. Then either travel to Earth 000 and win, or keep travelling the dimensional Earths. From that point the player chooses the Earth and the seed.
-
-## Open questions
-
-1. **Transit cap.** Today each resource has a limit on how much crosses to the next Earth (`transitCap`: 300 metal, 300 copper, 150 uranium, 150 steel, 50 electronics, 60 Fuel Rods, 40 Missiles); the rest is left behind. Should this stay, and should the Storage Room's size set it?
-2. **The Warp Drive's siphon.** How is it repaired, and does the backup fusion generator still matter once it is?
