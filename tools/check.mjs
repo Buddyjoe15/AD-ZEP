@@ -37,14 +37,19 @@ for (const f of scripts.filter(s => /^src\/(core|data|world|sim)\//.test(s))){
     if (re.test(code)) problems.push(`${name} in simulation file ${f}: use GW.RNG / GW.hashRandom for randomness and GW.Clock for timings`);
   }
 }
-// CLAUDE.md and AGENTS.md carry the same save format rules for AI contributors.
-const rules = f => {
+// CLAUDE.md and AGENTS.md carry the same save format and parallel branch rules for AI contributors.
+// A section runs from its "## " heading to the next one.
+const section = (f, title) => {
   const t = fs.existsSync(path.join(ROOT, f)) ? fs.readFileSync(path.join(ROOT, f), 'utf8') : '';
-  const i = t.indexOf('## Save format rules');
-  return i < 0 ? null : t.slice(i).trim();
+  const i = t.indexOf('\n## ' + title + '\n');
+  if (i < 0) return null;
+  const j = t.indexOf('\n## ', i + 1);
+  return t.slice(i, j < 0 ? undefined : j).trim();
 };
-if (!rules('CLAUDE.md')) problems.push('CLAUDE.md is missing its "## Save format rules" section');
-else if (rules('CLAUDE.md') !== rules('AGENTS.md')) problems.push('The "Save format rules" sections of CLAUDE.md and AGENTS.md differ; keep them identical');
+for (const title of ['Save format rules', 'Parallel branches']){
+  if (!section('CLAUDE.md', title)) problems.push(`CLAUDE.md is missing its "## ${title}" section`);
+  else if (section('CLAUDE.md', title) !== section('AGENTS.md', title)) problems.push(`The "${title}" sections of CLAUDE.md and AGENTS.md differ; keep them identical`);
+}
 try { loadSim(); } catch (e){ problems.push('simulation failed to load: ' + e.message); }
 
 if (problems.length){ console.error(problems.join('\n')); process.exit(1); }
