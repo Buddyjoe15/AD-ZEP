@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Instructions for AI agents working on this repository. `CLAUDE.md` has the same project constraints and save format rules; `tools/check.mjs` fails if the two files' "Save format rules" sections differ.
+Instructions for AI agents working on this repository. `CLAUDE.md` has the same project constraints, save format rules and parallel branch rules; `tools/check.mjs` fails if the two files' "Save format rules" or "Parallel branches" sections differ.
 
 ## Project constraints
 
@@ -64,3 +64,37 @@ Never change the order of RNG calls in the forest generator (`src/world/mapgen.j
 ### Adding new content
 
 New units, items, structures, resources and behaviours are data definitions in `src/data/` (see "Adding content" in `docs/ARCHITECTURE.md`). A new definition that only uses existing saved fields needs no schema change: definitions are looked up by key, so balance and text changes apply to existing saves. If it needs new persistent state, follow "How to change the save format" above.
+
+## Parallel branches
+
+Several sessions may work at once, each on its own branch. These rules keep their commits from overlapping.
+
+### Scope
+
+- One branch per feature: a unit, a building, a terrain change, or a small group of related ones. Merge it within a few days.
+- Merge `main` into your branch before you start, and at least daily after that. Never rebase a branch that has been pushed.
+- Open a draft PR as soon as the branch has its first commit. Its description says what the branch adds and which shared resources (below) it claims.
+- Stay in your area. Don't reorder, reformat or tidy code outside your feature.
+
+### Shared resources: one open branch at a time
+
+Before claiming one, check the open PRs. If another PR already claims it, wait for that PR to merge.
+- **Save schema.** Only one open branch may bump `GW.SAVE_SCHEMA`. If two branches end up with the same number anyway, the one that merges first keeps it. The other merges `main`, keeping `main`'s fixture and fingerprint for that number, then renumbers its own migration, fixture and fingerprint to the next number. `--force` is allowed on that unmerged schema only, because no player has saves in it.
+- **Terrain IDs.** New terrain types take the next free `id` in `src/data/terrain.js`, and only one open branch adds terrain. Saves store these IDs, so an ID already on `main` never changes.
+- **Map types.** Never change what an existing map type generates. Landscaping goes in a new map type.
+- **Palette.** Only one open branch changes the pixel-art palette or its alphabet in `tools/pixelart.mjs`, and only after asking, as `art/PIXEL_ART_RULES.md` already requires.
+
+### Generated files
+
+- Never merge `src/render/pixel-data.js` or `art/pixel-test/sheets/*` by hand. Merge `tools/sprites.mjs`, then run `npm run sprites` and commit what it produces.
+- Never merge save fingerprints or fixtures by hand either. Regenerate them as described under "Save schema".
+
+### Shared lists
+
+- Put a new unit, building or recipe next to others of its kind, not always at the end of the list. That way two branches rarely edit the same lines.
+- When lists conflict (definitions, or the README's "What changed"), keep both sides' entries.
+
+### Commits
+
+- One commit per unit, building or terrain change, and each commit passes `npm test`.
+- Keep PRs small: one feature, or a few related ones.
