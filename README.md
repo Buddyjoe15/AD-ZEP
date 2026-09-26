@@ -50,6 +50,8 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
 
 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** explains the structure and how to add units, items, structures, behaviours, resources and systems. Most new content is a data definition only.
 
+**[docs/DESIGN.md](docs/DESIGN.md)** holds the game design: modes, threat, the curated Earths and the story (with spoilers). **[docs/ROADMAP.md](docs/ROADMAP.md)** is the to-do list, including what Alpha needs.
+
 ## What changed in v0.7
 
 - **Woodlands map** (new map type, `woodlands`). A generated 512 × 512 woodland over five height levels. Cliffs mark every step between levels and block movement; grassy slopes and carved steps cross them. Rivers only run downhill, so there is a waterfall wherever one drops a level. It also has a lake and creek, a sunken swamp, villages of standing and ruined buildings, logging camps with a log hut and sawhorse, 2–4 caves (rarely 7–8), boulders, thickets, mushrooms, alien plants and crystals, a geothermal field, and scattered ground detail such as pebbles, leaves and tracks. The ship lands on a flat clearing 48 tiles across. Height, cliff faces (one tile tall) and ground detail are drawn only; the game map stays flat.
