@@ -124,8 +124,19 @@
       gl.bindTexture(gl.TEXTURE_2D, this.tex);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, A.canvas);
-      gl.generateMipmap(gl.TEXTURE_2D);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      if (G.PixelArt.enabled){
+        // Pixel art: mipmaps point-sampled from the atlas (not averaged), and the nearest
+        // texel of the nearest level, so zoomed-out units stay sharp instead of smudging.
+        for (let n = 1; ; n++){
+          const lv = A.level(n);
+          gl.texImage2D(gl.TEXTURE_2D, n, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, lv);
+          if (lv.width === 1 && lv.height === 1) break;
+        }
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
+      } else {
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      }
       // Pixel art stays crisp when magnified; Canvas art is smoothed.
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, G.PixelArt.enabled ? gl.NEAREST : gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);

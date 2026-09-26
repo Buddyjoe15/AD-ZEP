@@ -74,15 +74,18 @@
       return G.openPoint(b.x + ux * reach, b.y + uy * reach, 0, 12);
     },
     // True when no living unit from this spawner is still on the spawn point. Held units
-    // standing there with no route (pushed back, or their route was dropped) are sent to
-    // the rally point again, so the spawner can never block itself.
+    // standing there with no route (pushed back, or their route was dropped), or whose next
+    // waypoint is no longer in a clear line (the crowd pushed them against a wall), are sent
+    // to the rally point again, so the spawner can never block itself.
     spawnClear(b, p){
-      const r = this.CLEAR_TILES * G.CONFIG.TILE, r2 = r * r, s = this.state(b), stuck = [];
+      const r = this.CLEAR_TILES * G.CONFIG.TILE, r2 = r * r, s = this.state(b), stuck = [], grid = G.State.grid;
       let clear = true;
       G.State.spatial.each(p.x, p.y, r, u => {
         if (u.spawnerId !== b.id || u.hp <= 0 || G.dist2(u, p) >= r2) return;
         clear = false;
-        if (s.hold && !u.path.length && !u.pathPending) stuck.push(u);
+        if (!s.hold || u.pathPending) return;
+        const next = u.path[u.pathIndex];
+        if (!next || !grid.lineClear(u.x, u.y, next.x, next.y)) stuck.push(u);
       });
       stuck.forEach((u, i) => this.sendToRally(b, u, s.spawned + i));
       return clear;

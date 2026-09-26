@@ -201,6 +201,21 @@ function buildSheets(){
     for (const team of [null, 'blue', 'red']) row.append(fig(sheetCanvas(st.frames, st.frameWidth, st.frameHeight, team, 2, '#3a3129'), team ? team + ' team' : 'raw sheet (magenta)'));
     root.append(d);
   }
+  if (want('woodlands') && D.woodlands){
+    const W = D.woodlands, A = D.tileArt, off = W.tree.shadow.offset;
+    const [d, row] = section(`woodlands pilot — ${A}×${A} tiles and tree props`, `Grass, tall grass, water and deep water: 8 weighted, edge-matched variants each. Shoreline: 16 pieces by which sides touch land (1 N, 2 E, 4 S, 8 W). Cliffs: one tile tall, a piece per dropping side. Trees: oak, pine and birch canopy props with 9 frames each, 3 leans × 3 leaf-rustle steps (set by the weather), outline by the pipeline, engine shadow at ${off.join(',')}.`);
+    for (const key of ['grass', 'tall_grass', 'water', 'deep_water', 'shore', 'cliff']){
+      const strip = document.createElement('div'); strip.className = 'row';
+      W[key].tiles.forEach((s, i) => strip.append(fig(scaled(s, A, A, null, 2), key === 'cliff' ? W.cliff.pieces[i] : key === 'shore' ? 'mask ' + i : W[key].weights ? `${i} w${W[key].weights[i]}` : String(i))));
+      row.append(fig(strip, key.replace('_', ' ')));
+    }
+    for (const kind of W.tree.types){
+      const strip = document.createElement('div'); strip.className = 'row';
+      W.tree.variants[kind].forEach((frames, v) => frames.forEach((s, f) => strip.append(fig(scaled(s, A, A, null, 2), `v${v + 1} lean ${Math.floor(f / 3)} leaves ${f % 3}`))));
+      row.append(fig(strip, kind + ' tree: 3 leans (0, 2, 4 art px downwind) × 3 leaf-rustle steps'));
+    }
+    root.append(d);
+  }
   if (want('terrain')){
     const A = D.tileArt;
     const [d, row] = section(`dust plain terrain — ${A}×${A} tiles`, 'v1 is the tested set: 4 variants picked by (3x + 5y) & 3, which forms diagonal bands at a distance. v2 is the fix: 8 weighted, edge-matched variants picked by a mixing hash.');

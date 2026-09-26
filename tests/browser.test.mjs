@@ -50,7 +50,7 @@ async function startGame(page, url){
 }
 
 for (const target of ['index.html', 'dist/ad-ezp.html']){
-  test(`desktop play-through (${target})`, { skip, timeout: 120000 }, async () => {
+  test(`desktop play-through (${target})`, { skip, timeout: 180000 }, async () => {
     if (target.startsWith('dist')) execSync('node tools/build.mjs', { cwd: ROOT });
     fs.mkdirSync(OUT, { recursive: true });
     const browser = await launch();
@@ -171,7 +171,16 @@ for (const target of ['index.html', 'dist/ad-ezp.html']){
       await page.click('#spawnerPanel [data-rate="250"]');
       await page.fill('#spAmount', '300'); await page.press('#spAmount', 'Enter'); await page.click('#spawnerPanel h2');
       await page.click('#spStart');
-      await page.waitForFunction(() => GW.State.units.filter(u => u.spawnerId).length >= 300, null, { timeout: 15000 });
+      // Units leave as the spawn point clears, so this takes about 10 s of game time. Bound it
+      // in game time: a slow runner draws fewer frames per second and the game runs slower.
+      const t0 = await page.evaluate(() => GW.State.time);
+      await page.waitForFunction(t0 => GW.State.units.filter(u => u.spawnerId).length >= 300 || GW.State.time - t0 > 40, t0, { timeout: 90000 });
+      const spawnSecs = await page.evaluate(t0 => GW.State.time - t0, t0);
+      // On failure, say which units are still on the spawn point and why they don't leave.
+      const blocking = spawnSecs <= 40 ? '' : await page.evaluate(() => { const S = GW.State, b = S.buildings.find(b => b.type === 'hostile_fabricator'), p = GW.Spawner.spawnPoint(b), r = GW.Spawner.CLEAR_TILES * GW.CONFIG.TILE;
+        return JSON.stringify({ spawned: b.spawner.spawned, p, on: S.units.filter(u => u.spawnerId === b.id && Math.hypot(u.x - p.x, u.y - p.y) < r).map(u => ({ id: u.id, x: +u.x.toFixed(2), y: +u.y.toFixed(2), path: u.path.slice(u.pathIndex).map(q => [Math.round(q.x), Math.round(q.y), S.grid.lineClear(u.x, u.y, q.x, q.y)]), pending: u.pathPending,
+          near: S.units.filter(o => o !== u && Math.hypot(o.x - u.x, o.y - u.y) < 30).map(o => [o.id, +o.x.toFixed(1), +o.y.toFixed(1), o.path.length]) })) }); });
+      assert.ok(spawnSecs <= 40, `300 units spawned within 40 s of game time (took ${spawnSecs.toFixed(1)} s) ${blocking}`);
       await page.waitForTimeout(400);
       assert.equal(await page.evaluate(() => GW.State.units.filter(u => u.spawnerId).length), 300);
       assert.match(await page.textContent('#spLive'), /Complete · 300 \/ 300/);

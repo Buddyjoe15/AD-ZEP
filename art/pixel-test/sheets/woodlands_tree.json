@@ -1,0 +1,37 @@
+{
+  "name": "woodlands_tree",
+  "frameWidth": 48,
+  "frameHeight": 48,
+  "origin": [
+    0,
+    0
+  ],
+  "rows": [
+    "oak",
+    "pine",
+    "birch"
+  ],
+  "columns": "variant 1 frames 0-8, variant 2 frames 0-8 (frame = lean * 3 + rustle)",
+  "animations": {
+    "lean": {
+      "frames": 3,
+      "fps": "set by the weather"
+    },
+    "rustle": {
+      "frames": 3,
+      "fps": "set by the weather"
+    },
+    "frame": "lean * 3 + rustle"
+  },
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      4,
+      4
+    ],
+    "elevation": "prop"
+  },
+  "image": "woodlands_tree.png",
+  "sheetWidth": 864,
+  "sheetHeight": 144
+}

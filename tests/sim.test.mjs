@@ -31,6 +31,14 @@ test('content registries are consistent', () => {
   assert.throws(() => G.Defs.buildables.define('broken', { name: 'x', w: 1, h: 1, cost: { metal: -5 } }));
 });
 
+test('engine config: zoom limits and level-of-detail thresholds are numbers in order', () => {
+  const C = loadSim().CONFIG;
+  for (const k of ['ZOOM_MIN', 'ZOOM_MAX', 'LOD_ZOOM', 'FAR_CHUNK_ZOOM', 'UNIT_LOD_ZOOM', 'UNIT_LOD_ZOOM_PIXEL', 'MINIMAP_HZ', 'CHUNK_CACHE_MAX', 'FAR_CHUNK_CACHE_MAX', 'FAR_CHUNK_SCALE'])
+    assert.ok(Number.isFinite(C[k]) && C[k] > 0, k + ' is a positive number, got ' + C[k]);
+  assert.ok(C.ZOOM_MIN < C.FAR_CHUNK_ZOOM && C.FAR_CHUNK_ZOOM < C.LOD_ZOOM && C.LOD_ZOOM < C.ZOOM_MAX);
+  assert.ok(C.ZOOM_MIN < C.UNIT_LOD_ZOOM_PIXEL && C.UNIT_LOD_ZOOM < C.ZOOM_MAX);
+});
+
 test('terrain generation is deterministic and unchanged from v0.5', () => {
   const G = loadSim();
   assert.equal(fnv(G.MapGen.forest(72491).tiles), 1434927080);
@@ -455,6 +463,50 @@ test('Hostile Fabricator spawns waves at one point, waits for it to clear, and g
   assert.equal(G.Defs.buildables.get('hostile_fabricator').debugOnly, true, 'not in the Spider build menu');
 });
 
+test('a held unit on the spawn point whose next waypoint is cut off by a wall is sent to the rally point again', () => {
+  // The spawner waits for its spawn point to clear; a unit there that can't follow its route
+  // must not block it for good.
+  const G = newGame();
+  const S = G.State, SP = G.Spawner, b = S.buildings.find(b => b.type === 'hostile_fabricator');
+  SP.state(b);
+  const p = SP.spawnPoint(b), u = G.Units.spawn('hostile_machine', p.x, p.y, { team: b.team });
+  const behind = { x: b.x, y: b.y - b.h * T };   // on the far side of the Fabricator
+  assert.ok(!S.grid.lineClear(p.x, p.y, behind.x, behind.y), 'the Fabricator is in the way');
+  u.spawnerId = b.id; u.aiHold = true; u.path = [behind]; u.pathIndex = 0;
+  G.rebuildSpatial();
+  assert.equal(SP.spawnClear(b, p), false, 'still occupied this tick');
+  assert.ok(u.pathPending || (u.path.length && u.path[0] !== behind), 're-routed');
+});
+
+test('crowded units slide along a wall instead of pinning each other against it', () => {
+  // Regression: a push was all-or-nothing, so a unit resting on a wall's edge, nudged a hair
+  // into the wall by every push, could never move, and a unit squeezing past it stayed stuck
+  // (a Hostile Fabricator's spawn point next to the Shield Projector never cleared).
+  const G = newGame();
+  const S = G.State, grid = S.grid, b = S.buildings.find(b => b.type === 'shield_projector');
+  const gx = Math.floor(b.x / T), gy = Math.floor((b.y - b.h * T / 2) / T);   // top row of its footprint
+  assert.ok(!grid.passable(gx, gy) && grid.passable(gx, gy - 1) && grid.passable(gx + 1, gy - 1), 'open ground along the top edge');
+  const put = (x, y) => { const u = G.Units.spawn('hostile_machine', x, y, { team: 'red' }); u.aiHold = true; u.path = []; return u; };
+  const x0 = (gx + 0.5) * T, y0 = gy * T - 0.05;
+  const a = put(x0, y0), c = put(x0 - 18, y0 - 1.45);   // overlapping, pushing a east and a hair south
+  G.SystemManager.registry.get('movement').update(1 / 30);
+  assert.ok(a.x > x0 + 2, `pushed along the wall (moved ${(a.x - x0).toFixed(2)} px)`);
+  assert.ok(grid.passableWorld(a.x, a.y) && grid.passableWorld(c.x, c.y), 'both stay on open ground');
+});
+
+test('a unit pushed onto a wall with its next waypoint straight through it drops the route to re-plan', () => {
+  // Regression: sliding along the open axis moved it ~0 px each tick, so it kept a route it
+  // could never follow (and a spawner waiting for it to leave never spawned again).
+  const G = newGame();
+  const S = G.State, b = S.buildings.find(b => b.type === 'shield_projector');
+  const gx = Math.floor(b.x / T), gy = Math.floor((b.y - b.h * T / 2) / T);
+  const x0 = (gx + 0.5) * T, u = G.Units.spawn('hostile_machine', x0, gy * T - 0.05, { team: 'red' });
+  u.aiHold = true; u.path = [{ x: x0 + 0.01, y: (gy + 4) * T }]; u.pathIndex = 0;
+  G.SystemManager.registry.get('movement').update(1 / 30);
+  assert.equal(u.path.length, 0, 'route dropped');
+  assert.ok(S.grid.passableWorld(u.x, u.y));
+});
+
 test('metal mines need a centred 3×3 Mine Building, then extract slowly into a stockpile Spiders haul', () => {
   const G = newGame();
   const S = G.State, spider = find(G, 'utility_spider');
@@ -619,6 +671,130 @@ test('new games use the all-grass test map; transit keeps the map type', () => {
   forest.Scenario.newGame({ seed: 72491, map: 'forest' });
   assert.equal(fnv(forest.MapGen.forest(72491).tiles), 1434927080, 'forest generator unchanged');
   assert.ok(forest.State.grid.tiles.some(t => t === forest.TT.TREE));
+});
+
+test('woodlands generator is deterministic, with heights, water and a clear landing zone', () => {
+  const G = loadSim();
+  for (const [a, b, c] of [[1, 2, 3], [-7, 512, 72491], [0, 0, 0]]) assert.equal(G.hashRandom3(a, b, c), G.hashRandom(a, b, c));
+  const grid = G.MapGen.woodlands(72491), art = grid.art, id = k => G.Defs.terrain.get(k).id;
+  // Pinned like the forest map: existing Woodlands saves rebuild their terrain from this.
+  assert.equal(fnv(grid.tiles), 1031677493, 'woodlands terrain unchanged');
+  assert.equal(fnv(art.level), 4273338452, 'woodlands heights unchanged');
+  assert.equal(fnv(G.MapGen.woodlands(72491).tiles), fnv(grid.tiles), 'same seed, same map');
+  assert.notEqual(fnv(G.MapGen.woodlands(5).tiles), fnv(grid.tiles));
+  const has = k => grid.tiles.includes(id(k));
+  for (const k of ['tree', 'tall_grass', 'water', 'waterfall', 'cliff', 'steps', 'bridge', 'swamp', 'reeds', 'fallen_tree', 'cave', 'log_wall', 'sawhorse', 'wall', 'door']) assert.ok(has(k), k);
+  assert.ok(art.level.some(l => l === 0) && art.level.some(l => l === 4), 'five height levels');
+  assert.ok(art.detail.some(d => d > 0) && art.places.some(p => p.kind === 'settlement'));
+  // The ship lands on a flat, open pad 24 tiles across at the centre.
+  const mid = grid.cols / 2, l0 = art.level[mid * grid.cols + mid];
+  for (let y = mid - 24; y <= mid + 24; y++) for (let x = mid - 24; x <= mid + 24; x++){
+    if (Math.hypot(x - mid, y - mid) > 24) continue;
+    assert.equal(grid.get(x, y), id('clearing'), `pad at ${x},${y}`);
+    assert.equal(art.level[y * grid.cols + x], l0);
+  }
+  // A cliff always separates two height levels: no open tile sits beside lower open ground.
+  let steps = 0;
+  for (let y = 0; y < grid.rows; y++) for (let x = 0; x < grid.cols - 1; x++){
+    const i = y * grid.cols + x, j = i + 1;
+    if (art.level[i] !== art.level[j] && grid.terrainPassable(x, y) && grid.terrainPassable(x + 1, y)){
+      const t = [grid.tiles[i], grid.tiles[j]];
+      if (!t.includes(id('slope')) && !t.includes(id('steps')) && !t.includes(id('bridge'))) steps++;
+    }
+  }
+  assert.ok(steps < 60, 'level changes are cliffs, slopes, steps or bridges; loose steps: ' + steps);
+});
+
+test('a woodlands game starts, plays and survives a save', () => {
+  const G = loadSim();
+  G.Scenario.newGame({ seed: 72491, map: 'woodlands' });
+  const S = G.State, sh = G.Units.ship();
+  assert.equal(S.map, 'woodlands');
+  for (const b of S.buildings) for (let y = b.gy; y < b.gy + b.h; y++) for (let x = b.gx; x < b.gx + b.w; x++) assert.ok(S.grid.terrainPassable(x, y), b.type + ' on open ground');
+  for (const p of S.expedition.sites) assert.ok(S.grid.reachable(sh.gx + 3, sh.gy + sh.h, Math.floor(p.x / T), Math.floor(p.y / T)), 'signal reachable');
+  S.paused = false;
+  G.Sim.run(3);
+  const tiles = Array.from(S.grid.tiles), level = fnv(S.grid.art.level);
+  G.Save.restore(G.Save.serialize(), 1);
+  assert.deepEqual(Array.from(G.State.grid.tiles), tiles);
+  assert.equal(fnv(G.State.grid.art.level), level, 'heights rebuilt from the seed');
+});
+
+test('landing site: new games land where asked; Woodlands keeps it off water; saves keep it', () => {
+  const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
+  // Test map: the ship lands on the chosen tile; out-of-range requests stay 64 tiles from the edge.
+  G.Scenario.newGame({ seed: 7, map: 'grass', landing: { x: 120, y: 400 } });
+  let sh = G.Units.ship();
+  assert.deepEqual({ ...G.State.landing }, { x: 120, y: 400 });
+  assert.equal(sh.x, 120 * T); assert.equal(sh.y, 400 * T);
+  assert.ok(Math.hypot(G.Units.hero().x - sh.x, G.Units.hero().y - sh.y) < 400, 'Vance starts beside the ship');
+  G.Scenario.newGame({ seed: 7, map: 'grass', landing: { x: 3, y: 9999 } });
+  assert.deepEqual({ ...G.State.landing }, { x: 64, y: 511 - 64 });
+  // Woodlands: the clearing is built around the landing site.
+  const g = G.MapGen.woodlands(72491, { landing: { x: 400, y: 150 } }), L = g.art.landing;
+  assert.ok(Math.hypot(L.x - 400, L.y - 150) < 20, 'lands at or near the chosen tile');
+  for (let y = L.y - 20; y <= L.y + 20; y++) for (let x = L.x - 20; x <= L.x + 20; x++)
+    if (Math.hypot(x - L.x, y - L.y) <= 20) assert.equal(g.get(x, y), id('clearing'), `pad at ${x},${y}`);
+  // A landing asked for in a river moves to the nearest dry ground.
+  const river = G.MapGen.woodlands(72491), cols = river.cols;
+  let wet = null;
+  for (let i = 0; i < river.size && !wet; i++){ const x = i % cols, y = (i / cols) | 0; if (river.tiles[i] === id('water') && x > 80 && x < cols - 80 && y > 80 && y < cols - 80) wet = { x, y }; }
+  const moved = G.MapGen.woodlands(72491, { landing: wet }).art.landing;
+  assert.notDeepEqual({ ...moved }, wet);
+  assert.ok(Math.hypot(moved.x - wet.x, moved.y - wet.y) < 60, 'moved to nearby dry ground');
+  const dryGrid = G.MapGen.woodlands(72491, { landing: wet });
+  for (let y = moved.y - 24; y <= moved.y + 24; y++) for (let x = moved.x - 24; x <= moved.x + 24; x++)
+    if (Math.hypot(x - moved.x, y - moved.y) <= 24) assert.ok(dryGrid.terrainPassable(x, y), `open ground at ${x},${y}`);
+  // A Woodlands game with a chosen landing site restores the same terrain and landing.
+  G.Scenario.newGame({ seed: 72491, map: 'woodlands', landing: { x: 400, y: 150 } });
+  sh = G.Units.ship();
+  assert.deepEqual({ ...G.State.landing }, { ...L });
+  assert.equal(sh.x, L.x * T); assert.equal(sh.y, L.y * T);
+  const tiles = Array.from(G.State.grid.tiles);
+  const d = G.Save.serialize();
+  assert.deepEqual({ ...d.landing }, { ...L });
+  G.Save.restore(d, 1);
+  assert.deepEqual({ ...G.State.landing }, { ...L });
+  assert.deepEqual(Array.from(G.State.grid.tiles), tiles);
+});
+
+test('map editor: load woodlands and the test map, and keep named maps', () => {
+  const G = newGame();
+  const S = G.State, sh = G.Units.ship(), id = k => G.Defs.terrain.get(k).id;
+  assert.equal(G.MapEdit.loadMap('nowhere'), false);
+  assert.equal(G.MapEdit.loadMap('woodlands', 1.5), false);
+  assert.equal(G.MapEdit.loadMap('woodlands', 9, [{ x: 0, y: 0, w: 1, h: 1, t: 200 }]), false, 'unknown terrain in an edit');
+  // Save the test map with an edit, then swap in Woodlands under the running game.
+  G.MapEdit.paint(sh.gx - 30, sh.gy, 3, G.TT.WATER);
+  const testTiles = Array.from(S.grid.tiles);
+  assert.ok(G.MapLibrary.saveCurrent('Test map'));
+  assert.ok(G.MapEdit.loadMap('woodlands', 424242));
+  assert.equal(S.map, 'woodlands');
+  assert.equal(S.seed, 424242);
+  assert.ok(S.grid.art && S.grid.tiles.includes(id('cliff')));
+  for (const b of S.buildings) for (let y = b.gy; y < b.gy + b.h; y++) for (let x = b.gx; x < b.gx + b.w; x++) assert.ok(S.grid.terrainPassable(x, y), b.type + ' on open ground');
+  for (const u of S.units) if (!u.isShip) assert.ok(S.grid.passableWorld(u.x, u.y), u.type + ' on open ground');
+  // The swap is saved: a restore rebuilds the same Woodlands terrain.
+  const woodTiles = Array.from(S.grid.tiles);
+  G.Save.restore(G.Save.serialize(), 1);
+  assert.equal(G.State.map, 'woodlands');
+  assert.deepEqual(Array.from(G.State.grid.tiles), woodTiles);
+  assert.ok(G.MapLibrary.saveCurrent('Woodlands 424242'));
+  // Reload the saved test map: the same tiles as before, edits included.
+  assert.equal(G.MapLibrary.list().map(m => m.name).join('|'), 'Test map|Woodlands 424242');
+  assert.ok(G.MapLibrary.load('Test map'));
+  assert.equal(G.State.map, 'grass');
+  assert.ok(!G.State.grid.art);
+  assert.deepEqual(Array.from(G.State.grid.tiles), testTiles);
+  assert.ok(G.MapLibrary.load('Woodlands 424242'));
+  assert.deepEqual(Array.from(G.State.grid.tiles), woodTiles);
+  // Resetting to grass on another map switches back to the test map.
+  assert.ok(G.MapEdit.reset());
+  assert.equal(G.State.map, 'grass');
+  assert.ok(G.State.grid.tiles.every(t => t === G.TT.GRASS));
+  assert.equal(G.MapLibrary.remove('Test map'), true);
+  assert.equal(G.MapLibrary.remove('Test map'), false);
+  assert.equal(G.MapLibrary.load('Test map'), false);
 });
 
 test('Utility Spider cargo holds 250 metal; loaded spiders follow the definition', () => {

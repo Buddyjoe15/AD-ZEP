@@ -100,6 +100,36 @@
       const u = G.Input.unitAt(wx, wy, true, true); if (u) return this.unitDetails(G.Defs.units.get(u.type), u);
       return null;
     },
+    // Hover info in debug mode: whatever is under the mouse, else the terrain feature there.
+    hoverAt(wx, wy){
+      const hit = this.inspectAt(wx, wy);
+      if (hit) return hit;
+      const S = G.State, T = G.CONFIG.TILE, E = S.expedition;
+      const sig = E && E.sites.find(p => !p.done && Math.hypot(p.x - wx, p.y - wy) < T);
+      if (sig) return this.siteDetails(sig.kind);
+      return this.terrainDetails(Math.floor(wx / T), Math.floor(wy / T));
+    },
+    // A terrain tile: what it is, whether it blocks, its height and ground detail, and the
+    // nearest named place on a Woodlands map. Plain grass and clearings show nothing.
+    terrainDetails(gx, gy){
+      const S = G.State, grid = S.grid;
+      if (!grid || !grid.inBounds(gx, gy)) return null;
+      const i = gy * grid.cols + gx, t = grid.tiles[i], d = G.Defs.terrain.all().find(x => x.id === t), art = grid.art;
+      const mark = art && art.detail[i] ? (G.WOODLANDS_DETAIL || [])[art.detail[i] - 1] : null;
+      if (!d || ((d.key === 'grass' || d.key === 'clearing') && !mark)) return null;
+      const move = !d.passable ? 'Blocks movement' : d.speed !== 1 ? `Passable, speed ×${d.speed}` : 'Passable';
+      const rows = [['Tile', `${gx}, ${gy}`], ['Movement', move], ['Map', (G.MapGen.types[S.map] && G.MapGen.types[S.map].name) || S.map]];
+      if (art){
+        rows.push(['Height', `level ${art.level[i]} of 0–4`]);
+        if (mark) rows.push(['Ground detail', mark.charAt(0) + mark.slice(1).toLowerCase().replace('_', ' ')]);
+        let near = null, nd = Infinity;
+        for (const p of art.places){ const dd = Math.hypot(p.x - gx, p.y - gy); if (dd < nd){ nd = dd; near = p; } }
+        if (near && nd < 40) rows.push(['Near', `${near.name} (${Math.round(nd)} tiles)`]);
+        const kind = d.key === 'tree' ? G.WoodlandsArt.treeKindAt(grid, gx, gy) : null;
+        if (kind) rows.push(['Kind', kind.charAt(0).toUpperCase() + kind.slice(1)], ['Wind', G.Weather.current().name]);
+      }
+      return { title: d.name, sub: 'Terrain', rows, desc: d.passable ? '' : 'Units walk around it. The Map Editor can paint over it.' };
+    },
     // Full state of one unit, for the Units inspector.
     unitDebugDetails(u){
       const d = G.Defs.units.get(u.type), T = G.CONFIG.TILE, name = id => { const v = id != null && G.Units.alive(id); return v ? `${v.name} #${v.id}` : '—'; };
@@ -184,12 +214,8 @@
       tip.id = 'dbgTip';
       tip.innerHTML = `<b>${esc(info.title)}</b><i>${esc(info.sub)}</i>${info.rows.filter(r => r[1] != null && r[1] !== '').map(r => `<div><span>${esc(r[0])}</span>${esc(r[1])}</div>`).join('')}${info.desc ? `<p>${esc(info.desc)}</p>` : ''}`;
       document.body.appendChild(tip);
-      const r = tip.getBoundingClientRect();
-      let top = y - r.height - 14;
-      if (top < 6) top = Math.min(innerHeight - r.height - 6, y + 18);
-      tip.style.left = Math.min(Math.max(6, x + 14), innerWidth - r.width - 6) + 'px';
-      tip.style.top = top + 'px';
-      this.tip = tip; this.sticky = sticky;
+      this.tip = tip; this.sticky = sticky; this.hoverKey = null;
+      this.placeTip(x, y);
     },
     hideTip(){ if (this.tip) this.tip.remove(); this.tip = null; this.sticky = false; },
 
@@ -199,7 +225,7 @@
       const p = $('dbgPanel');
       open = open ?? p.classList.contains('hidden');
       p.classList.toggle('hidden', !open); $('dbgBtn').classList.toggle('on', open);
-      if (!open) this.armed = null; else this.render();
+      if (!open){ this.armed = null; this.endHover(); } else this.render();
       G.MapEditorUI.syncButton();
     },
     render(){
@@ -214,6 +240,9 @@
         <div class="dbgGroup">Display</div>
         <button type="button" class="dbgEntry dbgToggle${G.Fog.enabled ? ' active' : ''}" id="dbgFog"><span class="dbgIcon">${G.Fog.enabled ? 'ON' : 'OFF'}</span>Fog of war</button>
         ${G.PixelArt.data ? `<button type="button" class="dbgEntry dbgToggle${G.PixelArt.enabled ? ' active' : ''}" id="dbgPixelArt"><span class="dbgIcon">${G.PixelArt.enabled ? 'ON' : 'OFF'}</span>Pixel-art sprites and terrain</button>` : ''}
+        <div class="dbgGroup">Weather</div>
+        <div class="medRow">${Object.entries(G.Weather.PRESETS).map(([k, w]) => `<button type="button" class="medSize${G.Weather.key === k ? ' on' : ''}" data-weather="${k}">${esc(w.name)}</button>`).join('')}</div>
+        <div class="dbgHelp">How many Woodlands trees sway in the wind, and how fast (pixel art).</div>
         <div class="dbgGroup">Units</div>
         <button type="button" class="dbgEntry dbgToggle${a && a.kind === 'inspect' ? ' active' : ''}" id="dbgInspect"><span class="dbgIcon">${a && a.kind === 'inspect' ? 'ON' : 'OFF'}</span>Inspect: tap any unit for its full state</button>
         <div class="dbgHelp">Tap a row to jump to the next unit of that type and see its state.</div>
@@ -230,6 +259,7 @@
       if ($('dbgPixelArt')) $('dbgPixelArt').onclick = () => {
         G.PixelArt.set(!G.PixelArt.enabled); G.UI.toast('Pixel art ' + (G.PixelArt.enabled ? 'on' : 'off')); this.render();
       };
+      p.querySelectorAll('[data-weather]').forEach(b => b.onclick = () => { G.Weather.set(b.dataset.weather); G.UI.toast('Weather: ' + G.Weather.current().name); this.render(); });
       $('dbgFog').onclick = () => { G.Fog.set(!G.Fog.enabled); G.UI.toast('Fog of war ' + (G.Fog.enabled ? 'on' : 'off')); this.render(); };
       $('dbgInspect').onclick = () => { this.armed = a && a.kind === 'inspect' ? null : { kind: 'inspect', key: 'inspect', name: 'unit to inspect' }; this.render(); };
       this.unitsSig = null; this.renderUnits();
@@ -246,8 +276,30 @@
         el.addEventListener('click', () => { if (held){ held = false; return; } this.armed = a && a.kind === e.kind && a.key === e.key ? null : e; this.render(); });
       });
     },
+    // Mouse hover while the Debug panel is open: an info box follows the pointer.
+    hover(e){
+      if (!this.isOpen() || e.pointerType !== 'mouse' || e.buttons || !G.State.grid || G.SceneManager.currentName !== 'gameplay'){ this.endHover(); return; }
+      if (this.sticky) return;
+      const p = G.Input.p(e), q = G.worldFromScreen(p.x, p.y), info = this.hoverAt(q.x, q.y);
+      if (!info){ this.endHover(); return; }
+      const key = info.title + '|' + info.rows.map(r => r[1]).join('|');
+      if (this.tip && this.hoverKey === key){ this.placeTip(e.clientX, e.clientY); return; }
+      this.showTip(info, e.clientX, e.clientY);
+      this.tip.classList.add('hover');
+      this.hoverKey = key;
+    },
+    endHover(){ if (this.hoverKey){ this.hoverKey = null; if (!this.sticky) this.hideTip(); } },
+    placeTip(x, y){
+      const tip = this.tip, r = tip.getBoundingClientRect();
+      let top = y - r.height - 14;
+      if (top < 6) top = Math.min(innerHeight - r.height - 6, y + 18);
+      tip.style.left = Math.min(Math.max(6, x + 14), innerWidth - r.width - 6) + 'px';
+      tip.style.top = top + 'px';
+    },
     init(){
       $('dbgBtn').addEventListener('click', () => this.toggle());
+      G.Renderer.cv.addEventListener('pointermove', e => this.hover(e));
+      G.Renderer.cv.addEventListener('pointerleave', () => this.endHover());
       setInterval(() => { if (this.isOpen()) this.renderUnits(); }, 1000);   // live unit counts
       $('dbgPanel').addEventListener('pointerdown', e => e.stopPropagation());
       addEventListener('wheel', () => { if (this.sticky) this.hideTip(); }, { capture: true, passive: true });

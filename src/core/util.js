@@ -18,6 +18,17 @@
     h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909);
     return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
   };
+  // hashRandom(a, b, c) for hot loops such as terrain noise: the same numbers, without the
+  // rest-parameter array or global lookups (both slow millions of calls).
+  const imul = Math.imul;
+  G.hashRandom3 = (a, b, c) => {
+    let h = 2166136261;
+    h = imul(h ^ (a | 0), 16777619); h ^= h >>> 13;
+    h = imul(h ^ (b | 0), 16777619); h ^= h >>> 13;
+    h = imul(h ^ (c | 0), 16777619); h ^= h >>> 13;
+    h = imul(h ^ (h >>> 16), 2246822507); h = imul(h ^ (h >>> 13), 3266489909);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
   // 32-bit FNV-1a hash of a string (e.g. a structure id), for use as a hashRandom input.
   G.hashString = str => { let h = 2166136261; for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619); return h | 0; };
   // Wall clock, injected by the presentation layer (src/main.js). The simulation may only

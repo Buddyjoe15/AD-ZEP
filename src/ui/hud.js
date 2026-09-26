@@ -289,7 +289,7 @@
         const m = S.metrics, avg = m.pathCalls ? m.pathMs / m.pathCalls : 0, sys = G.SystemManager.timings;
         const top = Object.entries(sys).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} ${v.toFixed(2)}`).join('<br>');
         $('devPanel').innerHTML = `<b>DEVELOPER MODE</b><br>Renderer ${G.GPU.ok ? 'WebGL2 (GPU)' : 'Canvas 2D · ' + G.esc(G.GPU.reason)}<br>FPS ${m.fps.toFixed(0)}<br>Update ${m.updateMs.toFixed(2)} ms<br>Draw ${m.drawMs.toFixed(2)} ms<br>
-          Entities ${m.entities} · Visible ${m.visible}<br>LOD ${m.lod} · Chunks ${m.chunks} · Cached ${m.cached}/${G.CONFIG.CHUNK_CACHE_MAX}<br>
+          Entities ${m.entities} · Visible ${m.visible}<br>LOD ${m.lod} · Chunks ${m.chunks} · Cached ${m.cached}/${G.CONFIG.CHUNK_CACHE_MAX + G.CONFIG.FAR_CHUNK_CACHE_MAX}<br>
           Path calls ${m.pathCalls} · Avg ${avg.toFixed(2)} ms<br>Path queue ${m.pathQueue} · Flow fields ${m.flowFields}<br>Zoom ${S.camera.z.toFixed(2)}<br><br><b>Systems (ms)</b><br>${top}`;
       }
     }

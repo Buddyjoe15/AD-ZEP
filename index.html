@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="src/styles/main.css">
   <link rel="stylesheet" href="src/styles/expedition.css">
   <link rel="stylesheet" href="src/styles/debug.css">
+  <link rel="stylesheet" href="src/styles/mappreview.css">
 </head>
 <body>
   <div id="app">
@@ -64,6 +65,7 @@
     <div id="devPanel" class="panel dev hidden"></div>
     <div id="dbgPanel" class="hidden"></div>
     <div id="mapEdPanel" class="hidden"></div>
+    <div id="mapPreview" class="hidden" role="dialog" aria-label="Woodlands preview"></div>
     <aside id="ezFabrication" class="hidden" aria-label="Fabrication"><div id="ezFabBody"></div></aside>
     <aside id="spawnerPanel" class="hidden" aria-label="Spawner"><div id="spawnerBody"></div></aside>
     <aside id="shieldPanel" class="hidden" aria-label="Shield Projector"><div id="shieldBody"></div></aside>
@@ -105,6 +107,7 @@
   <script src="src/data/world.js"></script>
   <script src="src/world/grid.js"></script>
   <script src="src/world/mapgen.js"></script>
+  <script src="src/world/woodlands.js"></script>
   <script src="src/world/spatial.js"></script>
   <script src="src/world/pathfinding.js"></script>
   <script src="src/sim/entities.js"></script>
@@ -129,6 +132,8 @@
   <script src="src/render/pixel-data.js"></script>
   <script src="src/render/pixelart.js"></script>
   <script src="src/render/visuals.js"></script>
+  <script src="src/render/weather.js"></script>
+  <script src="src/render/woodlands.js"></script>
   <script src="src/render/terrain.js"></script>
   <script src="src/render/fog.js"></script>
   <script src="src/render/sprites.js"></script>
@@ -142,6 +147,7 @@
   <script src="src/ui/shield.js"></script>
   <script src="src/ui/debug.js"></script>
   <script src="src/ui/mapeditor.js"></script>
+  <script src="src/ui/mappreview.js"></script>
   <script src="src/ui/input.js"></script>
   <script src="src/ui/menu.js"></script>
   <script src="src/main.js"></script>

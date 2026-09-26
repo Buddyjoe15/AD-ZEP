@@ -310,6 +310,336 @@ export const TERRAIN = {
       .map((o, i) => dustTile(21 + i, { ...o, matched: true })) }
 };
 
+// ---- Woodlands terrain and tree props (48×48) ----
+// Same method as the dust plain v2: two octaves of smooth value lattice whose border values
+// are shared by every variant (edge-matched) and whose interior values are one shuffled set
+// (tone-matched), then small features that wrap across the edges. Drawn at 1 art px per
+// world px; the first pilot was 24×24 at 2 world px per art px.
+const W_WEIGHTS = [6, 6, 6, 4, 3, 2, 1, 1], N = TILE_ART;
+const wrap = v => ((v % N) + N) % N;
+function latticeTile(seed, sharedSeed, pickColour){
+  const shared = rng(sharedSeed), r = rng(seed), g = new Grid(N, N);
+  const octave = L => {
+    const border = Array.from({ length: 2 * L - 1 }, () => shared()), inner = Array.from({ length: (L - 1) ** 2 }, () => shared());
+    for (let i = inner.length - 1; i > 0; i--){ const j = Math.floor(r() * (i + 1)); [inner[i], inner[j]] = [inner[j], inner[i]]; }
+    const lat = new Array(L * L);
+    for (let y = 0; y < L; y++) for (let x = 0; x < L; x++)
+      lat[y * L + x] = y === 0 ? border[x] : x === 0 ? border[L - 1 + y] : inner[(y - 1) * (L - 1) + x - 1];
+    const at = (x, y) => lat[((y % L + L) % L) * L + ((x % L + L) % L)], sm = t => t * t * (3 - 2 * t), cell = N / L;
+    return (x, y) => {
+      const gx = x / cell, gy = y / cell, x0 = Math.floor(gx), y0 = Math.floor(gy), tx = sm(gx - x0), ty = sm(gy - y0);
+      return (at(x0, y0) * (1 - tx) + at(x0 + 1, y0) * tx) * (1 - ty) + (at(x0, y0 + 1) * (1 - tx) + at(x0 + 1, y0 + 1) * tx) * ty;
+    };
+  };
+  const coarse = octave(6), fine = octave(12);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) g.set(x, y, C[pickColour(coarse(x, y) * 0.62 + fine(x, y) * 0.24 + r() * 0.14)]);
+  const put = (x, y, c) => g.set(wrap(x), wrap(y), C[c]);
+  const at = () => [Math.floor(r() * N), Math.floor(r() * N)];
+  return { g, r, put, at };
+}
+// A blade of grass from its root (x, y) upwards: `len` px, bending `bend` px sideways over
+// its length, a dark root, the body in `body` and a lit tip.
+function blade(put, x, y, len, bend, body = 'grass2', tip = 'grass3'){
+  for (let k = 0; k < len; k++){
+    const bx = x + Math.round(bend * (k / len) ** 2);
+    put(bx, y - k, k === 0 ? 'grass0' : k >= len - 1 ? tip : body);
+  }
+  put(x + 1, y, 'grass0');   // shadow at the root
+}
+// A shaded pebble or stone, lit top-left, with a contact shadow along its lower right.
+function stone(put, x, y, w, h, tones = ['dust5', 'dust4', 'dust3', 'dust1']){
+  for (let dy = 0; dy <= h; dy++) for (let dx = 0; dx <= w; dx++){
+    const ex = (dx - w / 2) / (w / 2 + 0.3), ey = (dy - h / 2) / (h / 2 + 0.3), d = ex * ex + ey * ey;
+    if (d > 1) continue;
+    const lit = ex + ey;
+    put(x + dx, y + dy, d > 0.6 && lit > 0.3 ? tones[3] : lit < -0.7 ? tones[0] : lit < 0.2 ? tones[1] : tones[2]);
+  }
+  for (let dx = 1; dx <= w; dx++) put(x + dx, y + h + 1, 'char1');
+}
+function grassTile(seed, { speckles = 30, blades = 14, clover = 0, tufts = 0, pebble = 0, flowers = 0 } = {}){
+  const { g, r, put, at } = latticeTile(seed, 7101, v => v < 0.36 ? 'grass0' : v < 0.66 ? 'grass1' : 'grass2');
+  for (let i = 0; i < speckles; i++){ const [x, y] = at(); put(x, y, r() < 0.5 ? 'grass0' : 'grass3'); }
+  // Short blades give the lawn a grain at this scale.
+  for (let i = 0; i < blades; i++){ const [x, y] = at(); blade(put, x, y, 2 + Math.floor(r() * 3), r() < 0.5 ? 0 : r() < 0.5 ? -1 : 1); }
+  for (let i = 0; i < clover; i++){
+    const [x, y] = at();
+    // Three round leaflets around a stem, each lit top-left and shaded bottom-right.
+    for (const [lx, ly] of [[0, 0], [4, 0], [2, 3]]){
+      for (const [dx, dy, c] of [[1, 0, 'grass3'], [2, 0, 'grass3'], [0, 1, 'grass3'], [1, 1, 'grass3'], [2, 1, 'grass2'], [3, 1, 'grass2'], [1, 2, 'grass2'], [2, 2, 'grass0']]) put(x + lx + dx, y + ly + dy, c);
+    }
+    put(x + 3, y + 6, 'grass0'); put(x + 3, y + 7, 'grass0');
+  }
+  for (let i = 0; i < tufts; i++){
+    const [x, y] = at();
+    for (let k = -2; k <= 2; k++) blade(put, x + k * 2, y, 4 + Math.floor(r() * 4) - Math.abs(k), k * 1.4);
+  }
+  for (let i = 0; i < flowers; i++){ const [x, y] = at(); put(x, y - 1, 'amber1'); put(x - 1, y, 'amber1'); put(x + 1, y, 'amber1'); put(x, y + 1, 'amber1'); put(x, y, 'dust5'); put(x + 1, y + 1, 'grass0'); }
+  for (let i = 0; i < pebble; i++){ const [x, y] = at(); stone(put, x, y, 4, 3); }
+  return g;
+}
+function tallGrassTile(seed, { blades = 70, seedheads = 0 } = {}){
+  const { g, r, put, at } = latticeTile(seed, 7202, v => v < 0.45 ? 'grass0' : 'grass1');
+  for (let i = 0; i < blades; i++){
+    const [x, y] = at(), len = 6 + Math.floor(r() * 6), bend = (r() < 0.3 ? 2 : r() < 0.4 ? -2 : 0) + (r() - 0.5);
+    blade(put, x, y, len, bend);
+  }
+  for (let i = 0; i < seedheads; i++){
+    const [x, y] = at();
+    blade(put, x, y, 8, 1, 'grass2', 'grass2');
+    for (const [dx, dy, c] of [[1, -8, 'dust5'], [1, -9, 'dust5'], [2, -9, 'dust4'], [1, -10, 'dust4'], [2, -8, 'dust3']]) put(x + dx, y + dy, c);
+  }
+  return g;
+}
+function waterTile(seed, { deep = false, ripples = 10, sparkle = 0 } = {}){
+  const { g, r, put, at } = latticeTile(seed, deep ? 7404 : 7303, deep ? (v => v < 0.78 ? 'water0' : 'water1') : (v => v < 0.3 ? 'water0' : v < 0.78 ? 'water1' : 'water2'));
+  // A ripple: a lit crest with a darker trough under it, thinning at both ends.
+  for (let i = 0; i < ripples; i++){
+    const [x, y] = at(), len = 5 + Math.floor(r() * 6);
+    for (let k = 0; k < len; k++){
+      const end = k === 0 || k === len - 1;
+      if (!end || r() < 0.5) put(x + k, y, deep ? 'water1' : 'water2');
+      if (!end) put(x + k + 1, y + 1, 'water0');
+    }
+  }
+  for (let i = 0; i < sparkle; i++){ const [x, y] = at(); put(x, y, 'water3'); put(x - 1, y, 'water2'); put(x + 1, y, 'water2'); put(x, y - 1, 'water2'); put(x, y + 1, 'water2'); }
+  return g;
+}
+// Shoreline: open water with a muddy bank and a broken foam line along each side that
+// touches land. `mask` bits: 1 north, 2 east, 4 south, 8 west. Where two neighbouring
+// sides are land, the corner is rounded.
+function shoreTile(mask){
+  const g = waterTile(31), R = 12, pat = rng(5150 + mask);
+  const noise = Array.from({ length: N * N }, () => pat());
+  // A little wobble along the bank, the same on every tile so neighbouring pieces line up.
+  const WOBBLE = [0, 0.4, 0.8, 1.2, 1.6, 1.2, 0.8, 0.4, 0, -0.3, -0.6, -0.3];
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++){
+    const sides = [];
+    if (mask & 1) sides.push(y); if (mask & 2) sides.push(N - 1 - x); if (mask & 4) sides.push(N - 1 - y); if (mask & 8) sides.push(x);
+    if (!sides.length) continue;
+    let d = Math.min(...sides);
+    const corner = (a, b, cx, cy) => { if ((mask & a) && (mask & b) && Math.abs(x - cx) < R && Math.abs(y - cy) < R) d = Math.min(d, R - Math.hypot(R - Math.abs(x - cx) - 0.5, R - Math.abs(y - cy) - 0.5)); };
+    corner(1, 8, 0, 0); corner(1, 2, N - 1, 0); corner(4, 2, N - 1, N - 1); corner(4, 8, 0, N - 1);
+    const along = (mask & 5) && !(mask & 10) ? x : (mask & 10) && !(mask & 5) ? y : x + y;
+    d += WOBBLE[along % 12];
+    const n = noise[y * N + x];
+    if (d < 2.4) g.set(x, y, C[n < 0.5 ? 'dust1' : n < 0.9 ? 'dust0' : 'dust2']);          // wet mud
+    else if (d < 5) g.set(x, y, C[n < 0.6 ? 'dust2' : n < 0.9 ? 'dust1' : 'dust3']);        // bank shallows
+    else if (d < 6.8) g.set(x, y, C[n < 0.6 ? 'water3' : 'water2']);                         // foam line
+    else if (d < 8.8 && n < 0.25) g.set(x, y, C.water2);                                     // broken foam
+    else if (d < 11 && n < 0.07) g.set(x, y, C.water3);
+  }
+  return g;
+}
+// Cliffs, one tile tall. A south drop shows the whole rock face: a grassy lip with tufts
+// hanging over, then irregular stone blocks (lit on their top-left edges, shaded bottom-right,
+// darker further down, grained inside), cracks, moss and loose stones at the foot. A drop on
+// another side shows the grass top with a ragged rock rim on that side; a corner drop a
+// rounded rim. Every block band has a joint on column 0, and rims wobble with a 48 px
+// period, so pieces line up with their neighbours.
+const RIM = Array.from({ length: N }, (_, k) => 6 + Math.round(Math.sin(k / N * Math.PI * 4) * 1.6 + Math.sin(k / N * Math.PI * 6 + 1) * 1.2));
+function cliffFace(variant){
+  const g = new Grid(N, N), r = rng(6100 + variant * 53), set = (x, y, c) => g.set(x, y, C[c]);
+  // Grassy lip.
+  for (let y = 0; y < 8; y++) for (let x = 0; x < N; x++)
+    set(x, y, y >= 6 ? (y === 7 ? 'char1' : 'grass0') : (x * 7 + y * 5 + variant * 3) % 13 === 0 ? 'grass3' : (x + y * 3) % 5 === 0 ? 'grass2' : 'grass1');
+  // Stone blocks in bands; deeper bands are darker.
+  const bands = [[8, 17], [18, 26], [27, 34], [35, 41]], tones = [['dust4', 'dust3', 'dust2'], ['dust3', 'dust2', 'dust1'], ['dust3', 'dust2', 'dust1'], ['dust2', 'dust1', 'dust0']];
+  bands.forEach(([y0, y1], b) => {
+    let x = b % 2 ? -Math.floor(4 + r() * 6) : 0;
+    while (x < N){
+      const w = 8 + Math.floor(r() * 10), x0 = Math.max(0, x), x1 = Math.min(N - 1, x + w - 1), [hi, mid, lo] = tones[b];
+      for (let y = y0; y <= y1; y++) for (let xx = x0; xx <= x1; xx++){
+        let c = mid;
+        if (r() < 0.12) c = r() < 0.5 ? hi : lo;                                 // grain
+        if (y === y0 || xx === x0 + 1) c = hi;                                   // lit top and left edges
+        if (y === y0 + 1 && xx > x0 + 1 && xx < x1 - 1 && r() < 0.5) c = hi;
+        if (y === y1 || xx === x1) c = lo;                                       // shaded bottom and right edges
+        if (y === y1 - 1 && xx === x1) c = 'char1';
+        if (xx === x0 && x > 0) c = 'char1';                                     // joint
+        set(xx, y, c);
+      }
+      // A chip or two knocked out of the face.
+      for (let k = 0; k < 2; k++) if (r() < 0.4){
+        const px = x0 + 2 + Math.floor(r() * Math.max(1, x1 - x0 - 4)), py = y0 + 2 + Math.floor(r() * Math.max(1, y1 - y0 - 3));
+        set(px, py, lo); set(px + 1, py, lo); set(px, py + 1, 'char1'); set(px + 1, py - 1, hi);
+      }
+      x = x1 + 1;
+    }
+    for (let y = y0; y <= y1; y++) set(0, y, 'char1');                        // joint on column 0 in every band
+  });
+  // Cracks running down a block or two, with a lit edge on one side.
+  for (let i = 0; i < 2 + (variant % 2); i++){
+    let x = 6 + Math.floor(r() * 36), y = 10 + Math.floor(r() * 12);
+    for (let k = 0; k < 10 + Math.floor(r() * 10) && y < 41; k++){
+      set(x, y, 'char0'); if (g.get(x + 1, y) && r() < 0.6) set(x + 1, y, 'dust1'); if (r() < 0.5) set(x - 1, y, 'dust4');
+      y++; if (r() < 0.3) x = Math.max(3, Math.min(44, x + (r() < 0.5 ? -1 : 1)));
+    }
+  }
+  // Moss on a few ledges.
+  for (let i = 0; i < 3 + variant % 3; i++){
+    const x = 3 + Math.floor(r() * 40), y = [8, 18, 27][Math.floor(r() * 3)], w = 3 + Math.floor(r() * 4);
+    for (let k = 0; k < w; k++){ set(x + k, y, k % 3 ? 'leaf1' : 'leaf2'); if (r() < 0.6) set(x + k, y + 1, 'leaf0'); if (r() < 0.25) set(x + k, y + 2, 'leaf0'); }
+  }
+  // Grass tufts hanging over the lip.
+  for (let i = 0; i < 5; i++){
+    const x = 2 + Math.floor(r() * 42), len = 2 + Math.floor(r() * 5);
+    for (let k = 0; k < len; k++) set(x, 8 + k, k === len - 1 ? 'grass0' : k === 0 ? 'grass3' : 'grass2');
+    if (r() < 0.6){ const l2 = Math.max(1, len - 2); for (let k = 0; k < l2; k++) set(x + 1, 8 + k, k === l2 - 1 ? 'grass0' : 'grass2'); }
+    set(x + 1, 8 + len, 'char1');
+  }
+  // Foot: a shadow band and loose stones.
+  for (let x = 0; x < N; x++){
+    set(x, 42, (x + variant) % 4 ? 'char1' : 'dust0'); set(x, 43, (x * 3 + variant) % 5 ? 'char1' : 'char0');
+    for (let y = 44; y < 47; y++) set(x, y, 'char0');
+    set(x, 47, (x * 5 + variant) % 7 === 0 ? 'char1' : 'char0');
+  }
+  for (let i = 0; i < 5; i++){
+    const x = 1 + Math.floor(r() * 44), y = 41 + Math.floor(r() * 3), w = 2 + Math.floor(r() * 2);
+    for (let k = 0; k <= w; k++){ set(x + k, y, k === 0 ? 'dust4' : 'dust3'); set(x + k, y + 1, k === w ? 'dust0' : 'dust1'); }
+  }
+  return g;
+}
+function cliffTile(key, variant = 0){
+  const corner = key.startsWith('c') ? key.slice(1) : null;
+  if (!corner && key.startsWith('S')){
+    const g = cliffFace(variant);
+    // The face turning away at an east or west end.
+    const side = xs => { for (let y = 8; y < 42; y++) xs.forEach((x, k) => g.set(x, y, C[k < 2 ? 'char1' : k < 4 ? 'dust1' : k === 4 ? 'dust4' : 'dust3'])); };
+    if (key.includes('E')) side([N - 1, N - 2, N - 3, N - 4, N - 5, N - 6]);
+    if (key.includes('W')) side([0, 1, 2, 3, 4, 5]);
+    return g;
+  }
+  const g = grassTile(21), r = rng(6200 + key.length * 13);
+  // A ragged rim: dark drop edge, then rock shading inwards, a lit lip, and grass creeping over.
+  const rim = (at) => {
+    for (let k = 0; k < N; k++){
+      const w = RIM[k];
+      for (let d = 0; d < w + 1; d++){
+        const [x, y] = at(k, d);
+        g.set(x, y, C[d < 2 ? 'char1' : d < 3 ? 'dust0' : d < 4 ? 'dust1' : d < w - 1 ? (r() < 0.15 ? 'dust3' : 'dust2') : d < w ? 'dust4' : ((k * 3) % 5 ? 'dust5' : 'grass0')]);
+      }
+      if (r() < 0.12){ const [x, y] = at(k, w + 1); g.set(x, y, C.grass3); }
+      if (r() < 0.08){ const [x, y] = at(k, w + 2); g.set(x, y, C.grass0); }
+    }
+  };
+  if (corner){
+    const [cx, cy] = { NE: [N, 0], SE: [N, N], SW: [0, N], NW: [0, 0] }[corner];
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++){
+      const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+      if (d < 9.2) g.set(x, y, C[d < 3.2 ? 'char1' : d < 5.2 ? 'dust1' : d < 7.2 ? 'dust2' : d < 8.2 ? 'dust4' : 'dust5']);
+    }
+    return g;
+  }
+  if (key.includes('N')) rim((k, d) => [k, d]);
+  if (key.includes('E')) rim((k, d) => [N - 1 - d, k]);
+  if (key.includes('W')) rim((k, d) => [d, k]);
+  return g;
+}
+// Cliff piece keys, and which piece each drop mask (1 N, 2 E, 4 S, 8 W; 16/32/64/128 corners) uses.
+export const CLIFF_KEYS = ['S', 'S2', 'S3', 'S4', 'SE', 'SW', 'SEW', 'N', 'E', 'W', 'NE', 'NW', 'EW', 'NEW', 'cNE', 'cSE', 'cSW', 'cNW'];
+function cliffPieces(){
+  return CLIFF_KEYS.map(k => /^S\d$/.test(k) ? cliffTile('S', +k[1] - 1) : cliffTile(k));
+}
+// Tree canopy props, three kinds. Each variant has 9 frames: 3 leans (at rest, then 2 and
+// 4 art px downwind, east) × 3 leaf-rustle steps (frame = lean * 3 + rustle). The canopy
+// sits 2 px left of centre at rest so the furthest lean still keeps the 1 px outline margin.
+// Outline and top-left light are added by the pipeline (the leaf ramp shades); the engine
+// draws the shadow.
+const TREE_LEAN_PX = 2, TREE_CX = 21.5, TREE_CY = 23.5;
+const TREE_KINDS = {
+  // Broadleaf: a round, lobed crown with lighter leaf clumps and dark gaps between them.
+  oak(p, r){
+    const lobes = 5 + Math.floor(r() * 3);
+    p.ellipse(0, 0, 13.6, 13.6, 'leaf1');
+    for (let i = 0; i < lobes; i++){ const a = (i / lobes) * Math.PI * 2 + r() * 0.6, d = 8.4 + r() * 2.4, rr = 6 + r() * 2.2; p.ellipse(Math.cos(a) * d, Math.sin(a) * d, rr, rr, 'leaf1'); }
+    for (let i = 0; i < 7; i++) p.ellipse((r() - 0.5) * 18, (r() - 0.5) * 18, 1.4 + r() * 1.4, 1.2 + r() * 1.2, 'leaf0');
+    for (let i = 0; i < 12; i++){ const x = (r() - 0.5) * 18, y = (r() - 0.5) * 18; p.ellipse(x, y, 2.2 + r() * 1.6, 2 + r() * 1.4, 'leaf2'); p.ellipse(x + 1, y + 1.2, 1.2, 1, 'leaf1'); }
+    p.ellipse(-3, -3, 4, 3.6, 'leaf2');
+  },
+  // Conifer: a dark star of needle points around a tight centre, needles along each spoke.
+  pine(p, r){
+    const spikes = 10 + Math.floor(r() * 3), turn = r();
+    p.ellipse(0, 0, 10.4, 10.4, 'leaf0');
+    for (let i = 0; i < spikes; i++){
+      const a = ((i + turn) / spikes) * Math.PI * 2, len = 16.4 + r() * 2;
+      for (let k = 0; k <= 20; k++){ const t = k / 20, w = (1 - t) * 3.2; p.ellipse(Math.cos(a) * len * t, Math.sin(a) * len * t, w + 0.5, w + 0.5, 'leaf0'); }
+      // Needles: short strokes angled out from the spoke.
+      for (let k = 4; k < 16; k += 3) for (const s of [-1, 1]){
+        const t = k / len, bx = Math.cos(a) * k, by = Math.sin(a) * k, na = a + s * 0.7;
+        p.line(bx, by, bx + Math.cos(na) * 2.4 * (1 - t * 0.5), by + Math.sin(na) * 2.4 * (1 - t * 0.5), 'leaf0');
+      }
+    }
+    for (let i = 0; i < spikes; i++){
+      const a = ((i + turn + 0.5) / spikes) * Math.PI * 2;
+      for (let k = 0; k <= 12; k++){ const t = k / 12; p.ellipse(Math.cos(a) * 10.4 * t, Math.sin(a) * 10.4 * t, (1 - t) * 2.2 + 0.5, (1 - t) * 2.2 + 0.5, 'leaf1'); }
+    }
+    p.ellipse(0, 0, 2.8, 2.8, 'leaf2');
+    p.ellipse(-0.8, -0.8, 1.2, 1.2, 'grass3');
+  },
+  // Birch: a small, airy crown of separate light clusters with bright leaf tips.
+  birch(p, r){
+    const n = 7 + Math.floor(r() * 2);
+    p.ellipse(0, 0, 6.8, 6.8, 'leaf2');
+    for (let i = 0; i < n; i++){
+      const a = (i / n) * Math.PI * 2 + r() * 0.5, d = 9.6 + r() * 3.2, rr = 4.4 + r() * 1.8, x = Math.cos(a) * d, y = Math.sin(a) * d;
+      p.ellipse(x, y, rr, rr, 'leaf2');
+      p.ellipse(x + rr * 0.35, y + rr * 0.35, rr * 0.45, rr * 0.45, 'leaf1');   // shade inside each cluster
+      p.ellipse(x - rr * 0.4, y - rr * 0.4, 1, 1, 'grass3');                  // lit leaf tip
+    }
+    for (let i = 0; i < 6; i++) p.ellipse((r() - 0.5) * 18, (r() - 0.5) * 18, 1.6, 1.6, 'leaf1');
+    // Pale twigs showing through the gaps.
+    for (let i = 0; i < 3; i++){ const a = r() * Math.PI * 2; p.line(0, 0, Math.cos(a) * 7, Math.sin(a) * 7, 'dust5'); }
+  }
+};
+export const TREE_TYPES = Object.keys(TREE_KINDS), TREE_LEANS = 3, TREE_RUSTLES = 3, TREE_FRAMES = TREE_LEANS * TREE_RUSTLES;
+// Leaf rustle: step 0 is the crown as drawn; steps 1 and 2 move a few leaf tips along the
+// edge (some drop back, some poke out, in pairs so they read at 1 art px per world px) and
+// catch the light in different places. The same changes are used at every lean, so
+// rustling and leaning combine smoothly.
+function rustle(g, kind, seed, step, cx){
+  if (!step) return;
+  const r = rng(seed * 13 + step * 977), glint = kind === 'birch' ? C.grass3 : C.leaf2, leaf = kind === 'pine' ? C.leaf0 : kind === 'birch' ? C.leaf2 : C.leaf1;
+  const edge = [], outside = [];
+  for (let y = 3; y < N - 3; y++) for (let x = 3; x < N - 3; x++){
+    const v = g.get(x, y), open = (a, b) => !g.get(a, b);
+    if (v && (open(x - 1, y) || open(x + 1, y) || open(x, y - 1) || open(x, y + 1))) edge.push([x, y]);
+    else if (!v && (g.get(x - 1, y) || g.get(x + 1, y) || g.get(x, y - 1) || g.get(x, y + 1))) outside.push([x, y]);
+  }
+  const pick = list => list[Math.floor(r() * list.length)];
+  for (let i = 0; i < 9; i++){ const [x, y] = pick(edge), [dx, dy] = r() < 0.5 ? [1, 0] : [0, 1]; g.set(x, y, 0); if (edge.some(([a, b]) => a === x + dx && b === y + dy)) g.set(x + dx, y + dy, 0); }
+  for (let i = 0; i < 9; i++){ const [x, y] = pick(outside), [dx, dy] = r() < 0.5 ? [1, 0] : [0, 1]; g.set(x, y, leaf); if (!g.get(x + dx, y + dy)) g.set(x + dx, y + dy, leaf); }
+  for (let i = 0; i < 8; i++){
+    const x = Math.round(cx + (r() - 0.5) * 20), y = Math.round(TREE_CY + (r() - 0.5) * 20);
+    if (g.get(x, y) && g.get(x, y) !== C.leaf0){ g.set(x, y, glint); if (g.get(x + 1, y) && g.get(x + 1, y) !== C.leaf0) g.set(x + 1, y, glint); }
+  }
+}
+function treeFrames(kind, seed){
+  const out = [];
+  for (let lean = 0; lean < TREE_LEANS; lean++) for (let step = 0; step < TREE_RUSTLES; step++){
+    const g = new Grid(N, N), cx = TREE_CX + lean * TREE_LEAN_PX, p = painter(g, 0, [cx, TREE_CY]);
+    TREE_KINDS[kind](p, rng(seed));
+    rustle(g, kind, seed, step, cx);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (x === 0 || y === 0 || x === N - 1 || y === N - 1) g.set(x, y, 0);
+    out.push(finish(g));
+  }
+  return out;
+}
+// variants[kind] = [[frame0, frame1, frame2], ...]
+function treeSet(){
+  const out = {};
+  TREE_TYPES.forEach((kind, k) => { out[kind] = [0, 1].map(v => treeFrames(kind, 301 + k * 17 + v * 5)); });
+  return out;
+}
+
+export const WOODLANDS = {
+  grass: () => [{}, {}, {}, { speckles: 60 }, { clover: 1 }, { tufts: 2 }, { pebble: 1, tufts: 1 }, { clover: 2, flowers: 1 }].map((o, i) => grassTile(41 + i, o)),
+  tall_grass: () => [{}, {}, {}, { blades: 90 }, { seedheads: 3 }, { blades: 55 }, { seedheads: 6 }, { blades: 100, seedheads: 2 }].map((o, i) => tallGrassTile(61 + i, o)),
+  water: () => [{}, {}, {}, { ripples: 16 }, { ripples: 6 }, { sparkle: 1 }, { ripples: 14, sparkle: 1 }, { sparkle: 2 }].map((o, i) => waterTile(81 + i, o)),
+  deep_water: () => [{}, {}, {}, { ripples: 14 }, { ripples: 6 }, {}, { ripples: 12 }, { ripples: 4 }].map((o, i) => waterTile(101 + i, { ...o, deep: true })),
+  shore: () => Array.from({ length: 16 }, (_, m) => m ? shoreTile(m) : waterTile(31)),
+  cliff: cliffPieces,
+};
+
 // ---- Build everything in memory ----
 export function build(){
   const sprites = {}, sheets = {};
@@ -342,9 +672,28 @@ export function build(){
     const meta = { name: 'dust_plain_' + v, frameWidth: TILE_ART, frameHeight: TILE_ART, variants: tiles.length, hash: T.hash, formula: T.formula, weights: T.weights };
     sheets['dust_plain_' + v] = { meta, rows: [tiles] };
   }
+  // Woodlands: weighted terrain variants, 16 shoreline pieces by land mask, cliff pieces,
+  // and tree canopy props (engine shadow at the prop offset).
+  const woodlands = {};
+  for (const [key, make] of Object.entries(WOODLANDS)){
+    const tiles = make(), weights = ['grass', 'tall_grass', 'water', 'deep_water'].includes(key) ? W_WEIGHTS : null;
+    woodlands[key] = { tiles: tiles.map(g => g.encode()), ...(weights ? { weights } : {}) };
+    const meta = { name: 'woodlands_' + key, frameWidth: TILE_ART, frameHeight: TILE_ART, variants: tiles.length, ...(weights ? { weights, hash: 'mix32' } : {}) };
+    if (key === 'shore') meta.index = 'land mask: 1 north, 2 east, 4 south, 8 west (0 = open water)';
+    if (key === 'cliff'){ meta.pieces = CLIFF_KEYS; woodlands.cliff.pieces = CLIFF_KEYS; }
+    sheets['woodlands_' + key] = { meta, rows: [tiles] };
+  }
+  // Trees: per kind, variants of 9 frames (lean * 3 + rustle). One sheet row per kind.
+  const trees = treeSet(), shadow = { drawnBy: 'engine', offset: [4, 4], elevation: 'prop' };
+  const animations = { lean: { frames: TREE_LEANS, fps: 'set by the weather' }, rustle: { frames: TREE_RUSTLES, fps: 'set by the weather' }, frame: 'lean * 3 + rustle' };
+  woodlands.tree = { types: TREE_TYPES, animations, shadow, variants: Object.fromEntries(TREE_TYPES.map(k => [k, trees[k].map(fr => fr.map(g => g.encode()))])) };
+  sheets.woodlands_tree = {
+    meta: { name: 'woodlands_tree', frameWidth: TILE_ART, frameHeight: TILE_ART, origin: [0, 0], rows: TREE_TYPES, columns: 'variant 1 frames 0-8, variant 2 frames 0-8 (frame = lean * 3 + rustle)', animations, shadow },
+    rows: TREE_TYPES.map(k => trees[k].flat())
+  };
   const data = {
     alphabet: ALPHABET, palette: PALETTE.map(([name, hex]) => ({ name, hex })), teamIndex: [C.team0, C.team1, C.team2], teams: TEAMS,
-    tileArt: TILE_ART, worldPxPerArtPx: WORLD_PX_PER_ART_PX, sprites, terrain
+    tileArt: TILE_ART, worldPxPerArtPx: WORLD_PX_PER_ART_PX, sprites, terrain, woodlands
   };
   return { data, sheets };
 }
@@ -396,7 +745,7 @@ async function capture(){
   for (const [z, tag] of [['0.333', '033'], ['0.667', '067'], ['1', '100']]) await shot(`zoom=${z}&t=0.4&hud=0`, `scene-zoom-${tag}.png`, phone);
   await shot('zoom=0.333&t=0.4&hud=0&tiles=v1', 'scene-zoom-033-tiles-v1.png', phone);
   const desk = { viewport: { width: 1200, height: 800 }, deviceScaleFactor: 1, fullPage: true };
-  for (const s of ['spider', 'drone', 'vance', 'repair_station', 'terrain']) await shot(`view=sheets&only=${s}&hud=0`, `sheet-${s}.png`, desk);
+  for (const s of ['spider', 'drone', 'vance', 'repair_station', 'terrain', 'woodlands']) await shot(`view=sheets&only=${s}&hud=0`, `sheet-${s}.png`, desk);
   await browser.close();
 }
 

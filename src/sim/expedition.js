@@ -275,7 +275,7 @@
         S.nextId = nextId + 100;
         const T = G.CONFIG.TILE, C = G.CONFIG;
         const shipData = crew.find(u => u.isShip);
-        shipData.x = C.WORLD_W / 2; shipData.y = C.WORLD_H / 2;
+        shipData.x = S.landing.x * T; shipData.y = S.landing.y * T;
         shipData.gx = Math.round(shipData.x / T - shipData.w / 2); shipData.gy = Math.round(shipData.y / T - shipData.h / 2);
         shipData.fabQueue = [];
         G.Units.adopt(shipData);

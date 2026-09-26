@@ -258,12 +258,34 @@ test('migrate_6_to_7: Shield Projectors get a switch and a charge; nothing else 
   assert.equal(p.shieldOn, false); assert.equal(p.shield, 0);
   assert.ok(up.buildings.filter(b => b.type !== 'shield_projector').every(b => !('shieldOn' in b)));
   G.Save.validate(G.Save.migrate(raw));
-  // Validation rejects malformed shield data.
-  const bad = readJSON(fixtureFile(7));
+  // Validation rejects malformed shield data (in the schema 7 fixture, brought up to date).
+  const bad = G.Save.migrate(readJSON(fixtureFile(7)));
   const sp = bad.buildings.find(b => b.type === 'shield_projector');
   assert.ok(sp, 'the schema 7 fixture has a Shield Projector');
   sp.shield = 1e9;
   assert.throws(() => G.Save.validate(bad), /building shield/);
   sp.shield = 10; sp.shieldOn = 'yes';
   assert.throws(() => G.Save.validate(bad), /building shield/);
+});
+
+test('migrate_7_to_8: older saves land at the centre of their world, and landing sites are validated', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(7)), before = JSON.stringify(raw);
+  const up = G.Save.migrations[7](raw);
+  assert.equal(JSON.stringify(raw), before, 'the input is not modified');
+  assert.equal(up.schema, 8);
+  const half = Math.floor(raw.worldSize / 2);
+  assert.deepEqual({ ...up.landing }, { x: half, y: half });
+  const d = G.Save.validate(G.Save.migrate(raw));
+  // The ship of that save sits over the migrated landing site, and it restores with the same terrain.
+  const ship = d.units.find(u => u.isShip);
+  assert.equal(Math.floor(ship.x / 48), half); assert.equal(Math.floor(ship.y / 48), half);
+  G.Save.restore(raw, 1);
+  assert.deepEqual({ ...G.State.landing }, { x: half, y: half });
+  // Malformed landing sites are rejected.
+  for (const landing of [null, { x: 1.5, y: 3 }, { x: -1, y: 10 }, { x: 10, y: raw.worldSize }, 'centre']){
+    const bad = G.Save.migrate(readJSON(fixtureFile(7)));
+    bad.landing = landing;
+    assert.throws(() => G.Save.validate(bad), /landing site/, JSON.stringify(landing));
+  }
 });

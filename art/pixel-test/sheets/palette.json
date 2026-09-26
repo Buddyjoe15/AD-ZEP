@@ -147,6 +147,50 @@
     {
       "name": "blur",
       "hex": "#6d7c84"
+    },
+    {
+      "name": "grass0",
+      "hex": "#3f5a3a"
+    },
+    {
+      "name": "grass1",
+      "hex": "#4d6946"
+    },
+    {
+      "name": "grass2",
+      "hex": "#5d7a4f"
+    },
+    {
+      "name": "grass3",
+      "hex": "#739158"
+    },
+    {
+      "name": "leaf0",
+      "hex": "#1b3a21"
+    },
+    {
+      "name": "leaf1",
+      "hex": "#28502d"
+    },
+    {
+      "name": "leaf2",
+      "hex": "#3f6f3e"
+    },
+    {
+      "name": "water0",
+      "hex": "#1f4a5c"
+    },
+    {
+      "name": "water1",
+      "hex": "#2e6578"
+    },
+    {
+      "name": "water2",
+      "hex": "#4f8c9e"
+    },
+    {
+      "name": "water3",
+      "hex": "#9fcfd8"
     }
   ],
   "teams": {

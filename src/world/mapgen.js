@@ -140,7 +140,18 @@
   // landing zone and testing zone (not needed where everything is already open ground).
   G.MapGen = {
     forest, grass,
-    types: { forest: { generate: forest, clearLanding: true }, grass: { generate: grass, clearLanding: false } },
-    DEFAULT: 'grass'
+    types: {
+      forest: { name: 'Forest', generate: forest, clearLanding: true },
+      grass: { name: 'Test map', generate: grass, clearLanding: false }
+    },
+    DEFAULT: 'grass',
+    // Landing tile for a new world: `p` ({x, y} in tiles) kept LANDING_MARGIN tiles from every
+    // edge, or the centre of the world when none is given.
+    LANDING_MARGIN: 64,
+    landing(p){
+      const C = G.CONFIG, m = Math.min(this.LANDING_MARGIN, Math.floor(C.COLS / 4));
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return { x: Math.floor(C.COLS / 2), y: Math.floor(C.ROWS / 2) };
+      return { x: G.clamp(Math.round(p.x), m, C.COLS - 1 - m), y: G.clamp(Math.round(p.y), m, C.ROWS - 1 - m) };
+    }
   };
 })();

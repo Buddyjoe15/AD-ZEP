@@ -155,8 +155,18 @@
     return v;
   }
 
-  // Keyed by the schema each step upgrades from; add { 7: migrate_7_to_8 } and so on.
-  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7 };
+  // Schema 7 → schema 8: saves record the landing site (in tiles). The map generator builds
+  // the landing clearing there, and every earlier save landed at the centre of its world.
+  function migrate_7_to_8(d){
+    const v = G.copy(d);
+    v.schema = 8;
+    const half = Math.floor((int(v.worldSize) ? v.worldSize : 512) / 2);
+    v.landing = { x: half, y: half };
+    return v;
+  }
+
+  // Keyed by the schema each step upgrades from; add { 8: migrate_8_to_9 } and so on.
+  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7, 7: migrate_7_to_8 };
 
   // Applies the steps in order until the save reaches G.SAVE_SCHEMA. A current save is
   // returned as is; anything newer or unknown is rejected.
@@ -191,6 +201,8 @@
     if (!int(d.seed) || d.seed < 0 || d.seed > 4294967295) fail('seed');
     if (typeof d.map !== 'string' || !Object.prototype.hasOwnProperty.call(G.MapGen.types, d.map)) fail('map type');
     if (!int(d.worldSize) || d.worldSize < 64 || d.worldSize > 2048) fail('world size');
+    const L = d.landing;
+    if (!L || typeof L !== 'object' || !int(L.x) || !int(L.y) || L.x < 0 || L.y < 0 || L.x >= d.worldSize || L.y >= d.worldSize) fail('landing site');
     if (!num(d.time) || d.time < 0 || !int(d.nextId)) fail('clock');
     if (!list(d.units, LIMITS.units)) fail('units');
     const ids = new Set();
@@ -250,7 +262,7 @@
   // Builds a fresh world from validated save data.
   function apply(d, slot){
     G.setWorldSize(d.worldSize);
-    const S = G.Scenario.createWorld(d.seed, { slot, map: d.map });
+    const S = G.Scenario.createWorld(d.seed, { slot, map: d.map, landing: d.landing });
     for (const e of d.terrainEdits){ S.grid.fill(e.x, e.y, e.w, e.h, e.t); S.terrainEdits.push({ ...e }); }
     Object.assign(S, {
       time: d.time, nextId: d.nextId, heroId: d.heroId, shipId: d.shipId,
@@ -287,7 +299,7 @@
       const units = S.units.filter(u => u.hp > 0).map(u => { const o = G.copy(u); o.pathPending = false; return o; });
       return {
         project: G.PROJECT, schema: G.SAVE_SCHEMA, version: G.VERSION, savedAt: G.Clock.stamp(),
-        seed: S.seed, map: S.map, worldSize: G.CONFIG.WORLD_TILES, time: S.time, nextId: S.nextId, heroId: S.heroId, shipId: S.shipId,
+        seed: S.seed, map: S.map, landing: { x: S.landing.x, y: S.landing.y }, worldSize: G.CONFIG.WORLD_TILES, time: S.time, nextId: S.nextId, heroId: S.heroId, shipId: S.shipId,
         camera: { x: S.camera.x, y: S.camera.y, z: S.camera.z }, formation: S.formation, formationAngle: S.formationAngle,
         resources: G.copy(S.resources), inventory: G.copy(S.inventory), units,
         buildings: G.copy(S.buildings), constructionSites: G.copy(S.constructionSites), containers: G.copy(S.containers),

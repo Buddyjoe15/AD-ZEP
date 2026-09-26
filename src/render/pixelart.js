@@ -134,7 +134,46 @@
       if (!this._dust){ this._dust = new Set(); for (const t of G.Defs.terrain.all()) if (this.DUST.has(t.key)) this._dust.add(t.id); }
       return this._dust;
     },
-    DUST_MINIMAP: D ? hex(D.palette.find(c => c.name === 'dust2').hex) : [0, 0, 0]
+    DUST_MINIMAP: D ? hex(D.palette.find(c => c.name === 'dust2').hex) : [0, 0, 0],
+    // Woodlands pilot art (grass, tall grass, water, shoreline, cliffs, tree props), or null
+    // when pixel art is off; the Woodlands renderer keeps its vector art for anything else.
+    woodlands(){ return this.enabled && D && D.woodlands ? D.woodlands : null; },
+    // Weighted variant for tile (x, y), mixing-hashed like the dust plain; `salt` keeps
+    // different terrain types from picking in step.
+    weighted(weights, x, y, salt){
+      let total = 0;
+      for (const w of weights) total += w;
+      let r = fmix32(Math.imul(x, 0x9E3779B1) ^ Math.imul(y, 0x85EBCA77) ^ salt) % total;
+      for (let i = 0; i < weights.length; i++){ if (r < weights[i]) return i; r -= weights[i]; }
+      return 0;
+    },
+    tileCanvas(str){ return this.canvas(str, D.tileArt, D.tileArt); },
+    // A tree canopy prop with its engine shadow (unless `noShadow`), drawn at world rect
+    // (x, y, size). Shadow and canopy are composed once per frame string and size, so each
+    // tree is a single draw.
+    propCache: new Map(),
+    prop(g, str, x, y, size, noShadow){
+      const key = str + '|' + size + (noShadow ? '|n' : '');
+      let c = this.propCache.get(key);
+      if (!c){
+        const k = Math.max(1, Math.round(size / D.tileArt)), off = D.woodlands.tree.shadow.offset, n = D.tileArt;
+        c = document.createElement('canvas'); c.width = (n + off[0]) * k; c.height = (n + off[1]) * k;
+        const cg = c.getContext('2d');
+        cg.imageSmoothingEnabled = false;
+        if (!noShadow){
+          cg.globalAlpha = SHADOW_ALPHA;
+          cg.drawImage(this.canvas(str, n, n, null, true), off[0] * k, off[1] * k, n * k, n * k);
+          cg.globalAlpha = 1;
+        }
+        cg.drawImage(this.canvas(str, n, n, 'neutral'), 0, 0, n * k, n * k);
+        c.scale = size / (n * k);
+        this.propCache.set(key, c);
+      }
+      const smooth = g.imageSmoothingEnabled;
+      g.imageSmoothingEnabled = false;
+      g.drawImage(c, x, y, c.width * c.scale, c.height * c.scale);
+      g.imageSmoothingEnabled = smooth;
+    }
   };
 
   const P = G.PixelArt;

@@ -63,7 +63,9 @@
     },
     // Downscaled copies of the atlas (level 1 = half, 2 = quarter size) so Canvas 2D can
     // stamp sprites close to 1:1 when zoomed out; resampling a large image down to a tiny
-    // one is expensive, especially where the canvas is rasterised in software.
+    // one is expensive, especially where the canvas is rasterised in software. With pixel
+    // art on they are point-sampled (every other pixel), not smoothed, so sprites stay crisp;
+    // the GPU uses the same copies as its mipmaps.
     level(n){
       if (!n) return this.canvas;
       const L = this.levels || (this.levels = []);
@@ -71,8 +73,9 @@
       if (!c || c.version !== this.version){
         const src = this.level(n - 1);
         c = L[n] = L[n] || document.createElement('canvas');
-        c.width = src.width / 2; c.height = src.height / 2;
+        c.width = Math.max(1, src.width >> 1); c.height = Math.max(1, src.height >> 1);
         const g = c.getContext('2d');
+        g.imageSmoothingEnabled = !G.PixelArt.enabled;
         g.imageSmoothingQuality = 'high';
         g.clearRect(0, 0, c.width, c.height); g.drawImage(src, 0, 0, c.width, c.height);
         c.version = this.version;

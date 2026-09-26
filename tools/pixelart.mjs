@@ -8,7 +8,7 @@
 // drawn by the engine, never baked into sprites.
 import zlib from 'node:zlib';
 
-// ---- Palette (37 colours; index 0 in a grid means transparent) ----
+// ---- Palette (48 colours; index 0 in a grid means transparent) ----
 export const PALETTE = [
   ['outline', '#0d1419'],
   ['steel0', '#1f2c34'], ['steel1', '#34495a'], ['steel2', '#557184'], ['steel3', '#8aa7b4'],
@@ -24,7 +24,11 @@ export const PALETTE = [
   ['white', '#ffffff'],
   ['visor', '#16343e'],
   ['gold0', '#9a7a3e'], ['gold1', '#e1bd76'],
-  ['blur', '#6d7c84']
+  ['blur', '#6d7c84'],
+  // Woodlands terrain (added after the original 37, so earlier art keeps its indices).
+  ['grass0', '#3f5a3a'], ['grass1', '#4d6946'], ['grass2', '#5d7a4f'], ['grass3', '#739158'],
+  ['leaf0', '#1b3a21'], ['leaf1', '#28502d'], ['leaf2', '#3f6f3e'],
+  ['water0', '#1f4a5c'], ['water1', '#2e6578'], ['water2', '#4f8c9e'], ['water3', '#9fcfd8']
 ];
 export const C = Object.fromEntries(PALETTE.map(([n], i) => [n, i + 1]));
 // Team ramps replacing team0..team2 (dark, mid, light).
@@ -34,12 +38,12 @@ export const TEAMS = {
   neutral: ['#8a7a36', '#d4c46c', '#f0e6a8']
 };
 // One character per palette index in the text encoding ('.' is transparent).
-export const ALPHABET = '.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijk';
+export const ALPHABET = '.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuv';
 
 // Ramps that the shading pass may step along (emissive and terrain colours are left alone).
 const RAMPS = [
   ['steel0', 'steel1', 'steel2', 'steel3'], ['plate0', 'plate1', 'plate2'], ['team0', 'team1', 'team2'],
-  ['rust0', 'rust1', 'rust2'], ['gold0', 'gold1'], ['char0', 'char1'], ['amber0', 'amber1']
+  ['rust0', 'rust1', 'rust2'], ['gold0', 'gold1'], ['char0', 'char1'], ['amber0', 'amber1'], ['leaf0', 'leaf1', 'leaf2']
 ].map(r => r.map(n => C[n]));
 const RAMP_OF = new Map();
 for (const r of RAMPS) r.forEach((c, i) => RAMP_OF.set(c, [r, i]));
