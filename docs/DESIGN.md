@@ -25,11 +25,29 @@ Most Earths are wave-based. Some turn waves off and bring enemies through events
 
 Today's Hostile Autonomous Machines are not Omega. They are a stand-in for testing large numbers of units. The Omega enemies are still to be designed.
 
+## Ship power
+
+- **Element P** is the ship's main fuel, and lasts much longer than Fuel Rods.
+- **The siphon is broken.** The part of the Warp Drive that siphons energy off to the power grid is broken at the start of the game.
+- **Until then, Fuel Rods run the ship.** The ship's backup fusion generator burns them. They are also transit fuel.
+- **Fusion Generator:** a building that also burns Fuel Rods for power.
+- **This changes current behaviour:** today the Warp Drive supplies a steady 25 power from the start.
+
+## Troop veterancy
+
+- **Per unit.** Each unit earns XP from its own kills. It has nothing to do with transits.
+- **Five levels.** Each adds 5% to every stat (HP, defence, attack, attack speed and so on): 5% at level 1, up to 25% at level 5.
+- **Level 5 is the maximum.** After that the unit earns no more veterancy.
+
 ## Ship interior
 
 The Robotics Lab researches everything to do with friendly units. The Research Lab researches everything else.
 
 The mech is Vance's frame. The Mech Bay upgrades it, changes its modules and customises it. The frame's upgrades are researched in the Research Lab.
+
+Ship modules and blueprints are in Alpha, so the ship and its upgrades can be tested.
+
+For now, the Command Deck's history of past Earths holds only the current Earth: "Planet 001". In the story, Vance doesn't know it is an Earth.
 
 ## Earths
 
@@ -117,10 +135,5 @@ Each Earth is a divergence: its history went a different way. Every Earth is cur
 
 ## Open questions
 
-1. **Alpha and transit.** Alpha is one Woods World, but some Alpha items are about travelling between Earths:
-   - Fuel Rods as transit fuel, and the transit cap;
-   - crew veterancy, earned by surviving transits;
-   - ship modules and blueprints, kept from Earth to Earth;
-   - the Command Deck's history of past Earths.
-
-   Do these stay in Alpha in a single-Earth form, or move after Alpha?
+1. **Transit cap.** Today each resource has a limit on how much crosses to the next Earth (`transitCap`: 300 metal, 300 copper, 150 uranium, 150 steel, 50 electronics, 60 Fuel Rods, 40 Missiles); the rest is left behind. Should this stay, and should the Storage Room's size set it?
+2. **The Warp Drive's siphon.** How is it repaired, and does the backup fusion generator still matter once it is?

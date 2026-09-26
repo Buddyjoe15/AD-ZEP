@@ -30,7 +30,9 @@ Alpha is the starter / demo build: a sandbox mode on one Woods World, where the 
 - [ ] **Rivers, cliffs and slopes** make natural chokepoints. Turrets on high ground get more range, and slopes slow units.
 
 ### Resource loops
-- [ ] **Fuel Rods** power the Warp Drive: transit costs fuel. A **Reactor** burns rods for a lot of power.
+- [ ] **Ship power** (DESIGN.md, "Ship power"): the Warp Drive's siphon to the power grid starts broken, so the ship's backup fusion generator runs on Fuel Rods. Element P is the main fuel.
+- [ ] **Fuel Rods** are also transit fuel.
+- [ ] **Fusion Generator:** a building that burns Fuel Rods for power.
 - [ ] **Element P** shortens stabilisation. The Expedition log's boost action already does this, but Element P can't be found yet.
 - [ ] **Fabricator levels:** upgrading with steel and electronics unlocks new units.
 - [ ] **Transit cap as a choice:** the ship's cargo hold is upgraded between Earths (see Storage Room).
@@ -40,7 +42,7 @@ Alpha is the starter / demo build: a sandbox mode on one Woods World, where the 
 
 ### Progression
 - [ ] Ship modules.
-- [ ] Crew veterancy: units that survive transits earn small bonuses and a name.
+- [ ] **Troop veterancy:** each unit earns XP from its kills and levels up to 5 times. Each level adds 5% to every stat, up to 25% at level 5, the maximum.
 - [ ] Blueprints recovered from archives unlock structures for the rest of the run.
 
 ### Ship interior
@@ -49,7 +51,7 @@ Six sections:
 - [ ] **Research Lab:** all research except friendly units: anomalies, frame upgrades, defence upgrades, new buildings and building upgrades.
 - [ ] **Living Quarters:** upgrade the Commander's skills, health and speed.
 - [ ] **Robotics Lab:** all research for friendly units: new units, unit upgrades and the unit cap.
-- [ ] **Command Deck:** upgrade the ship. See the history of past Earths visited, and statistics.
+- [ ] **Command Deck:** upgrade the ship. See the history of past Earths visited, and statistics. For now the history holds only the current Earth, Planet 001.
 - [ ] **Storage Room:** its size can be upgraded.
 
 ## To-do, target not yet set
