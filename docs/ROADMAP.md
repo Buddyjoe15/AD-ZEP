@@ -6,17 +6,18 @@ Many of these items add saved state. Each one that does is a save format change:
 
 ## Required for Alpha
 
-Alpha is the starter / demo build, set on Woods World.
+Alpha is the starter / demo build: a sandbox mode on one Woods World, where the player must survive the Omega waves. The campaign is not in Alpha.
 
 ### Woods World
 - [ ] Woods World as the Alpha Earth:
   - the woods of Northern Canada, built on the `woodlands` map type;
   - abandoned settlements, whose humans the Omega has taken;
   - minimal hazards, resources to mine, and Omega waves.
+- [ ] **Sandbox mode:** one Woods World; survive the waves.
+- [ ] **Dynamic weather:** wind, rain, changing sunlight and lightning strikes.
 
 ### Threat
-Woods World is wave-based, so Alpha needs this.
-- [ ] Omega waves that grow with energy, the unit cap and, possibly, the Element P stored aboard the ship.
+- [ ] Omega waves that grow with the power produced, the number of friendly units on the map and, possibly, the Element P stored aboard the ship.
 - [ ] Omega enemy units. Today's Hostile Autonomous Machines are only a stand-in for testing unit numbers.
 
 ### Terrain features
@@ -27,13 +28,15 @@ Woods World is wave-based, so Alpha needs this.
 - [ ] **Caves** are explored by Vance or a drone: a short, risky trip for a big reward, perhaps with hostiles inside.
 - [ ] **Logging camps and log piles** give wood, a cheap early building material, or salvage.
 - [ ] **Rivers, cliffs and slopes** make natural chokepoints. Turrets on high ground get more range, and slopes slow units.
-- [ ] **Weather:** storms also cut sight, ground drones and hide attacks.
 
 ### Resource loops
 - [ ] **Fuel Rods** power the Warp Drive: transit costs fuel. A **Reactor** burns rods for a lot of power.
 - [ ] **Element P** shortens stabilisation. The Expedition log's boost action already does this, but Element P can't be found yet.
 - [ ] **Fabricator levels:** upgrading with steel and electronics unlocks new units.
 - [ ] **Transit cap as a choice:** the ship's cargo hold is upgraded between Earths (see Storage Room).
+
+### Vance
+- [ ] **Vance's abilities.**
 
 ### Progression
 - [ ] Ship modules.
@@ -51,18 +54,20 @@ Six sections:
 
 ## To-do, target not yet set
 
-- [ ] **Campaign mode:** the next Earth is random, from the curated Earths.
-- [ ] **Sandbox mode:** choose the first Earth's seed; every Earth after it is random.
 - [ ] **Lost archives and ARIA's weakening disclosure restrictions** (DESIGN.md, "Lost archives").
+- [ ] **Suit hazard upgrades.**
+
+## After Alpha
+
+### Campaign
+- [ ] **Campaign mode:** the next Earth is random, from the curated Earths. The ship lands at the centre of the map unless an Earth says otherwise.
 - [ ] **Campaign ending** (DESIGN.md, "Ending"):
   - defeat the boss on an Omega world;
   - then Earth 000 and a win, or keep travelling and choose the Earth and seed.
-- [ ] **Vance's abilities.**
-- [ ] **Suit hazard upgrades.**
+- [ ] **Sandbox across Earths:** choose the first Earth's seed; every Earth after it is random.
 
-## Wish list (after Alpha)
-
-Curated Earths, described in DESIGN.md:
+### Curated Earths (wish list)
+Described in DESIGN.md:
 - [ ] **Medieval Earth:** a castle and villages, trading, run by events.
 - [ ] **Lava World:** ash, lava flows and steam geysers, heat damage to Vance, Omega waves.
 - [ ] **Snow Earth:** an ice age, slow movement and freezing drones, Omega waves.
@@ -79,3 +84,7 @@ Found while playing `main` at 8fa3c74:
 - [ ] **Departure checklist:** it says "N metal aboard drones", but it counts all cargo, and Utility Spiders carry it.
 - [ ] **Stray screenshots:** 24 of them (17.5 MB) sit at the repository root.
 - [ ] **`docs/ARCHITECTURE.md`:** it gives the save schema as 5 (it is now 8). Its simulation order leaves out `power`, `shields`, `swarm` and `gates`.
+
+## Last
+
+- [ ] **Existing climates:** decide how the curated Earths relate to today's climates (Temperate, Frozen, Silent, Irradiated). Frozen is close to Snow Earth.

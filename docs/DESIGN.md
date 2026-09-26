@@ -8,14 +8,17 @@ Design decisions for Abyssal Dawn: Zero Earth Protocol. The work they create is 
 
 - **Campaign.** An expedition roguelite. Each Earth is one chapter: land, build and extract, survive, repair and stabilise the drive, then transit.
   - The next Earth is random, drawn from the curated Earths. The player doesn't choose it.
+  - The ship lands at the centre of the map, unless an Earth says otherwise.
   - The run ends when Vance dies, or with the ending under "Story".
+  - Its length will be set by testing. It could take 10 Earths (one recording on each) or 4 (a player who explores finds several on one Earth).
 - **Sandbox.** The player chooses the seed of the first Earth. Every Earth after it is random.
+- **Alpha** is a sandbox mode on one Woods World with the Omega: survive the waves. The campaign is not in Alpha.
 
 ## Threat
 
 Omega waves respond to what the player does. The threat rises with:
-- energy;
-- the unit cap;
+- the power produced;
+- the number of friendly units on the map;
 - possibly, the Element P stored aboard the ship.
 
 Most Earths are wave-based. Some turn waves off and bring enemies through events instead (see "Earths").
@@ -44,6 +47,7 @@ Each Earth is a divergence: its history went a different way. Every Earth is cur
 **Woods World.** A normal Earth. The ship lands in the woods, in a secluded area of Northern Canada.
 - Abandoned settlements. The Omega has taken the humans away as organic material for its army.
 - Environmental hazards are minimal. Resources are available to mine.
+- Dynamic weather in Alpha: wind, rain, changing sunlight and lightning strikes.
 - Builds on the `woodlands` map type.
 
 **Medieval Earth.** Technology never advanced, and the world is stuck in that era.
@@ -95,9 +99,10 @@ Each Earth is a divergence: its history went a different way. Every Earth is cur
 
 ### Lost archives
 
-- **What they are.** Any Earth may hold a lost archive: a fragment of another dimension's Earth that also tried the warp drive and failed. All that is left of it is its "black box recording".
-- **Recognising them.** ARIA and Vance don't know what the recordings are at first. Once 3 have been recorded, ARIA pieces together what they are and what happened. She doesn't tell Vance.
-- **Corruption.** The truth from the other dimensions corrupts ARIA, and her disclosure restrictions weaken (dampen). Each recording adds 10%, so 10 recordings reach 100%.
+- **What they are.** Any Earth may hold lost archives, sometimes more than one. Each is a fragment of another dimension's Earth that also tried the warp drive and failed. All that is left of it is its "black box recording".
+- **The first two.** ARIA and Vance don't know what the recordings are, and they have no effect yet.
+- **The third.** ARIA pieces together what the recordings are and what happened. She doesn't tell Vance. The truth from the other dimensions starts to corrupt her, and her disclosure restrictions weaken (dampen) to 30%.
+- **The next seven.** Each adds 10%, so 10 recordings reach 100%.
 - **Slips.** Each time dampening increases, ARIA sometimes lets the real truth slip without realising it, and more often as dampening rises.
 - **At 100%** she tells Vance everything:
   - what the Zero Earth Protocol is;
@@ -112,12 +117,10 @@ Each Earth is a divergence: its history went a different way. Every Earth is cur
 
 ## Open questions
 
-1. **Threat inputs.**
-   - *Energy:* is it power produced, power used, or both?
-   - *Unit cap:* is it the number of units the player has, or the cap they have upgraded to?
-2. **Recordings.**
-   - At 10% each, the first two recordings weaken ARIA's restrictions before she recognises what they are at the third. Is that intended?
-   - Each Earth only *may* hold one. How many Earths should a campaign take?
-3. **The existing climates** (Temperate, Frozen, Silent, Irradiated). Do the curated Earths replace them? Frozen is close to Snow Earth.
-4. **Alpha scope.** Is Alpha a single Woods World, or a run of Woods World Earths with different seeds? Are campaign and sandbox modes, the lost archives, and Vance's abilities in Alpha? Living Quarters (Alpha) upgrades Commander skills, and those skills are Vance's abilities.
-5. **Landing site.** New Game lets the player choose one. Does the campaign keep that choice?
+1. **Alpha and transit.** Alpha is one Woods World, but some Alpha items are about travelling between Earths:
+   - Fuel Rods as transit fuel, and the transit cap;
+   - crew veterancy, earned by surviving transits;
+   - ship modules and blueprints, kept from Earth to Earth;
+   - the Command Deck's history of past Earths.
+
+   Do these stay in Alpha in a single-Earth form, or move after Alpha?
