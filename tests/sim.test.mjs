@@ -463,6 +463,21 @@ test('Hostile Fabricator spawns waves at one point, waits for it to clear, and g
   assert.equal(G.Defs.buildables.get('hostile_fabricator').debugOnly, true, 'not in the Spider build menu');
 });
 
+test('a held unit on the spawn point whose next waypoint is cut off by a wall is sent to the rally point again', () => {
+  // The spawner waits for its spawn point to clear; a unit there that can't follow its route
+  // must not block it for good.
+  const G = newGame();
+  const S = G.State, SP = G.Spawner, b = S.buildings.find(b => b.type === 'hostile_fabricator');
+  SP.state(b);
+  const p = SP.spawnPoint(b), u = G.Units.spawn('hostile_machine', p.x, p.y, { team: b.team });
+  const behind = { x: b.x, y: b.y - b.h * T };   // on the far side of the Fabricator
+  assert.ok(!S.grid.lineClear(p.x, p.y, behind.x, behind.y), 'the Fabricator is in the way');
+  u.spawnerId = b.id; u.aiHold = true; u.path = [behind]; u.pathIndex = 0;
+  G.rebuildSpatial();
+  assert.equal(SP.spawnClear(b, p), false, 'still occupied this tick');
+  assert.ok(u.pathPending || (u.path.length && u.path[0] !== behind), 're-routed');
+});
+
 test('crowded units slide along a wall instead of pinning each other against it', () => {
   // Regression: a push was all-or-nothing, so a unit resting on a wall's edge, nudged a hair
   // into the wall by every push, could never move, and a unit squeezing past it stayed stuck
