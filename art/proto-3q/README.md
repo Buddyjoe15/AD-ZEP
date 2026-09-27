@@ -17,6 +17,7 @@ npm run proto:spider:preview   # also previews/ (needs Playwright + Chromium)
   - a lathed cargo hull in team colour with seams, a plate band, a hazard band, side vents, a top hatch, tail lights and an antenna;
   - a laser arm with a turret, a piston, an elbow hinge and an emitter;
   - eight legs, each with a hip actuator, an armoured upper leg with a piston, an amber knee hinge, a shin guard and a clawed foot. The knees are solved for each foot position.
+  - The hull, head and arm ride 6 world px above the leg mount, and the rear legs angle out to the side. The upper legs pass under the body with about 1 world px to spare in every walk frame, instead of cutting through its sides.
 - **Camera.** An oblique three-quarter view. The ground keeps its top-down shape, so map tiles stay square as they are in the game, and each px of height lifts a point 0.8 px up the screen.
 - **Facings.** Each of the 8 facings is its own render, never a rotated copy, so the angle, lighting and shadow match on all of them.
 - **Light and colour.** Each art px is shaded from 2 × 2 samples and takes their most common colour, which keeps edges clean and thin parts whole. For each sample:
@@ -36,7 +37,7 @@ npm run proto:spider:preview   # also previews/ (needs Playwright + Chromium)
 |---|---|---|
 | View | straight top-down | three-quarter |
 | Art px per world px | 1 | 2 |
-| Frame | 49 × 49 | 114 × 139 |
+| Frame | 49 × 49 | 128 × 155 |
 | Facings | 2 drawn, 6 rotated copies | 8 rendered |
 | Frames per facing | 10 (idle 2, walk 4, work 4) | 14 (idle 2, walk 8, work 4) |
 | Colours | from the shared 48 | its own 32 |
@@ -44,11 +45,11 @@ npm run proto:spider:preview   # also previews/ (needs Playwright + Chromium)
 ## Findings
 
 - **Detail.** At zoom 1 on a high-density screen (1.5 screen px per world px) most of the extra detail is averaged away. It starts to show at about 2 screen px per world px, and shows fully at the closest zoom (3.3).
-- **Size.** As run-length text, `spider-3q.js` is 677 KB for one unit. The same frames as a PNG are 166 KB (`spider-3q-sheet.png`), about 221 KB embedded as base64.
+- **Size.** As run-length text, `spider-3q.js` is 716 KB for one unit. The same frames as a PNG are 168 KB (`spider-3q-sheet.png`), about 224 KB embedded as base64.
   - Embedded PNG data is the better format for the game.
   - The browser still lets the game read the pixels of an embedded image when it's opened from disk.
 - **What the game would need.**
   - Sprites drawn from the back of the screen to the front.
   - Clicks that hit the visible sprite.
   - These shadow masks in place of the engine's silhouette shadows.
-  - Atlas room: a 114 × 139 frame needs bigger slots than the atlas's 128 px ones, even at 1 atlas px per art px (today's art is stored at 2). With both teams, one atlas texture holds the frames of only a few units like this, so the atlas would need more than one texture.
+  - Atlas room: a 128 × 155 frame needs bigger slots than the atlas's 128 px ones, even at 1 atlas px per art px (today's art is stored at 2). With both teams, one atlas texture holds the frames of only a few units like this, so the atlas would need more than one texture.

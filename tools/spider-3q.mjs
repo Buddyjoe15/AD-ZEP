@@ -43,7 +43,7 @@ for (const [name, hexes] of Object.entries(RAMPS)) RAMP[name] = hexes.map(hex =>
 const grime = (p, cut) => noise3(p[0] / 1.4 + 11, p[1] / 1.4 + 3, p[2] / 1.4 + 7) > cut ? -1 : 0;
 const near = (v, at, w = 0.32) => at.some(a => Math.abs(v - a) < w);
 function materials(bob){
-  const body = f => (p, n) => f([p[0], p[1] - bob, p[2]], n);
+  const body = f => (p, n) => f([p[0], p[1] - bob - RAISE, p[2]], n);
   const M = {
     dark: { ramp: RAMP.dark, spec: 0.25, shine: 16 },
     steel: { ramp: RAMP.steel, spec: 0.4, shine: 18 },
@@ -71,10 +71,13 @@ function materials(bob){
 const LEGS = [   // per side: hip (x, y, z) and where the foot rests (angle from forward, distance)
   { hip: [5.5, 8, -5], foot: [36, 19] },
   { hip: [6.5, 8, -1.5], foot: [74, 20] },
-  { hip: [6.5, 8, 2.5], foot: [108, 20] },
-  { hip: [5.5, 8, 6], foot: [146, 19] }
+  { hip: [6.5, 8, 2.5], foot: [106, 21] },
+  { hip: [6.5, 8, 5], foot: [126, 22] }      // angled out to the side, clear of the hull
 ];
 const UPPER = 10, LOWER = 11.5, STRIDE = 3.2, LIFT = 3.5;
+// The hull, head and arm sit this much higher than the leg mount, so the upper legs run out
+// underneath the body instead of through its sides.
+const RAISE = 6;
 
 // Knee of a two-segment leg, bent up and outward.
 function knee(hip, foot){
@@ -94,16 +97,18 @@ function piston(m, M, p, q, r = 0.75){
 // pose: { walk: 0..1 phase or null, bob, work: 0..1 or null }
 function spider(pose){
   const m = new Model(), bob = pose.bob || 0, M = materials(bob);
-  const B = (...ms) => mul(translate(0, bob, 0), ...ms);
-  const at = (p, ...ms) => mul(translate(p[0], p[1] + bob, p[2]), ...ms);
-  const pt = p => [p[0], p[1] + bob, p[2]];
+  // Body parts (hull, head, neck, arm) are placed RAISE above the leg mount.
+  const lift = bob + RAISE, low = (...ms) => mul(translate(0, bob, 0), ...ms);
+  const B = (...ms) => mul(translate(0, lift, 0), ...ms);
+  const at = (p, ...ms) => mul(translate(p[0], p[1] + lift, p[2]), ...ms);
+  const pt = p => [p[0], p[1] + lift, p[2]];
   // Lathed and tube parts that run along the body: backward (+z) or forward (-z), flattened.
   const aft = (z, y, flat, length = 1) => B(translate(0, y, z), scale(1, flat, 1), rotX(Math.PI / 2), scale(1, length, 1));
   const fore = (z, y, flat) => B(translate(0, y, z), scale(1, flat, 1), rotX(-Math.PI / 2));
 
-  // Chassis under the body.
-  m.box(B(translate(0, 6.6, 0.5), scale(9.5, 2.6, 15)), M.chassis);
-  m.box(B(translate(0, 5.4, 0.5), scale(6, 1.2, 11)), M.dark);
+  // Chassis: the leg mount under the body, reaching up to meet it.
+  m.box(low(translate(0, 9, 0.5), scale(11, 4, 15)), M.chassis);
+  m.box(low(translate(0, 6.5, 0.5), scale(7, 1.2, 11)), M.dark);
 
   // Cargo hull behind, in team colour: seams, a plate band behind the neck, a hazard band
   // near the tail, side vents, a top hatch, tail lights and an antenna.
@@ -150,7 +155,7 @@ function spider(pose){
   // on the ground while the other swings forward in the air.
   LEGS.forEach((leg, i) => {
     for (const s of [-1, 1]){
-      const hip = pt([leg.hip[0] * s, leg.hip[1], leg.hip[2]]);
+      const hip = [leg.hip[0] * s, leg.hip[1] + bob, leg.hip[2]];
       const a = leg.foot[0] * Math.PI / 180;
       let foot = [Math.sin(a) * leg.foot[1] * s, 0.8, -Math.cos(a) * leg.foot[1]];
       if (pose.walk != null){
