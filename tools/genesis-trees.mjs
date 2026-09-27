@@ -29,19 +29,25 @@ export const GENESIS_PROPS = {
   // leftovers, and small ground detail.
   tallgrass: [{ r: 11 }, { r: 15 }], thicket: [{ r: 16 }], mound: [{ r: 12 }], vent: [{ r: 12 }], crystal: [{ r: 10 }, { r: 14 }],
   ore: [{ r: 12 }], alien: [{ r: 10 }], logpile: [{ r: 14 }], sawhorse: [{ r: 10 }], burrow: [{ r: 9 }], rubble: [{ r: 9 }, { r: 13 }],
-  tuft: [{ r: 5 }], weeds: [{ r: 5 }], pebbles: [{ r: 6 }], leaves: [{ r: 7 }], twigs: [{ r: 8 }], bones: [{ r: 6 }], puddle: [{ r: 9 }]
+  tuft: [{ r: 5 }], weeds: [{ r: 5 }], pebbles: [{ r: 6 }], leaves: [{ r: 7 }], twigs: [{ r: 8 }], bones: [{ r: 6 }], puddle: [{ r: 9 }],
+  // Village life: lamp posts, signposts, benches, barrels, crates, wells, fences, hay and carts.
+  lamp: [{ r: 8 }], sign: [{ r: 10 }], bench: [{ r: 12 }], barrel: [{ r: 6 }], crate: [{ r: 7 }], well: [{ r: 18 }],
+  fence: [{ r: 13 }], hay: [{ r: 7 }, { r: 12 }], cart: [{ r: 15 }]
 };
 export const LOG_ANGLES = 16;
 export const PROP_SHADOW = {
   stump_cut: [3, 3], stump_broken: [3, 3], log: [4, 4], bush: [5, 5], flowers: [2, 2], boulder: [6, 6], reeds: [3, 3], mushrooms: [2, 2], fern: [3, 3],
   tallgrass: [2, 2], thicket: [5, 5], mound: [7, 7], vent: [2, 2], crystal: [5, 5], ore: [4, 4], alien: [3, 3], logpile: [4, 4], sawhorse: [4, 4],
-  burrow: [2, 2], rubble: [3, 3], tuft: [1, 1], weeds: [1, 1], pebbles: [1, 1], leaves: [0, 0], twigs: [1, 1], bones: [1, 1], puddle: [0, 0]
+  burrow: [2, 2], rubble: [3, 3], tuft: [1, 1], weeds: [1, 1], pebbles: [1, 1], leaves: [0, 0], twigs: [1, 1], bones: [1, 1], puddle: [0, 0],
+  lamp: [6, 6], sign: [4, 4], bench: [3, 3], barrel: [3, 3], crate: [3, 3], well: [4, 4], fence: [2, 2], hay: [4, 4], cart: [4, 4]
 };
 const STUMP_VARIANTS = 3, LOG_VARIANTS = 2;
 // Variants per landscaping prop: flower patches come in six colours; boulders 2 and 3 are mossy.
 export const PROP_VARIANTS = {
   bush: 3, flowers: 6, boulder: 4, reeds: 3, mushrooms: 3, fern: 3, tallgrass: 3, thicket: 3, mound: 2, vent: 2, crystal: 3, ore: 3, alien: 3,
-  logpile: 2, sawhorse: 1, burrow: 2, rubble: 3, tuft: 3, weeds: 3, pebbles: 3, leaves: 3, twigs: 3, bones: 2, puddle: 3
+  logpile: 2, sawhorse: 1, burrow: 2, rubble: 3, tuft: 3, weeds: 3, pebbles: 3, leaves: 3, twigs: 3, bones: 2, puddle: 3,
+  // Benches, fences and carts: 0 runs east–west, 1 north–south. Signs point 0 west or 1 east.
+  lamp: 2, sign: 2, bench: 2, barrel: 3, crate: 2, well: 1, fence: 2, hay: 2, cart: 2
 };
 
 // Run-length text: a palette character, then its repeat count when it repeats (the alphabet
@@ -425,6 +431,67 @@ Object.assign(PROP_DRAW, {
   leaves(b, r, { r: R }){ for (let i = 0; i < 9; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.8), [lx, ly] = polar(r() * TAU, 1.2); b.taper(x - lx, y - ly, x + lx, y + ly, 1.3, 0.5, ['amber1', 'rust2', 'gold0', 'amber0'][i % 4]); } },
   twigs(b, r, { r: R }){ for (let i = 0; i < 3; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.4), [lx, ly] = polar(r() * TAU, R * (0.5 + r() * 0.4)); b.line(x - lx, y - ly, x + lx, y + ly, 0.8, 'dust1'); b.line(x, y, x + ly * 0.4, y - lx * 0.4, 0.6, 'dust1'); } },
   bones(b, r, { r: R }){ for (let i = 0; i < 2; i++){ const [lx, ly] = polar(r() * TAU, R * 0.7), ox = (r() - 0.5) * 3, oy = (r() - 0.5) * 3; b.line(ox - lx, oy - ly, ox + lx, oy + ly, 1, 'plate2'); b.disc(ox - lx, oy - ly, 1, 'plate2'); b.disc(ox + lx, oy + ly, 1, 'plate2'); } },
+  // A lamp post seen from above: a stone foot, the iron hood and its four lit panes.
+  lamp(b, r, spec, a, v){
+    b.disc(0, 0, 4.2, 'plate0'); b.disc(-0.8, -0.8, 2, 'plate1');
+    b.paint(-3.5, -3.5, 3.5, 3.5, (x, y) => Math.abs(x) < 3.2 && Math.abs(y) < 3.2 ? (Math.abs(x) < 0.8 || Math.abs(y) < 0.8 ? 'steel0' : v ? 'amber1' : 'amber2') : null);
+    b.disc(0, 0, 1.1, 'char0');
+  },
+  // A signpost: a post and a pointed board with lettering.
+  sign(b, r, spec, a, v){
+    const d = v ? 1 : -1;
+    b.paint(-7, -3, 7, 3, (x, y) => { const t = x * d; return Math.abs(y) < 2.4 && t > -6 && t < 6 - Math.abs(y) * 0.9 ? (Math.abs(y) < 0.5 && t > -4.5 && t < 3.5 && (Math.floor(t * 1.2) & 1) ? 'dust1' : y < -1.4 ? 'dust5' : 'dust4') : null; });
+    b.disc(-d * 4.2, 3, 1.2, 'dust1');
+  },
+  // A bench: three planks on two iron legs, a back rail behind.
+  bench(b, r, spec, a, v){
+    const at = (x, y) => v ? [y, x] : [x, y];
+    b.paint(-12, -12, 12, 12, (x, y) => { const [u, w] = v ? [y, x] : [x, y]; if (Math.abs(u) > 10 || w < -3.5 || w > 3) return null; if (w < -2.2) return 'dust1'; return Math.floor((w + 3) / 2) & 1 ? 'dust3' : 'dust4'; });
+    for (const u of [-8.5, 8.5]){ const [x, y] = at(u, 3.4); b.line(x - (v ? 0 : 0.6), y - (v ? 0.6 : 0), x + (v ? 0 : 0.6), y + (v ? 0.6 : 0), 1.2, 'char1'); }
+  },
+  // A barrel from above: staves round a lid, two dark hoops.
+  barrel(b, r, spec, a, v){
+    b.disc(0, 0, 4.4, 'char1'); b.disc(0, 0, 3.8, v === 2 ? 'rust1' : 'dust2');
+    b.paint(-4, -4, 4, 4, (x, y) => { const d = Math.hypot(x, y); return d < 3.2 && d > 2.6 ? 'char1' : d < 2.6 ? (Math.floor(x + 4) % 2 ? (v === 2 ? 'rust2' : 'dust4') : (v === 2 ? 'rust1' : 'dust3')) : null; });
+    if (v === 1) b.disc(0, 0, 2.6, 'water1');   // a rain barrel, full
+  },
+  // A wooden crate: a plank border and a cross brace.
+  crate(b, r, spec, a, v){
+    b.paint(-5, -5, 5, 5, (x, y) => { if (Math.abs(x) > 4.4 || Math.abs(y) > 4.4) return null; if (Math.abs(x) > 3.4 || Math.abs(y) > 3.4) return 'dust1'; if (Math.abs(x - y) < 0.8 || (v && Math.abs(x + y) < 0.8)) return 'dust2'; return (Math.floor(y + 4) % 3) ? 'dust4' : 'dust3'; });
+  },
+  // A village well: a ring of stones round dark water, a beam across with the rope and bucket.
+  well(b, r, { r: R }){
+    const k = R / 13;
+    b.disc(0, 0, 9.5 * k, 'plate0');
+    b.paint(-R, -R, R, R, (x, y) => { const d = Math.hypot(x, y) / k, ang = Math.atan2(y, x); if (d > 9.3) return null; if (d > 6) return Math.floor(ang / TAU * 18 + (d > 7.8 ? 0.5 : 0)) % 2 ? 'plate1' : 'plate0'; return d > 5.4 ? 'char1' : d < 2.5 && x + y < 0 ? 'water1' : 'water0'; });
+    b.line(-11 * k, 0, 11 * k, 0, 2.6, 'dust2'); b.line(-11 * k, -0.8, 11 * k, -0.8, 0.7, 'dust4');
+    for (const x of [-10.5 * k, 10.5 * k]) b.disc(x, 0, 2, 'dust1');
+    b.line(2, 0, 2, 3.5, 0.6, 'dust4'); b.disc(2, 4.6, 2, 'dust1'); b.disc(2, 4.6, 1.1, 'water1');
+  },
+  // A length of split-rail fence: posts and two rails.
+  fence(b, r, spec, a, v){
+    const at = (u, w) => v ? [w, u] : [u, w];
+    for (const w of [-1, 1]){ const [x0, y0] = at(-12, w), [x1, y1] = at(12, w); b.line(x0, y0, x1, y1, 1, 'dust2'); }
+    for (const u of [-12, 0, 12]){ const [x, y] = at(u, 0); b.disc(x, y, 1.6, 'dust1'); b.disc(x - 0.4, y - 0.4, 0.7, 'dust4'); }
+  },
+  // Hay: a round bale rolled in a spiral, or a haystack.
+  hay(b, r, { r: R }, a, v){
+    if (R < 10){
+      b.disc(0, 0, R * 0.85, 'gold0');
+      b.paint(-R, -R, R, R, (x, y) => { const d = Math.hypot(x, y); if (d > R * 0.8) return null; const sp = (d + Math.atan2(y, x) / TAU * 2.2) % 2.2; return sp < 0.6 ? 'amber1' : x + y < -2 ? 'gold1' : null; });
+    } else {
+      for (let i = 0; i < 30; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.75); b.taper(x, y, x + (r() - 0.5) * 5, y + (r() - 0.5) * 5, 1.4, 0.4, r() < 0.4 ? 'gold1' : r() < 0.7 ? 'gold0' : 'amber1'); }
+      b.disc(-R * 0.15, -R * 0.15, R * 0.35, 'gold1');
+      if (v) for (const [x, y] of [[-R * 0.8, R * 0.3], [R * 0.6, R * 0.6]]) b.taper(x, y, x + 3, y - 1, 1, 0.3, 'gold1');   // wisps blown off
+    }
+  },
+  // A hand cart: a plank bed, two wheels on its axle and the shafts.
+  cart(b, r, spec, a, v){
+    const at = (u, w) => v ? [w, u] : [u, w];
+    b.paint(-15, -15, 15, 15, (x, y) => { const [u, w] = v ? [y, x] : [x, y]; if (u < -7 || u > 7 || Math.abs(w) > 5) return null; if (u < -6 || u > 6 || Math.abs(w) > 4) return 'dust1'; return Math.floor(u + 7) % 3 ? 'dust3' : 'dust2'; });
+    for (const s of [-1, 1]){ const [x0, y0] = at(-3, s * 6), [x1, y1] = at(3, s * 6); b.line(x0, y0, x1, y1, 1.8, 'char1'); const [sx, sy] = at(7, s * 3), [ex, ey] = at(14, s * 2.5); b.line(sx, sy, ex, ey, 0.9, 'dust2'); }
+    for (let i = 0; i < 3; i++){ const [x, y] = at(-4 + i * 3.5, (r() - 0.5) * 4); b.disc(x, y, 1.6, r() < 0.5 ? 'gold0' : 'dust4'); }
+  },
   // A puddle: still water with a light rim and a sky reflection.
   puddle(b, r, { r: R }){
     for (let i = 0; i < 3; i++){ const [x, y] = polar(r() * TAU, R * 0.3); b.disc(x, y, R * (0.5 + r() * 0.2), 'water1'); }

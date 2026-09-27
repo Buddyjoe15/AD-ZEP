@@ -74,7 +74,18 @@ GW.TREES.props = {
   leaves:    { name: 'Fallen leaves',  sizes: [{ r: 7 }], hp: [1], wood: [0], decor: true },
   twigs:     { name: 'Twigs',          sizes: [{ r: 8 }], hp: [1], wood: [0], decor: true },
   bones:     { name: 'Bones',          sizes: [{ r: 6 }], hp: [Infinity], wood: [0], decor: true },
-  puddle:    { name: 'Puddle',         sizes: [{ r: 9 }], hp: [Infinity], wood: [0], decor: true }
+  puddle:    { name: 'Puddle',         sizes: [{ r: 9 }], hp: [Infinity], wood: [0], decor: true },
+  // Village life round the houses (Genesis settlements). Variant 0/1 is the way benches,
+  // fences and carts run (east–west, north–south) and the way a sign points.
+  lamp:      { name: 'Lamp post',      sizes: [{ r: 8 }], hp: [40], wood: [0] },
+  sign:      { name: 'Signpost',       sizes: [{ r: 10 }], hp: [20], wood: [1] },
+  bench:     { name: 'Bench',          sizes: [{ r: 12 }], hp: [30], wood: [2] },
+  barrel:    { name: 'Barrel',         sizes: [{ r: 6 }], hp: [25], wood: [1] },
+  crate:     { name: 'Crate',          sizes: [{ r: 7 }], hp: [20], wood: [1] },
+  well:      { name: 'Well',           sizes: [{ r: 18 }], hp: [Infinity], wood: [0] },
+  fence:     { name: 'Fence',          sizes: [{ r: 13 }], hp: [20], wood: [1] },
+  hay:       { name: 'Hay',            sizes: [{ r: 7 }, { r: 12 }], hp: [15, 30], wood: [0, 0] },
+  cart:      { name: 'Hand cart',      sizes: [{ r: 15 }], hp: [60], wood: [4] }
 };
 GW.TREES.LOG_ANGLES = 16;
 // Every kind a Genesis map plants, in the order `grid.art.trees.kind` indexes: species first.

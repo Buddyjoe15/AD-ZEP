@@ -1,0 +1,30 @@
+{
+  "name": "genesis_hay",
+  "frameWidth": 92,
+  "frameHeight": 92,
+  "origin": [
+    45.5,
+    45.5
+  ],
+  "worldPxPerArtPx": 0.5,
+  "rows": [
+    "{\"r\":7}",
+    "{\"r\":12}"
+  ],
+  "frameSizes": [
+    60,
+    92
+  ],
+  "columns": "2 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      4,
+      4
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_hay.png",
+  "sheetWidth": 184,
+  "sheetHeight": 184
+}

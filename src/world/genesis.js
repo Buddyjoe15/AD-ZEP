@@ -37,7 +37,7 @@
   // the scan order doesn't leave a direction in the pattern.
   const PASSES = 8;
 
-  function plant(grid, s){
+  function plant(grid, s, extra = []){
     const W = grid.cols, H = grid.rows, N = W * H, TILE = G.CONFIG.TILE, tiles = grid.tiles, art = grid.art;
     const TR = G.TREES, ALL = TR.ALL, id = k => G.Defs.terrain.get(k).id;
     const TREE = id('tree'), FLOOR = id('forest'), GRASS = id('grass'), BUSH = id('bush'), STUMP = id('stump'), LOG = id('fallen_tree');
@@ -258,6 +258,9 @@
       }
     }
 
+    // Village life (towns()), at the places given.
+    for (const q of extra) add(q.x, q.y, 0, q.kind, q.z, q.v);
+
     // 7. Drawing order: dead wood under every tree, small trees under big ones, then north to
     // south, then west to east.
     const layer = q => K[q] >= TR.KINDS.length ? 0 : 1;
@@ -294,6 +297,17 @@
         while (n < 9 && wet((y + dy * n) * W + x + dx * n) && lvl[(y + dy * n) * W + x + dx * n] === l) n++;
         const end = (y + dy * n) * W + x + dx * n;
         if (n - 1 < 3 || n - 1 > 7 || !bank(end, l)) continue;
+        // Only where the river runs straight across the grid here, so the crossing sits square
+        // in it: the same banks two tiles up and down the stream.
+        let square = true;
+        for (const o of [-2, -1, 1, 2]){
+          const bx = x + (dy ? o : 0), by = y + (dx ? o : 0);
+          if (!bank(by * W + bx, l)) { square = false; break; }
+          for (let k = 1; k < n; k++) if (!wet((by + dy * k) * W + bx + dx * k)) { square = false; break; }
+          if (square && !bank((by + dy * n) * W + bx + dx * n, l)) square = false;
+          if (!square) break;
+        }
+        if (!square) continue;
         cands.push({ x, y, dx, dy, n: n - 1, fx, fy, key: hash(x, y, s + 811) });
       }
     cands.sort((a, b) => a.key - b.key);
@@ -358,11 +372,359 @@
     };
   }
 
+
+
+  // One-level banks: Woodlands mixes grassy slopes and short pieces of cliff along the same
+  // edge, which reads as grass growing down a rock face. A piece of cliff between slopes
+  // becomes slope too, and a lone slope in a run of cliff becomes cliff, so each stretch of
+  // bank is one or the other.
+  function banks(grid){
+    const W = grid.cols, H = grid.rows, tiles = grid.tiles, lvl = grid.art.level, id = k => G.Defs.terrain.get(k).id;
+    const CLIFF = id('cliff'), SLOPE = id('slope');
+    for (let pass = 0; pass < 2; pass++){
+      const flip = [];
+      for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++){
+        const i = y * W + x, t = tiles[i];
+        if (t !== CLIFF && t !== SLOPE) continue;
+        let low = lvl[i], nS = 0, nC = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){
+          if (!dx && !dy) continue;
+          const j = (y + dy) * W + x + dx;
+          low = Math.min(low, lvl[j]);
+          if (tiles[j] === SLOPE) nS++; else if (tiles[j] === CLIFF) nC++;
+        }
+        if (lvl[i] - low !== 1) continue;
+        if (t === CLIFF && nS >= 2) flip.push([i, SLOPE]);
+        else if (t === SLOPE && nS === 0 && nC >= 2) flip.push([i, CLIFF]);
+      }
+      for (const [i, t] of flip) tiles[i] = t;
+    }
+    grid.touch();
+  }
+
+  // Bridges run square across the water. Woodlands trails cross rivers on the diagonal, which
+  // leaves L-shaped and stepped bridges; here each bridge becomes a straight deck two tiles wide
+  // running east–west or north–south (whichever way it mostly crossed), the river runs straight
+  // under it for a few tiles either side, and the trail meets each end head on.
+  function bridges(grid, s){
+    const W = grid.cols, H = grid.rows, N = W * H, tiles = grid.tiles, lvl = grid.art.level, id = k => G.Defs.terrain.get(k).id;
+    const BRIDGE = id('bridge'), WATER = id('water'), DEEP = id('deep_water'), BOG = id('bog'), PATH = id('path'), GRASS = id('grass'), FALLS = id('waterfall'), STAIRS = id('steps');
+    const NATURAL = new Set(['grass', 'tall_grass', 'wildflowers', 'forest', 'bush', 'reeds', 'mushrooms', 'swamp', 'path', 'thicket', 'tree'].map(id));
+    const inb = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
+    const at = (x, y) => inb(x, y) ? tiles[y * W + x] : -1;
+    const wetT = t => t === WATER || t === DEEP || t === BOG;
+    const seen = new Uint8Array(N), out = [];
+    for (let s0 = 0; s0 < N; s0++){
+      if (tiles[s0] !== BRIDGE || seen[s0]) continue;
+      const st = [s0], cells = [];
+      seen[s0] = 1;
+      let sEW = 0, sNS = 0, nearFalls = false;
+      const under = new Map();
+      while (st.length){
+        const i = st.pop(), x = i % W, y = (i / W) | 0;
+        cells.push(i);
+        // Pieces of deck a tile apart are one bridge (overlapping trails leave ragged ones).
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++){ const j = (y + dy) * W + x + dx; if (at(x + dx, y + dy) === BRIDGE && !seen[j]){ seen[j] = 1; st.push(j); } }
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){
+          const t = at(x + dx, y + dy);
+          if (t === BRIDGE || t < 0) continue;
+          if (t === FALLS) nearFalls = true;
+          if (wetT(t)) under.set(t, (under.get(t) || 0) + 1);
+          const land = !wetT(t);
+          if (dx){ if (land) sEW++; else sNS++; } else { if (land) sNS++; else sEW++; }
+        }
+      }
+      if (nearFalls) continue;
+      const ew = sEW >= sNS, water = [...under].sort((a, b) => b[1] - a[1])[0]?.[0] ?? WATER;
+      // In (u, v): u along the way over, v across it.
+      const X = (u, v) => ew ? u : v, Y = (u, v) => ew ? v : u;
+      const U = i => ew ? i % W : (i / W) | 0, V = i => ew ? (i / W) | 0 : i % W;
+      const v0 = Math.round(cells.reduce((a, i) => a + V(i), 0) / cells.length - 0.5);
+      let u0 = Math.min(...cells.map(U)), u1 = Math.max(...cells.map(U));
+      const crossable = (u) => [v0, v0 + 1].some(v => { const t = at(X(u, v), Y(u, v)); return t === BRIDGE || wetT(t); });
+      while (crossable(u0 - 1) && u0 > 1) u0--;
+      while (crossable(u1 + 1) && u1 < (ew ? W : H) - 2) u1++;
+      // Long causeways (a trail along a lake shore or over the fen) stay as they are.
+      if (u1 - u0 > 12 || cells.length > 40) continue;
+      // Where trails meet out on the water (another bridge beside the new deck), leave it be.
+      const own = new Set(cells);
+      let joined = false;
+      for (let u = u0 - 1; u <= u1 + 1 && !joined; u++) for (let v = v0 - 1; v <= v0 + 2; v++){ const x = X(u, v), y = Y(u, v); if (at(x, y) === BRIDGE && !own.has(y * W + x)){ joined = true; break; } }
+      if (joined) continue;
+      const L = lvl[s0];
+      // Where the trails came onto the old deck, to reconnect them.
+      const oldEnds = [];
+      for (const i of cells){ const x = i % W, y = (i / W) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){ const t = at(x + dx, y + dy); if (t === PATH || t === STAIRS) oldEnds.push((y + dy) * W + x + dx); } }
+      const saved = new Map(), put = (i, t) => { if (!saved.has(i)) saved.set(i, tiles[i]); tiles[i] = t; };
+      // The old deck goes back to water, the new one goes down.
+      for (const i of cells) put(i, water);
+      for (let u = u0; u <= u1; u++) for (const v of [v0, v0 + 1]){ const x = X(u, v), y = Y(u, v); if (inb(x, y)){ put(y * W + x, BRIDGE); seen[y * W + x] = 1; } }
+      // The river straight under it: open water across the span for three tiles either side,
+      // firm bank beyond the ends.
+      for (const v of [v0 - 3, v0 - 2, v0 - 1, v0 + 2, v0 + 3, v0 + 4]){
+        for (let u = u0; u <= u1; u++){ const x = X(u, v), y = Y(u, v), i = y * W + x; if (inb(x, y) && NATURAL.has(tiles[i]) && lvl[i] === L) put(i, water); }
+        for (const u of [u0 - 1, u0 - 2, u1 + 1, u1 + 2]){ const x = X(u, v), y = Y(u, v), i = y * W + x; if (inb(x, y) && wetT(tiles[i]) && lvl[i] === L) put(i, GRASS); }
+      }
+      // The trail meets it head on.
+      const approach = new Set();
+      for (const u of [u0 - 1, u0 - 2, u0 - 3, u1 + 1, u1 + 2, u1 + 3]) for (const v of [v0, v0 + 1]){
+        const x = X(u, v), y = Y(u, v), i = y * W + x;
+        if (inb(x, y) && (NATURAL.has(tiles[i]) || wetT(tiles[i])) && lvl[i] === L){ put(i, PATH); approach.add(i); }
+      }
+      // Every trail that came onto the old bridge must reach the new one over land (paved
+      // straight to it); if one can't, the bridge stays as it was.
+      const walk = (i, j) => { const t = tiles[j]; return !grid.solidTerrain[t] && !wetT(t) && t !== BRIDGE && Math.abs(lvl[j] - lvl[i]) <= 1; };
+      const links = [];
+      let ok = approach.size > 0;
+      for (const e of oldEnds){
+        if (!ok) break;
+        if (approach.has(e) || tiles[e] === BRIDGE) continue;
+        if (wetT(tiles[e])) continue;   // under the new water: the approach replaces it
+        const p = route(W, H, [e], i => approach.has(i), walk, 40);
+        if (p) links.push(p); else ok = false;
+      }
+      if (!ok){ for (const [i, t] of saved) tiles[i] = t; continue; }
+      for (const i of saved.keys()) grid.art.detail[i] = 0;
+      for (const p of links) for (const i of p) if (NATURAL.has(tiles[i])){ tiles[i] = PATH; grid.art.detail[i] = 0; }
+      out.push({ ew, u0, u1, v0, ends: [[X(u0 - 3, v0), Y(u0 - 3, v0)], [X(u1 + 3, v0), Y(u1 + 3, v0)]] });
+    }
+    grid.touch();
+    return out;
+  }
+
+  // Paves the cheapest way (4 directions, turns cost extra, so paths run straight along the
+  // grid) from the tiles in `from` to the nearest tile `goal(i)` accepts, over tiles `ok(i, j)`
+  // lets a path step between. Returns the tiles walked, or null.
+  function route(W, H, from, goal, ok, maxCost){
+    const N = W * H, cost = new Float32Array(N * 4).fill(Infinity), came = new Int32Array(N * 4).fill(-1), heap = [];
+    const push = (k, c) => { heap.push([c, k]); let i = heap.length - 1; while (i > 0){ const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+    const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length){ heap[0] = last; let i = 0; for (;;){ const l = 2 * i + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
+    const D = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (const i of from) for (let d = 0; d < 4; d++){ cost[i * 4 + d] = 0; push(i * 4 + d, 0); }
+    while (heap.length){
+      const [c, k] = pop();
+      if (c > cost[k] || c > maxCost) continue;
+      const i = k >> 2, d0 = k & 3;
+      if (c > 0 && goal(i)){ const path = []; for (let q = k; q >= 0; q = came[q]) path.push(q >> 2); return path.reverse(); }
+      const x = i % W, y = (i / W) | 0;
+      for (let d = 0; d < 4; d++){
+        const nx = x + D[d][0], ny = y + D[d][1], j = ny * W + nx;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H || (!goal(j) && !ok(i, j))) continue;
+        const nc = c + 1 + (d === d0 ? 0 : 0.6), nk = j * 4 + d;
+        if (nc < cost[nk]){ cost[nk] = nc; came[nk] = k; push(nk, nc); }
+      }
+    }
+    return null;
+  }
+
+  // Villages and camps: buildings that ended up against a cliff, in the water or across a
+  // change of level are moved to open, level ground nearby; every house door gets a path to
+  // the road; each village gets a barn with a fenced paddock and hay, and the lived-in things
+  // round the houses (a well on the green, lamp posts along the lanes, benches, a signpost,
+  // barrels and crates by the walls, a cart). Returns the props to plant and the barns.
+  function towns(grid, s){
+    const W = grid.cols, H = grid.rows, N = W * H, TILE = G.CONFIG.TILE, tiles = grid.tiles, lvl = grid.art.level, id = k => G.Defs.terrain.get(k).id;
+    const WALL = id('wall'), FLOOR = id('floor'), DOOR = id('door'), LOGW = id('log_wall'), PATH = id('path'), GRASS = id('grass'), STAIRS = id('steps'), BRIDGE = id('bridge');
+    const PART = new Set([WALL, FLOOR, DOOR, LOGW]);
+    const BAD = new Set(['cliff', 'slope', 'steps', 'water', 'deep_water', 'waterfall', 'bog', 'bridge', 'cave', 'stepping_stones', 'clearing'].map(id));
+    const OPEN = new Set(['grass', 'tall_grass', 'wildflowers', 'bush', 'forest', 'mushrooms', 'burrow', 'rubble'].map(id));
+    const inb = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
+    const at = (x, y) => inb(x, y) ? tiles[y * W + x] : -1;
+    const places = (grid.art.places || []).filter(p => p.kind === 'settlement' || p.kind === 'camp');
+    const nearestPlace = (x, y) => places.reduce((b, p) => !b || Math.hypot(p.x - x, p.y - y) < Math.hypot(b.x - x, b.y - y) ? p : b, null);
+    // Buildings: joined wall, floor, door and log-wall tiles.
+    const comps = [], of = new Int32Array(N).fill(-1);
+    for (let s0 = 0; s0 < N; s0++){
+      if (of[s0] >= 0 || !PART.has(tiles[s0])) continue;
+      const st = [s0], cells = [];
+      of[s0] = comps.length;
+      while (st.length){
+        const i = st.pop(), x = i % W, y = (i / W) | 0; cells.push(i);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){ const j = (y + dy) * W + x + dx; if (inb(x + dx, y + dy) && of[j] < 0 && PART.has(tiles[j])){ of[j] = comps.length; st.push(j); } }
+      }
+      const xs = cells.map(i => i % W), ys = cells.map(i => (i / W) | 0), x0 = Math.min(...xs), y0 = Math.min(...ys), w = Math.max(...xs) - x0 + 1, h = Math.max(...ys) - y0 + 1;
+      const log = cells.some(i => tiles[i] === LOGW), intact = cells.length === w * h && w >= 3 && h >= 3;
+      comps.push({ x: x0, y: y0, w, h, cells, log, intact, L: lvl[cells[0]] });
+    }
+    // Whether a building stands clear: nothing it touches (or its ring of ground) is cliff,
+    // water or another feature, and all of it is on one level.
+    const clear = c => {
+      for (const i of c.cells){
+        const x = i % W, y = (i / W) | 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){ const t = at(x + dx, y + dy), j = (y + dy) * W + x + dx; if (t < 0 || BAD.has(t) || lvl[j] !== c.L) return false; }
+      }
+      return true;
+    };
+    // Open, level ground for a w × h building with `m` tiles round it.
+    const fits = (x0, y0, w, h, m, L) => {
+      for (let y = y0 - m; y < y0 + h + m; y++) for (let x = x0 - m; x < x0 + w + m; x++){
+        const t = at(x, y), inner = x >= x0 && y >= y0 && x < x0 + w && y < y0 + h;
+        if (t < 0 || lvl[y * W + x] !== L || !(OPEN.has(t) || (!inner && t === PATH))) return false;
+      }
+      return true;
+    };
+    const houses = [];
+    const stamp = (x0, y0, w, h, log, face) => {
+      for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++){ const edge = x === x0 || y === y0 || x === x0 + w - 1 || y === y0 + h - 1; tiles[y * W + x] = edge ? (log ? LOGW : WALL) : FLOOR; grid.art.detail[y * W + x] = 0; }
+      const dx = face.x - (x0 + w / 2), dy = face.y - (y0 + h / 2);
+      let door;
+      if (Math.abs(dx) > Math.abs(dy)) door = { x: dx > 0 ? x0 + w - 1 : x0, y: y0 + Math.floor(h / 2), ox: dx > 0 ? 1 : -1, oy: 0 };
+      else door = { x: x0 + Math.floor(w / 2), y: dy > 0 ? y0 + h - 1 : y0, ox: 0, oy: dy > 0 ? 1 : -1 };
+      tiles[door.y * W + door.x] = DOOR;
+      tiles[(door.y + door.oy) * W + door.x + door.ox] = PATH;
+      const H0 = { x: x0, y: y0, w, h, log, door };
+      houses.push(H0);
+      return H0;
+    };
+    const doorOf = c => {
+      const i = c.cells.find(q => tiles[q] === DOOR);
+      if (i === undefined) return null;
+      const x = i % W, y = (i / W) | 0;
+      return { x, y, ox: x === c.x ? -1 : x === c.x + c.w - 1 ? 1 : 0, oy: y === c.y ? -1 : y === c.y + c.h - 1 ? 1 : 0 };
+    };
+    const place = (c, m) => {
+      const home = nearestPlace(c.x + c.w / 2, c.y + c.h / 2), cx = c.x, cy = c.y;
+      for (let r = 1; r <= 18; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++){
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const x = cx + dx, y = cy + dy;
+        if (!inb(x, y) || !fits(x, y, c.w, c.h, m, c.L)) continue;
+        if (home && Math.hypot(x + c.w / 2 - home.x, y + c.h / 2 - home.y) > 24) continue;
+        return stamp(x, y, c.w, c.h, c.log, home || { x: x + c.w / 2, y: y + c.h + 5 });
+      }
+      return null;
+    };
+    for (const c of comps){
+      if (clear(c)){
+        if (c.intact){ const d = doorOf(c); houses.push({ x: c.x, y: c.y, w: c.w, h: c.h, log: c.log, door: d }); }
+        continue;
+      }
+      // Take it down; an intact house is rebuilt on open ground nearby, a ruin just goes.
+      for (const i of c.cells){ tiles[i] = BAD.has(tiles[i]) ? tiles[i] : GRASS; grid.art.detail[i] = 0; }
+      if (c.intact) place(c, 2);
+    }
+
+    // Villages are kept: most of the long grass and brush between the houses is cut.
+    const THICK = id('tall_grass'), SHRUB = id('bush');
+    for (const p of places.filter(q => q.kind === 'settlement')) for (let y = p.y - 20; y <= p.y + 20; y++) for (let x = p.x - 20; x <= p.x + 20; x++){
+      const i = y * W + x, d = Math.hypot(x - p.x, y - p.y);
+      if (!inb(x, y) || d > 20 || !(tiles[i] === THICK || tiles[i] === SHRUB)) continue;
+      if (hash(x, y, s + 999) < (tiles[i] === THICK ? 0.85 : 0.5) * Math.min(1, (22 - d) / 8)){ tiles[i] = GRASS; grid.art.detail[i] = 0; }
+    }
+    // Barns: one per village, at its edge, with room for a paddock.
+    const barns = [], props = [];
+    const prop = (px, py, kind, z, v) => props.push({ x: Math.round(px), y: Math.round(py), kind, z, v });
+    const h8 = (a, b, q) => Math.floor(hash(a, b, s + q) * 256);
+    for (const p of places.filter(q => q.kind === 'settlement')){
+      const L = lvl[p.y * W + p.x];
+      let done = false;
+      for (let tryN = 0; tryN < 4 && !done; tryN++) for (let r = 10; r <= 28 && !done; r++) for (let k = 0; k < 24 && !done; k++){
+        const th = (k / 24 + hash(p.x, p.y, s + 1001)) * Math.PI * 2, bw = tryN < 2 ? 6 : 5, bh = 4, horiz = (hash(p.x, p.y, s + 1003) < 0.5) !== (tryN & 1) > 0;
+        const w = horiz ? bw : bh, h = horiz ? bh : bw, x = Math.round(p.x + Math.cos(th) * r - w / 2), y = Math.round(p.y + Math.sin(th) * r - h / 2);
+        if (!fits(x, y, w, h, tryN < 2 ? 2 : 1, L)) continue;
+        // The paddock beside it, away from the green.
+        const side = Math.abs(Math.cos(th)) > Math.abs(Math.sin(th)) ? [Math.sign(Math.cos(th)), 0] : [0, Math.sign(Math.sin(th))];
+        const pw = side[0] ? 4 : w, ph = side[1] ? 4 : h, px0 = side[0] > 0 ? x + w + 1 : side[0] < 0 ? x - 5 : x, py0 = side[1] > 0 ? y + h + 1 : side[1] < 0 ? y - 5 : y;
+        const H0 = stamp(x, y, w, h, false, p);
+        barns.push({ x, y, w, h });
+        done = true;
+        if (fits(px0, py0, pw, ph, 0, L)){
+          // Fence round it, rails between posts at every half tile, a gap for the gate.
+          const X0 = px0 * TILE, Y0 = py0 * TILE, X1 = (px0 + pw) * TILE, Y1 = (py0 + ph) * TILE;
+          for (let fx = X0 + 12; fx < X1; fx += 24){ prop(fx, Y0, 'fence', 0, 0); if (Math.abs(fx - (X0 + X1) / 2) > 20) prop(fx, Y1, 'fence', 0, 0); }
+          for (let fy = Y0 + 12; fy < Y1; fy += 24){ prop(X0, fy, 'fence', 0, 1); prop(X1, fy, 'fence', 0, 1); }
+          for (let j = 0; j < 4; j++) prop(X0 + TILE * (0.6 + hash(x, j, s + 1005) * (pw - 1.2)), Y0 + TILE * (0.6 + hash(y, j, s + 1007) * (ph - 1.2)), 'hay', 0, j & 1);
+        }
+        const d = H0.door, sx = (d.x + d.ox * 2 + 0.5) * TILE, sy = (d.y + d.oy * 2 + 0.5) * TILE;
+        prop(sx + d.oy * 30, sy + d.ox * 30, 'hay', 1, 0);
+        prop(sx - d.oy * 34, sy - d.ox * 34, 'cart', 0, d.ox ? 1 : 0);
+      }
+    }
+
+    // Paths from every door to the road (the trails and the green, not another door step).
+    const road = new Uint8Array(N);
+    {
+      const seen = new Uint8Array(N);
+      for (let s0 = 0; s0 < N; s0++){
+        if (seen[s0] || (tiles[s0] !== PATH && tiles[s0] !== STAIRS && tiles[s0] !== BRIDGE)) continue;
+        const st = [s0], cells = []; seen[s0] = 1;
+        while (st.length){ const i = st.pop(), x = i % W, y = (i / W) | 0; cells.push(i); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){ const t = at(x + dx, y + dy), j = (y + dy) * W + x + dx; if ((t === PATH || t === STAIRS || t === BRIDGE) && !seen[j]){ seen[j] = 1; st.push(j); } } }
+        if (cells.length >= 12) for (const i of cells) road[i] = 1;
+      }
+    }
+    for (const Hs of houses){
+      const d = Hs.door;
+      if (!d) continue;
+      const st = (d.y + d.oy) * W + d.x + d.ox, L = lvl[st];
+      if (road[st]) continue;
+      const p = route(W, H, [st], i => road[i] === 1 && lvl[i] === L, (i, j) => lvl[j] === L && (OPEN.has(tiles[j]) || tiles[j] === PATH), 50);
+      if (p) for (const i of p) if (OPEN.has(tiles[i])){ tiles[i] = PATH; grid.art.detail[i] = 0; }
+      if (p) for (const i of p) road[i] = 1;
+    }
+
+    // The lived-in village.
+    for (const p of places){
+      const L = lvl[p.y * W + p.x], T2 = TILE / 2;
+      if (p.kind === 'settlement'){
+        prop(p.x * TILE + T2, p.y * TILE + T2, 'well', 0, 0);
+        // Benches facing the well, a signpost at the corner of the green.
+        for (const [dx, dy] of [[0, -3], [0, 3], [-3, 0], [3, 0]]) if (hash(p.x + dx, p.y + dy, s + 1011) < 0.6 && OPEN.has(at(p.x + dx, p.y + dy))) prop((p.x + dx) * TILE + T2 - dx * 6, (p.y + dy) * TILE + T2 - dy * 6, 'bench', 0, dx ? 1 : 0);
+        prop((p.x + 2) * TILE + TILE - 6, (p.y - 2) * TILE + 8, 'sign', 0, hash(p.x, p.y, s + 1013) < 0.5 ? 0 : 1);
+        // Lamp posts along the lanes, at the edge of the path, no two close together.
+        const lamps = [];
+        for (let y = p.y - 20; y <= p.y + 20; y++) for (let x = p.x - 20; x <= p.x + 20; x++){
+          const i = y * W + x;
+          if (!inb(x, y) || tiles[i] !== PATH || lvl[i] !== L || Math.hypot(x - p.x, y - p.y) > 20 || Math.hypot(x - p.x, y - p.y) < 3) continue;
+          if (hash(x, y, s + 1015) > 0.5 || lamps.some(q => Math.hypot(q[0] - x, q[1] - y) < 6)) continue;
+          const side = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dy]) => OPEN.has(at(x + dx, y + dy)));
+          if (!side) continue;
+          lamps.push([x, y]);
+          prop(x * TILE + T2 + side[0] * 20, y * TILE + T2 + side[1] * 20, 'lamp', 0, h8(x, y, 1017) & 1);
+        }
+      }
+    }
+    // Barrels, crates and rain barrels against the house walls (not across the door).
+    for (const Hs of houses){
+      const home = nearestPlace(Hs.x, Hs.y);
+      if (!home || barns.some(b => b.x === Hs.x && b.y === Hs.y)) continue;
+      const n = 1 + Math.floor(hash(Hs.x, Hs.y, s + 1021) * 3);
+      for (let j = 0; j < n; j++){
+        const side = Math.floor(hash(Hs.x, Hs.y, s + 1023 + j) * 4), f = 0.15 + hash(Hs.x, Hs.y, s + 1025 + j) * 0.7;
+        const [ox, oy] = [[0, -1], [1, 0], [0, 1], [-1, 0]][side];
+        if (Hs.door && ox === Hs.door.ox && oy === Hs.door.oy) continue;
+        let px = (Hs.x + (ox > 0 ? Hs.w : ox < 0 ? 0 : Hs.w * f)) * TILE + ox * 12, py = (Hs.y + (oy > 0 ? Hs.h : oy < 0 ? 0 : Hs.h * f)) * TILE + oy * 12;
+        const t = at(Math.floor(px / TILE), Math.floor(py / TILE));
+        if (!OPEN.has(t) && t !== PATH) continue;
+        const k = hash(px, py, s + 1027);
+        if (k < 0.55){ prop(px, py, 'barrel', 0, k < 0.12 ? 1 : k < 0.2 ? 2 : 0); if (k < 0.3) prop(px + (oy ? 9 : 0), py + (ox ? 9 : 0), 'barrel', 0, 0); }
+        else { prop(px, py, 'crate', 0, k < 0.8 ? 0 : 1); if (k > 0.85) prop(px + (oy ? 10 : 0), py + (ox ? 10 : 0), 'barrel', 0, 0); }
+      }
+    }
+    // Flower beds along the front of some houses, either side of the door.
+    for (const Hs of houses){
+      const d = Hs.door;
+      if (!d || Hs.log || barns.some(b => b.x === Hs.x && b.y === Hs.y) || hash(Hs.x, Hs.y, s + 1031) > 0.5) continue;
+      const colour = Math.floor(hash(Hs.x, Hs.y, s + 1033) * 6);
+      const along = d.ox ? [0, 1] : [1, 0], len = d.ox ? Hs.h : Hs.w, start = d.ox ? Hs.y : Hs.x;
+      for (let k = 0; k < len; k++){
+        const t = start + k, px = d.ox ? (d.x + (d.ox > 0 ? 1 : 0)) * TILE + d.ox * 9 : (t + 0.5) * TILE, py = d.ox ? (t + 0.5) * TILE : (d.y + (d.oy > 0 ? 1 : 0)) * TILE + d.oy * 9;
+        if (t === (d.ox ? d.y : d.x)) continue;   // not across the door
+        const tt = at(Math.floor(px / TILE), Math.floor(py / TILE));
+        if (OPEN.has(tt)) prop(px, py, 'flowers', 0, colour);
+      }
+    }
+    grid.touch();
+    return { props, barns };
+  }
+
   function genesis(seed, opts = {}){
     const grid = G.MapGen.woodlands(seed, opts);
     grid.art.generator = 'genesis';
     grid.art.version = VERSION;
-    grid.art.trees = plant(grid, (seed | 0) ^ 0x5eed);
+    banks(grid);
+    grid.art.bridges = bridges(grid, (seed | 0) ^ 0xb1d);
+    const town = towns(grid, (seed | 0) ^ 0x70e);
+    grid.art.barns = town.barns;
+    grid.art.trees = plant(grid, (seed | 0) ^ 0x5eed, town.props);
     grid.art.fords = fords(grid, (seed | 0) ^ 0xf0d);
     return grid;
   }

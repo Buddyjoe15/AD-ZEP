@@ -1,0 +1,28 @@
+{
+  "name": "genesis_cart",
+  "frameWidth": 108,
+  "frameHeight": 108,
+  "origin": [
+    53.5,
+    53.5
+  ],
+  "worldPxPerArtPx": 0.5,
+  "rows": [
+    "{\"r\":15}"
+  ],
+  "frameSizes": [
+    108
+  ],
+  "columns": "2 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      4,
+      4
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_cart.png",
+  "sheetWidth": 216,
+  "sheetHeight": 108
+}

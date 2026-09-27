@@ -14,7 +14,7 @@
   const G = GW, Math = globalThis.Math;
   const HEX = {
     char0: '#231f1c', char1: '#433a33', dust0: '#5e4f3d', dust1: '#6f5e48', dust2: '#7f6c53', dust3: '#8e7a5e', dust4: '#9e896b', dust5: '#b09c7e',
-    steel0: '#1f2c34', steel1: '#34495a', steel2: '#557184', plate0: '#7f8b86', plate1: '#b3bdb5', rust0: '#4a2a1e', rust1: '#7d4630', rust2: '#a8653f',
+    steel0: '#1f2c34', steel1: '#34495a', steel2: '#557184', plate0: '#7f8b86', plate1: '#b3bdb5', plate2: '#e3eae2', rust0: '#4a2a1e', rust1: '#7d4630', rust2: '#a8653f',
     leaf1: '#28502d', grass1: '#4d6946', grass2: '#5d7a4f', amber1: '#c98a2e', amber2: '#f2c66a', outline: '#0d1419'
   };
   const LE = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
@@ -38,6 +38,15 @@
       w, h, d,
       set(x, y, c){ if (x >= 0 && y >= 0 && x < w && y < h) d[y * w + x] = c; },
       get(x, y){ return x >= 0 && y >= 0 && x < w && y < h ? d[y * w + x] : 0; },
+      // Shades what is already drawn here (a shadow falling on the roof), or lays a see-through
+      // shadow where nothing is.
+      shade(x, y){
+        if (x < 0 || y < 0 || x >= w || y >= h) return;
+        const c = d[y * w + x];
+        if (!(c >>> 24) || (c >>> 24) < 255){ d[y * w + x] = SHADOW; return; }
+        const f = v => Math.round(v * 0.62);
+        d[y * w + x] = LE ? ((0xff << 24) | (f((c >> 16) & 255) << 16) | (f((c >> 8) & 255) << 8) | f(c & 255)) >>> 0 : ((f(c >>> 24) << 24) | (f((c >> 16) & 255) << 16) | (f((c >> 8) & 255) << 8) | 255) >>> 0;
+      },
       canvas(){ const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').putImageData(img, 0, 0); return cv; }
     };
   }
@@ -73,11 +82,12 @@
         const t = tiles[y * cols + x], edge = x === x0 || y === y0 || x === x1 || y === y1;
         if (edge ? !(t === k.wall || t === k.log_wall || t === k.door) : t !== k.floor){ intact = false; break; }
       }
-      list.push({ id, x: x0, y: y0, w, h, intact, log, door, cells, cv: null });
+      const barn = intact && (a.barns || []).some(b => b.x === x0 && b.y === y0 && b.w === w && b.h === h);
+      list.push({ id, x: x0, y: y0, w, h, intact, log, barn, door, cells, cv: null });
     }
     return (a.houses = { list, of });
   }
-  G.Events.on('terrain:changed', () => { const grd = G.State.grid; if (grd && grd.art){ grd.art.houses = null; grd.art.bridges = null; } });
+  G.Events.on('terrain:changed', () => { const grd = G.State.grid; if (grd && grd.art){ grd.art.houses = null; grd.art.bridgeWay = null; } });
 
   const PAD = 12;   // world px round a house canvas, for the eaves and shadow
   // An intact house: a roof over the whole building, hipped on stone houses (four slopes, the
@@ -87,13 +97,14 @@
   function roof(H, grd){
     const T = G.CONFIG.TILE, W = (H.w * T + PAD * 2) * 2, Hh = (H.h * T + PAD * 2) * 2, b = buffer(W, Hh), O = PAD * 2, OV = 6;
     const rx0 = O - OV, ry0 = O - OV, rx1 = O + H.w * T * 2 + OV, ry1 = O + H.h * T * 2 + OV, seed = H.x * 7919 + H.y;
-    const horiz = H.w >= H.h, mat = H.log ? 'plank' : h3(H.x, H.y, 71) < 0.5 ? 'slate' : 'shingle', hipped = !H.log;
+    const horiz = H.w >= H.h, mat = H.barn ? 'barn' : H.log ? 'plank' : h3(H.x, H.y, 71) < 0.5 ? 'slate' : 'shingle', hipped = !H.log && !H.barn;
     const RAMP = {
       slate: [PX.steel0, PX.steel1, PX.steel2, PX.plate0, PX.plate1],
       shingle: [PX.rust0, PX.rust1, PX.rust2, PX.dust4, PX.dust5],
-      plank: [PX.dust0, PX.dust1, PX.dust2, PX.dust3, PX.dust4]
+      plank: [PX.dust0, PX.dust1, PX.dust2, PX.dust3, PX.dust4],
+      barn: [PX.rust0, PX.rust1, PX.rust1, PX.rust2, PX.plate1]
     }[mat];
-    const CW = mat === 'slate' ? 12 : mat === 'shingle' ? 9 : 10, CH = mat === 'plank' ? 1e9 : 7;   // tile width, course height
+    const CW = mat === 'slate' ? 12 : mat === 'shingle' ? 9 : 10, CH = mat === 'plank' || mat === 'barn' ? 1e9 : 7;   // tile width, course height
     const inRoof = (x, y) => x >= rx0 && y >= ry0 && x < rx1 && y < ry1;
     // Shadow first, down and right.
     for (let y = ry0 + 16; y < ry1 + 16; y++) for (let x = rx0 + 16; x < rx1 + 16; x++) if (!inRoof(x, y)) b.set(x, y, SHADOW);
@@ -111,11 +122,11 @@
       let c;
       const ridge = hipped ? Math.abs((half - dist) - end) < 1.2 && end <= half || (!onEnd && dist < 1.5 && end >= half - 1) : dist < 2;
       if (ridge) c = RAMP[4];                                                     // ridge and hip caps
-      else if (q < 2.5) c = RAMP[0];                                              // eaves
-      else if (mat === 'plank'){
+      else if (q < 2.5) c = mat === 'barn' ? PX.plate1 : RAMP[0];                // eaves (a barn's painted white)
+      else if (mat === 'plank' || mat === 'barn'){
         // Boards run down the slope, a dark seam between them, battens across now and then.
         const bd = Math.floor(e / 10), seam = Math.floor(e) % 10 === 0, batten = Math.abs(q - half * 0.5) < 1.5;
-        v = base - 0.3 + (h3(bd, 1, seed) - 0.5) * 0.9 + (dt - 0.5) * 0.3 + (q / half) * 0.3;
+        v = mat === 'barn' ? base - 0.1 + (h3(bd, 1, seed) - 0.5) * 0.7 : base - 0.3 + (h3(bd, 1, seed) - 0.5) * 0.9 + (dt - 0.5) * 0.3 + (q / half) * 0.3;
         c = seam || batten ? RAMP[0] : RAMP[Math.max(0, Math.min(4, Math.round(v)))];
       } else {
         const joint = Math.floor(e + (row & 1) * CW / 2 + h3(row, 3, seed) * 3) % CW === 0;
@@ -129,26 +140,35 @@
     // Outline round the roof.
     for (let y = ry0 - 1; y <= ry1; y++) for (let x = rx0 - 1; x <= rx1; x++) if (!inRoof(x, y) && (inRoof(x + 1, y) || inRoof(x - 1, y) || inRoof(x, y + 1) || inRoof(x, y - 1))) b.set(x, y, PX.outline);
     // A stone chimney on the lit slope of some houses, with its shadow down the roof.
-    if (!H.log && h3(H.x, H.y, 73) < 0.65){
+    if (!H.log && !H.barn && h3(H.x, H.y, 73) < 0.65){
       const f = 0.3 + h3(H.x, H.y, 75) * 0.4, ax = horiz ? rx0 + len * f : (rx0 + rx1) / 2 - 12, ay = horiz ? (ry0 + ry1) / 2 - 12 : ry0 + len * f;
-      for (let y = 0; y < 16; y++) for (let x = 0; x < 12; x++) b.set(Math.round(ax + 7 + x), Math.round(ay + 7 + y), SHADOW);
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 12; x++) b.shade(Math.round(ax + 7 + x), Math.round(ay + 7 + y));
       for (let y = -7; y < 7; y++) for (let x = -7; x < 7; x++){
         const edge = x === -7 || y === -7 || x === 6 || y === 6, lit = x < -4 || y < -4, dark = x > 3 || y > 3;
         const course = (y + 7) % 4 === 0 || (x + 7 + (((y + 7) >> 2) & 1) * 3) % 6 === 0;
         b.set(Math.round(ax + x), Math.round(ay + y), edge ? PX.outline : Math.abs(x) < 3 && Math.abs(y) < 3 ? PX.char0 : lit ? PX.plate1 : dark ? PX.dust2 : course ? PX.dust2 : PX.plate0);
       }
     }
+    // A barn: a louvred cupola on the ridge, and big double doors under the eaves.
+    if (H.barn){
+      const ax = Math.round((rx0 + rx1) / 2), ay = Math.round((ry0 + ry1) / 2);
+      for (let y = 0; y < 26; y++) for (let x = 0; x < 20; x++) b.shade(ax + 14 + x, ay + 14 + y);
+      for (let y = -16; y < 16; y++) for (let x = -16; x < 16; x++){
+        const edge = x === -16 || y === -16 || x === 15 || y === 15, lit = horiz ? y < 0 : x < 0, rim = Math.abs(x) > 12 || Math.abs(y) > 12;
+        b.set(ax + x, ay + y, edge ? PX.outline : rim ? (lit ? PX.plate2 : PX.plate0) : (horiz ? Math.abs(y) < 1 : Math.abs(x) < 1) ? PX.plate1 : ((horiz ? x : y) + 16) % 4 < 2 ? PX.char0 : lit ? PX.plate1 : PX.plate0);
+      }
+    }
     // A step at the door, out from under the eaves.
     if (H.door){
       const dx = (H.door.x - H.x) * T * 2 + O + T, dy = (H.door.y - H.y) * T * 2 + O + T;
       const out = H.door.y === H.y + H.h - 1 ? [0, 1] : H.door.y === H.y ? [0, -1] : H.door.x === H.x ? [-1, 0] : [1, 0];
-      const cx = dx + out[0] * (T + OV + 5), cy = dy + out[1] * (T + OV + 5), sw = out[0] ? 6 : 14, sh = out[0] ? 14 : 6;
+      const cx = dx + out[0] * (T + OV + 5), cy = dy + out[1] * (T + OV + 5), sw = out[0] ? 6 : H.barn ? 28 : 14, sh = out[0] ? (H.barn ? 28 : 14) : 6;
       for (let y = -sh; y <= sh; y++) for (let x = -sw; x <= sw; x++){
         const edge = Math.abs(x) === sw || Math.abs(y) === sh;
         b.set(cx + x, cy + y, edge ? PX.dust0 : (out[0] ? x : y) % 4 === 0 ? PX.dust2 : x + y < 0 ? PX.dust4 : PX.dust3);
       }
       // A lamp by the door on some.
-      if (h3(H.x, H.y, 77) < 0.4){ const lx = cx + (out[0] ? 0 : sw + 4), ly = cy + (out[0] ? sh + 4 : 0); for (const [x, y] of [[0, 0], [1, 0], [0, 1], [1, 1]]) b.set(lx + x, ly + y, PX.amber2); b.set(lx - 1, ly, PX.amber1); }
+      if (!H.barn && h3(H.x, H.y, 77) < 0.4){ const lx = cx + (out[0] ? 0 : sw + 4), ly = cy + (out[0] ? sh + 4 : 0); for (const [x, y] of [[0, 0], [1, 0], [0, 1], [1, 1]]) b.set(lx + x, ly + y, PX.amber2); b.set(lx - 1, ly, PX.amber1); }
     }
     return b.canvas();
   }
@@ -247,7 +267,7 @@
   // way with more land at its ends and water at its sides). Tile index -> true for east–west.
   function bridges(grd){
     const a = grd.art;
-    if (a.bridges) return a.bridges;
+    if (a.bridgeWay) return a.bridgeWay;
     const k = ids(), cols = grd.cols, tiles = grd.tiles, ew = new Map();
     const wet = t => t === k.water || t === k.deep_water || t === k.waterfall || t === k.bog || t === k.stepping_stones;
     const at = (x, y) => x >= 0 && y >= 0 && x < cols && y < grd.rows ? tiles[y * cols + x] : -1;
@@ -270,7 +290,7 @@
       const way = sEW >= sNS;
       for (const i of cells) ew.set(i, way);
     }
-    return (a.bridges = ew);
+    return (a.bridgeWay = ew);
   }
 
   // A cave mouth in a south-facing cliff face, on a 96 × 144 art px canvas from the tile's top.

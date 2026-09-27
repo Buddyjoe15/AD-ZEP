@@ -739,13 +739,45 @@ test('a woodlands game starts, plays and survives a save', () => {
   assert.equal(fnv(G.State.grid.art.level), level, 'heights rebuilt from the seed');
 });
 
+test('genesis villages and bridges: buildings clear of cliffs and water, paths to the doors, village props, square bridges', () => {
+  const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
+  for (const seed of [72491, 2]){
+    const grid = G.MapGen.genesis(seed), art = grid.art, cols = grid.cols, lvl = art.level, tiles = grid.tiles;
+    const PART = new Set(['wall', 'floor', 'door', 'log_wall'].map(id)), BAD = new Set(['cliff', 'slope', 'steps', 'water', 'deep_water', 'waterfall', 'bog', 'bridge', 'cave', 'stepping_stones'].map(id));
+    // No building touches a cliff, the water or a change of level.
+    for (let i = 0; i < grid.size; i++){
+      if (!PART.has(tiles[i])) continue;
+      const x = i % cols, y = (i / cols) | 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){ const j = (y + dy) * cols + x + dx; assert.ok(!BAD.has(tiles[j]) && lvl[j] === lvl[i], `building at ${x},${y} beside a feature`); }
+    }
+    // Every door opens onto a path.
+    for (let i = 0; i < grid.size; i++){
+      if (tiles[i] !== id('door')) continue;
+      const x = i % cols, y = (i / cols) | 0;
+      assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => tiles[(y + dy) * cols + x + dx] === id('path')), `door at ${x},${y} opens onto a path`);
+    }
+    // Each village has a barn, a well and lamp posts.
+    const villages = art.places.filter(p => p.kind === 'settlement').length, tr = art.trees, n = k => { let c = 0; for (let q = 0; q < tr.count; q++) if (G.TREES.ALL[tr.kind[q]] === k) c++; return c; };
+    assert.equal(art.barns.length, villages, 'a barn per village');
+    assert.equal(n('well'), villages, 'a well per village');
+    for (const k of ['lamp', 'bench', 'sign', 'fence', 'hay', 'cart']) assert.ok(n(k) >= villages, k + ': ' + n(k));
+    assert.ok(n('barrel') + n('crate') > villages * 3, 'barrels and crates');
+    // Bridges it squared up are straight decks two tiles wide across open water.
+    assert.ok(art.bridges.length > 0, 'bridges squared up');
+    for (const b of art.bridges) for (let u = b.u0; u <= b.u1; u++) for (const v of [b.v0, b.v0 + 1]){
+      const x = b.ew ? u : v, y = b.ew ? v : u;
+      assert.equal(tiles[y * cols + x], id('bridge'), `deck at ${x},${y}`);
+    }
+  }
+});
+
 test('genesis plants free-standing trees in thick and thin clusters, off the tile centres, with stumps and fallen trees among them', () => {
   const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
   const grid = G.MapGen.genesis(72491), art = grid.art, tr = art.trees, cols = grid.cols;
   // Pinned: saves of this map type rebuild their terrain and trees from the seed.
   assert.equal(art.generator, 'genesis');
-  assert.equal(fnv(grid.tiles), 1792859369, 'genesis terrain unchanged');
-  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 4323284, 'genesis trees unchanged');
+  assert.equal(fnv(grid.tiles), 1837240040, 'genesis terrain unchanged');
+  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 3246375447, 'genesis trees unchanged');
   const again = G.MapGen.genesis(72491);
   assert.equal(fnv(again.tiles), fnv(grid.tiles), 'same seed, same map');
   assert.equal(fnv(G.MapGen.woodlands(72491).tiles), 1031677493, 'woodlands itself is untouched');

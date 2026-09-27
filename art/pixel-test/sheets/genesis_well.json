@@ -1,0 +1,28 @@
+{
+  "name": "genesis_well",
+  "frameWidth": 128,
+  "frameHeight": 128,
+  "origin": [
+    63.5,
+    63.5
+  ],
+  "worldPxPerArtPx": 0.5,
+  "rows": [
+    "{\"r\":18}"
+  ],
+  "frameSizes": [
+    128
+  ],
+  "columns": "1 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      4,
+      4
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_well.png",
+  "sheetWidth": 128,
+  "sheetHeight": 128
+}

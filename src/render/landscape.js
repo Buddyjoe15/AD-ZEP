@@ -54,6 +54,22 @@
     const a = NOISE[ya + xa], b = NOISE[ya + xb], c = NOISE[yb + xa], d = NOISE[yb + xb];
     return a + (b - a) * fx + (c - a + (a - b - c + d) * fx) * fy;
   };
+  // Hummocks in the fen: round mounds scattered on a jittered grid (art px). Returns 1 on a
+  // mound (HUM.d: 0 at its top to 1 at its foot, HUM.l: how lit), -1 in one's shadow, else 0.
+  const HUM = { d: 0, l: 0 }, HC = 30;
+  const hummock = (ax, ay, n) => {
+    const cx0 = Math.floor(ax / HC), cy0 = Math.floor(ay / HC);
+    let hit = 0, best = 2;
+    for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++){
+      const gx = cx0 + i, gy = cy0 + j;
+      if (G.hashRandom3(gx, gy, 811) > 0.32) continue;
+      const r0 = 6 + G.hashRandom3(gx, gy, 819) * 8, mx = (gx + 0.25 + G.hashRandom3(gx, gy, 813) * 0.5) * HC, my = (gy + 0.25 + G.hashRandom3(gx, gy, 817) * 0.5) * HC;
+      const dx = ax - mx, dy = ay - my, rr = r0 * (0.85 + n * 0.3), d = Math.sqrt(dx * dx + dy * dy) / rr;
+      if (d < 1){ if (d < best){ best = d; hit = 1; const h = Math.sqrt(1 - d * d); HUM.d = d; HUM.l = (-(dx + dy) / rr) * 0.55 + h * 0.45; } }
+      else if (!hit && (dx - rr * 0.45) ** 2 + (dy - rr * 0.45) ** 2 < rr * rr) hit = -1;
+    }
+    return hit;
+  };
   // Two scales that don't line up, so the shapes don't visibly repeat.
   const fbm = (x, y, sx, sy) => noiseB(x / 5.3 + sx, y / 5.3 + sy) * 0.65 + noiseB(x / 2.1 + sy, y / 2.1 + sx) * 0.35;
   // Fractured rock, 128 × 128 art px, repeating: irregular slabs (wider than tall) from a
@@ -98,7 +114,7 @@
     const n = grd.size;
     a.land = { E: new Float32Array(n), W: new Float32Array(n), D: new Float32Array(n), noFace: new Uint8Array(n), near: new Uint8Array(n), P: new Float32Array(n), B: new Uint8Array(n), PK: new Uint8Array(n), S: new Float32Array(n), stones: new Map() };
     // Stepping stones (grid.art.fords) listed by every tile they or their wake reach, and each
-    // one's shape: stretched and turned, with a lumpy outline, in one of three kinds of stone.
+    // one's shape: stretched and turned, with a lumpy outline, in one of three greys of stone.
     const f = a.fords, t = T();
     if (f){
       const n2 = f.count, h = G.hashRandom3, R = a.land.rock = { ca: new Float32Array(n2), sa: new Float32Array(n2), st: new Float32Array(n2), c2: new Float32Array(n2), s2: new Float32Array(n2), c3: new Float32Array(n2), s3: new Float32Array(n2), kind: new Uint8Array(n2), tone: new Float32Array(n2) };
@@ -110,7 +126,7 @@
       }
     }
     if (f) for (let s = 0; s < f.count; s++){
-      const reach = f.land[s] ? f.r[s] + 2 : f.r[s] * 4;
+      const reach = f.land[s] ? f.r[s] + 2 : Math.max(f.r[s] * 4, 20);   // the wake, or the gravel round it
       for (let y = Math.floor((f.y[s] - reach) / t); y <= Math.floor((f.y[s] + reach) / t); y++) for (let x = Math.floor((f.x[s] - reach) / t); x <= Math.floor((f.x[s] + reach) / t); x++){
         if (!grd.inBounds(x, y)) continue;
         const i = y * grd.cols + x;
@@ -313,7 +329,11 @@
             // A slope or carved steps sit on either side of the rim (the rim wobbles across the tile
             // edge), so check both.
             let ramp = 0;
-            if (face){ const ry = oy + rimY * step, a1 = Math.min(rows - 1, Math.max(0, Math.floor((ry - 3) / t))), b1 = Math.min(rows - 1, Math.max(0, Math.floor((ry + 3) / t))); ramp = Math.max(L.noFace[a1 * cols + gx], L.noFace[b1 * cols + gx]); }
+            if ((face || (cliffs && rimL > lp && ft < Fc + fx7))){ const ry = oy + rimY * step, a1 = Math.min(rows - 1, Math.max(0, Math.floor((ry - 3) / t))), b1 = Math.min(rows - 1, Math.max(0, Math.floor((ry + 3) / t))); ramp = Math.max(L.noFace[a1 * cols + gx], L.noFace[b1 * cols + gx]);
+              // Where a bank steps diagonally the rim crosses a plain tile: the bank is beside it.
+              if (!ramp && grd.tiles[a1 * cols + gx] !== k.CLIFF && grd.tiles[b1 * cols + gx] !== k.CLIFF)
+                for (const gx2 of [gx - 1, gx + 1]) if (gx2 >= 0 && gx2 < cols) ramp = Math.max(ramp, L.noFace[a1 * cols + gx2], L.noFace[b1 * cols + gx2]);
+            }
             let w = Wi;
             if (wet){ const q = rowJ[r], a0 = colW[q]; w = a0 + (colW[q + 1] - a0) * rowF[r] + (NOISE[((ay + 31) & (NS - 1)) * NS + ((ax + 57) & (NS - 1))] - 0.5) * 0.14; }
             // Stepping stones: wet rock lit from the top left, a ring of foam, a bow wave upstream
@@ -340,15 +360,21 @@
                   const tone = 0.5 + lit * 0.35 + (n - 0.5) * 0.35 + dith * 0.12;
                   col = best > -0.9 ? P.char1 : n > 0.82 ? P.grass1 : tone > 0.72 ? P.dust5 : tone > 0.48 ? P.dust4 : tone > 0.25 ? P.plate0 : P.dust3;
                 } else {
-                  // Grey granite, brown sandstone or dark basalt, each lit from the top left.
+                  // Grey granite, lichened river stone or dark basalt, each lit from the top left.
                   const tone = 0.5 + lit * 0.45 + (n - 0.5) * 0.3 + dith * 0.12 + RK.tone[bq], kd = RK.kind[bq];
-                  if (best > -Math.min(1.2, rr * 0.3)) col = kd === 1 ? P.dust0 : P.steel1;          // its dark wet edge
+                  if (best > -Math.min(1.2, rr * 0.3)) col = P.steel1;                                 // its dark wet edge
                   else if (lit > 0.1 && n > 0.8) col = P.leaf1;                                       // moss on top
-                  else if (kd === 1) col = tone > 0.78 ? P.dust4 : tone > 0.52 ? P.dust3 : tone > 0.3 ? P.dust2 : P.dust1;
+                  else if (kd === 1) col = n > 0.7 && dith < 0.5 ? P.plate2 : tone > 0.7 ? P.plate0 : tone > 0.42 ? P.steel2 : P.steel1;
                   else if (kd === 2) col = tone > 0.8 ? P.steel2 : tone > 0.45 ? P.steel1 : P.steel0;
                   else col = tone > 0.78 ? P.plate1 : tone > 0.52 ? P.plate0 : tone > 0.3 ? P.steel2 : P.steel1;
                 }
-              } else if (w >= 0.5 && !fd.land[bq] && best < Math.min(1.8, fd.r[bq] * 0.3 + 0.6)){
+              } else if (w > 0.26 && w < 0.66 && best < 16 && dith < 1.25 - best / 13 - (w < 0.4 ? (0.4 - w) * 5 : 0)){
+                // Where the crossing meets the shore: a bar of wet gravel running from the rocks
+                // up into the bank, grey stones in the shallows and on the mud, so they sit in it.
+                const gv = NOISE[((ay * 3 + 7) & (NS - 1)) * NS + ((ax * 3 + 29) & (NS - 1))];
+                col = w >= 0.5 ? (gv > 0.62 ? P.plate0 : gv > 0.42 ? P.water2 : gv > 0.3 ? P.steel2 : P.water1)
+                  : gv > 0.66 ? P.plate1 : gv > 0.48 ? P.plate0 : gv > 0.32 ? P.steel2 : P.dust1;
+              } else if (w >= 0.6 && !fd.land[bq] && best < Math.min(1.8, fd.r[bq] * 0.3 + 0.6)){
                 const up = (wx - fd.x[bq]) * fd.fx[bq] + (wy - fd.y[bq]) * fd.fy[bq] < 0;
                 col = up && dith < 0.7 ? P.white : P.water3;                      // a thin foam ring, brightest upstream
               } else if (w >= 0.5 && wake > 0 && dith < wake * 0.5) col = wake > 0.7 && n > 0.6 ? P.white : P.water3;
@@ -360,8 +386,15 @@
               // or steps cut into the rock, in the same band a rock face would take.
               const f = ft / Fc;
               if (ramp === 2) col = (Math.floor(ft / (7 * res)) & 1) ? (f > 0.5 ? P.dust1 : P.dust2) : (ft % (7 * res) < res ? P.dust4 : P.dust3);
-              else if (f < 0.06 && dith < 0.5) col = P.grass3;                          // the lit brow
-              else { col = P.char0; alpha = (18 + f * 55 + dith * 12) | 0; }            // the grass darkening down the ramp
+              else {
+                // A grassy bank, not a face: the brow catches the light, the grass shades softly
+                // towards the foot, with tufts and a little bare earth on the way down.
+                const tf = NOISE[((ay * 3 + 5) & (NS - 1)) * NS + ((ax * 3 + 17) & (NS - 1))];
+                if (f < 0.1 && dith < 0.6 - f * 5) col = P.grass3;
+                else if (tf > 0.84) col = f < 0.5 ? P.grass3 : P.grass2;                // tufts
+                else if (tf < 0.12 && f > 0.3) col = P.dust2;                           // bare earth
+                else { col = P.char0; alpha = (6 + f * f * 42 + dith * 10) | 0; }
+              }
             }
             else if (face){
               const f = ft / Fc;
@@ -426,18 +459,19 @@
                 if (sv >= 0.5){
                   // Fen: peaty pools with a muddy lip and lily pads, mossy hummocks lit on the
                   // upper left, sedge standing in tufts, and sodden dark ground between.
-                  const pool = fbm(ax, ay, 20, 60) + (sv - 0.5) * 0.08, hum = fbm(ax, ay, 90, 30), sedge = NOISE[5 * NS + ((ax * 3) & (NS - 1))];
+                  let mound = 0;
+                  const pool = fbm(ax, ay, 20, 60) + (sv - 0.5) * 0.08, sedge = NOISE[5 * NS + ((ax * 3) & (NS - 1))];
                   if (pool > 0.66){
                     const lily = fbm(ax * 2, ay * 2, 44, 9);
                     col = pool < 0.672 ? P.dust0 : pool < 0.685 ? (dith < 0.5 ? P.leaf0 : P.water0) : lily > 0.7 ? (lily > 0.74 ? P.leaf2 : P.leaf1)
                       : ((ay + (ax >> 3)) & 7) === 0 && n > 0.62 ? P.water1 : P.water0;
-                  } else if (hum > 0.64){
-                    // A mossy hummock, lit on its upper-left flank, darker on the far one.
-                    const up = hum - fbm(ax - 10, ay - 10, 90, 30);
-                    const tuft = NOISE[((ay * 3 + 11) & (NS - 1)) * NS + ((ax * 3) & (NS - 1))];
-                    col = up < -0.02 && dith < 0.6 ? P.grass3 : up > 0.012 ? (dith < 0.5 ? P.grass0 : P.grass1) : tuft + dith * 0.3 > 0.8 ? P.grass3 : tuft > 0.45 ? P.grass2 : P.grass1;
-                  } else if (hum > 0.56 && fbm(ax - 8, ay - 8, 90, 30) > 0.64 && dith < 0.8){
-                    col = P.leaf0; alpha = 150;   // its shadow on the lower right
+                  } else if ((mound = hummock(ax, ay, n)) !== 0){
+                    // A raised, mossy hummock: lit on its upper-left flank, dark round its foot
+                    // on the far side, tussocks of sedge on top.
+                    if (mound > 0){
+                      const l = HUM.l + dith * 0.25, tuft = NOISE[((ay * 3 + 11) & (NS - 1)) * NS + ((ax * 3) & (NS - 1))];
+                      col = HUM.d > 0.88 ? (HUM.l > 0.2 ? P.grass1 : P.leaf0) : tuft > 0.8 && HUM.d < 0.7 ? (tuft > 0.9 ? P.grass3 : P.leaf2) : l > 0.78 ? P.grass3 : l > 0.42 ? P.grass2 : l > 0.12 ? P.grass1 : P.leaf1;
+                    } else { col = P.leaf0; alpha = 175; }   // its shadow on the lower right
                   } else if (sedge > 0.78 && ((ay + ((sedge * 97) | 0)) % 13) < 4){
                     col = ((ay + ((sedge * 97) | 0)) % 13) === 0 ? P.grass3 : P.leaf2;   // a blade of sedge, its lit tip
                   } else if (pool > 0.62 && dith < (pool - 0.62) * 20){ col = P.leaf0; }   // wet dark ground round the pools
@@ -458,7 +492,7 @@
             }
             if (col < 0 && cliffs){
               // The face's shadow on the ground at its foot.
-              if (rimL > lp && ft >= Fc && ft < Fc + fx7 && dith < 0.75 - (ft - Fc) / fx7 * 0.6){
+              if (rimL > lp && !ramp && ft >= Fc && ft < Fc + fx7 && dith < 0.75 - (ft - Fc) / fx7 * 0.6){
                 // Scree fallen from the face lies in its shadow.
                 const sc = NOISE[((ay * 3 + 5) & (NS - 1)) * NS + ((ax * 3) & (NS - 1))];
                 if (sc > 0.8 && ft < Fc + fx7 * 0.7){ col = sc > 0.86 ? P.dust4 : P.dust2; }
