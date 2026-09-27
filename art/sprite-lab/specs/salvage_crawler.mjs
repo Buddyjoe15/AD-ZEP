@@ -1,16 +1,16 @@
-// Salvage Crawler: a tracked crew unit that cuts wrecks apart and hauls the scrap home as
-// metal. Model space is world px: x east, y up, z south; it faces -z; the origin is the
-// ground point under its centre.
-import { Model, mul, translate, scale, rotX, rotY, along, MAT, patterned, grime, near, piston, unitFrame } from '../../../tools/sprite-kit.mjs';
+// Salvage Crawler: a tracked crew unit that cuts wrecks apart with two saw arms and hauls
+// the scrap home as metal. Model space is world px: x east, y up, z south; it faces -z; the
+// origin is the ground point under its centre.
+import { Model, mix, mul, translate, scale, rotX, rotY, along, MAT, patterned, grime, near, piston, unitFrame } from '../../../tools/sprite-kit.mjs';
 import { rng } from '../../../tools/pixelart.mjs';
 
 const box = (m, c, s, mat, ry = 0, rx = 0) => m.box(mul(translate(...c), rotY(ry), rotX(rx), scale(...s)), mat);
 const ball = (m, c, r, mat, seg = 10) => m.ball(mul(translate(...c), scale(...(Array.isArray(r) ? r : [r, r, r]))), mat, seg);
-// A vertical disc or drum: radius r, from y0 up h.
+// A vertical drum: radius r, from y0 up h.
 const drum = (m, [x, y0, z], r, h, mat, seg = 16) => m.tube(mul(translate(x, y0, z), scale(1, h, 1)), mat, r, r, seg);
 
-const HULL_Y = 5.5, GRINDER = [4, 0, -16];
-const hazard = patterned(MAT.amber, p => (Math.floor((p[0] + p[2] + 60) / 1.1) & 1) ? MAT.dark : 0);
+const HULL_Y = 5.5, ARM_X = 5.9, BLADE_R = 4.2, BLADE_T = 1.4, REACH = 6;
+const hazard = patterned(MAT.amber, p => (Math.floor((p[0] + p[2] + p[1] + 60) / 1.1) & 1) ? MAT.dark : 0);
 const hull = y0 => patterned(MAT.steel, p => {
   if (near(p[2], [-5, 1, 7], 0.28) && p[1] > y0 + 7.4) return -2;                       // plate seams across the deck
   if (near(Math.abs(p[0]), 6, 0.3) && p[1] > y0 + 7.4) return -1;
@@ -18,36 +18,78 @@ const hull = y0 => patterned(MAT.steel, p => {
   return grime(p, 0.72, 1.6) || (grime([p[0] + 40, p[1], p[2]], 0.84, 1.1) ? MAT.rust : 0);   // grime and rust streaks
 });
 
+// One saw arm on side s (-1 left, +1 right), extended by e (0 retracted, 1 at full reach).
+// The blade stands upright and spins on an axle across the arm, like a circular saw: from
+// straight above the camera sees it edge-on, a long toothed chrome strip.
+function sawArm(m, s, y0, e, spin, cutting, frame){
+  const x = ARM_X * s, pivot = [x, y0 + 6, -6.5];
+  const head = [x, 8.6 - 4.4 * e, -11 - REACH * e];                        // reaches forward and drops into the cut
+  drum(m, [x, pivot[1] - 1.4, pivot[2]], 2, 2.4, MAT.dark);                 // pivot mount on the deck
+  ball(m, pivot, 1.5, MAT.steel, 10);
+  // Telescoping boom: a fixed outer sleeve aimed at the head, then the chrome inner section that slides out.
+  const d = head.map((v, i) => v - pivot[i]), len = Math.hypot(...d), sleeveEnd = pivot.map((v, i) => v + d[i] / len * 3.6);
+  m.tube(along(pivot, sleeveEnd), MAT.steel, 1.5, 1.3, 10);
+  m.tube(along(sleeveEnd, head), MAT.chrome, 0.9, 0.9, 8);
+  ball(m, sleeveEnd, 1.35, hazard, 10);                                      // hazard collar where the boom slides out
+  piston(m, [x - 1.5 * s, y0 + 5.6, -2.5], mix(sleeveEnd, head, 0.6).map((v, i) => v + [-1.1 * s, 0.9, 0][i]), 0.55);
+  // Fork either side of the blade, and the hubs of its axle.
+  for (const k of [-1, 1]){
+    const fx = x + k * (BLADE_T / 2 + 0.4);
+    box(m, [fx, head[1] + 0.9, head[2] + 1.4], [0.55, 1, 3.4], MAT.dark);
+    ball(m, [fx + k * 0.15, head[1], head[2]], [0.45, 1.2, 1.2], MAT.chrome, 8);
+  }
+  // The blade: chrome with a dark ring inside the rim, and teeth that turn with the spin.
+  const blade = patterned(MAT.chrome, p => {
+    const dy = p[1] - head[1], dz = p[2] - head[2], r = Math.hypot(dy, dz), a = Math.atan2(dy, dz) + spin;
+    if (r < 1.2) return MAT.dark;                                            // hub
+    if (r > BLADE_R - 0.8) return (Math.floor((a + 7) * 14 / Math.PI) & 1) ? MAT.dark : 1;
+    if (near(r, BLADE_R - 1.4, 0.3)) return -2;
+    return 0;
+  });
+  m.tube(along([x - BLADE_T / 2, head[1], head[2]], [x + BLADE_T / 2, head[1], head[2]]), blade, BLADE_R, BLADE_R, 32);
+  // A small dark guard over the back of the blade, so the whole cutting edge shows from above.
+  box(m, [x, head[1] + BLADE_R * 0.75, head[2] + BLADE_R * 0.55], [BLADE_T + 0.9, 0.7, BLADE_R * 0.9], MAT.dark, 0, -0.6);
+  if (cutting){
+    // Sparks thrown outward from where the blade bites.
+    const sr = rng(90 + frame * 7 + (s > 0 ? 3 : 0));
+    for (let i = 0; i < 7; i++){
+      const z = head[2] - BLADE_R * (0.1 + sr() * 0.45), out = 1.2 + sr() * 1.6;
+      ball(m, [x + s * out, 0.8 + sr() * 2.5, z + (sr() - 0.5) * 1.5], 0.4 + sr() * 0.3, sr() < 0.55 ? MAT.lampAmber : MAT.glow, 6);
+    }
+  }
+}
+
 export default {
   key: 'salvage_crawler',
   name: 'Salvage Crawler',
-  request: 'a salvage crawler that strips wrecks for metal',
+  request: 'a salvage crawler that strips wrecks for metal. Revised: a second working arm with a cutting disc; the discs stand vertical; the arms actuate and extend forward to cut the salvage.',
   kind: 'unit',
   faction: 'crew',
   team: true,
   elevation: 'ground',
   frame: unitFrame('standard'),
-  animations: { idle: { frames: 2, fps: 2 }, walk: { frames: 4, fps: 8 }, work: { frames: 4, fps: 8 } },
+  animations: { idle: { frames: 2, fps: 2 }, walk: { frames: 4, fps: 8 }, work: { frames: 6, fps: 8 } },
   fit: {
-    lore: 'Fabricated by ARIA as crew field tech: it crawls out to wrecks and ruined settlements, grinds them apart and hauls the scrap back as metal, the way a Scavenging Mine is worked by hand. Suited to salvage Earths such as Earth at War and the abandoned towns of Woods World.',
-    style: 'Crew steel and plate, worn with grime and rust from the work. Hazard-striped grinder guard, gold-free and plain: a working machine. Team colour rims the scrap hopper and marks the cab roof, both seen from above. Cyan sensor eye, amber beacon, sparks from the grinder while working.',
-    silhouette: 'A long boxy hull on twin treads with a grinder arm reaching forward and an open hopper of scrap behind: no legs, not round, unlike the Spider.',
+    lore: 'Fabricated by ARIA as crew field tech: it crawls out to wrecks and ruined settlements, saws them apart and hauls the scrap back as metal, the way a Scavenging Mine is worked by hand. Suited to salvage Earths such as Earth at War and the abandoned towns of Woods World.',
+    style: 'Crew steel and plate, worn with grime and rust from the work. Two saw arms with chrome telescoping booms, hydraulic pistons and hazard-striped collars. Team colour rims the scrap hopper and marks the cab roof, both seen from above. Cyan sensor eye, amber beacon, sparks where the blades bite.',
+    silhouette: 'A long boxy hull on twin treads with two saw arms reaching forward like mandibles and an open hopper of scrap behind: no legs, not round, unlike the Spider.',
     changes: [
       'Made a crew unit (team colour, fabricated by ARIA): the description didn\'t say who owns it, and the crew is who salvages.',
-      'Sized as a one-tile ground unit in the standard 96 × 96 frame, inside the inscribed circle with the arm at full reach.',
-      'Animations: idle (beacon blinks), walk (treads roll) and work (grinder spins, sparks fly), all names the engine already plays.'
+      'Sized as a one-tile ground unit in the standard 96 × 96 frame, inside the inscribed circle with both arms at full reach.',
+      'The cab moved to the centre front to make room for the second arm.',
+      'The discs stand upright, so from straight above each shows edge-on as a long toothed chrome strip in its fork, with only a small guard at the back.',
+      'Work is 6 frames: the arms take turns telescoping forward and dropping into the cut, then pulling back, each blade spinning and throwing sparks while it cuts. Idle (beacon blinks) and walk (treads roll) keep the arms in.'
     ]
   },
   build({ anim, frame, frames }){
     const m = new Model(), t = frame / frames;
     const bob = anim === 'walk' ? (frame % 2) * 0.3 : 0, y0 = HULL_Y + bob;
-    const roll = anim === 'walk' ? t * 2 : 0, spin = anim === 'work' ? t * Math.PI / 2 : 0;
+    const roll = anim === 'walk' ? t * 2 : 0;
     // Treads, rounded at the ends; the grooves on top roll while walking.
     const tread = patterned(MAT.dark, p => p[1] > 4.4 && ((p[2] + roll + 100) % 2) < 0.7 ? -2 : (p[1] > 4.4 && near(Math.abs(p[0]), 9.5, 0.4) ? 1 : 0));
     for (const s of [-1, 1]){
       box(m, [9.5 * s, 2.5, 0], [5, 5, 26], tread);
       for (const z of [-13, 13]) m.tube(along([9.5 * s - 2.5, 2.5, z], [9.5 * s + 2.5, 2.5, z]), MAT.dark, 2.5, 2.5, 12);
-      box(m, [9.5 * s, 5.4, -10.5], [5.6, 0.8, 6], hazard);                            // front fenders
     }
     // Hull and deck.
     box(m, [0, y0 + 1.5, 1], [13, 7, 25], hull(y0));
@@ -56,7 +98,7 @@ export default {
     const H = y0 + 5, top = H + 4.2;
     const rim = patterned(MAT.steel, p => p[1] > top - 0.9 ? MAT.team : grime(p, 0.75));
     box(m, [0, H + 2.1, 12.6], [13, 4.2, 1], rim); box(m, [0, H + 2.1, 1.4], [13, 4.2, 1], rim);
-    for (const s of [-1, 1]) box(m, [6, H + 2.1, 7], [1, 4.2, 12.2], rim);
+    for (const s of [-1, 1]) box(m, [6 * s, H + 2.1, 7], [1, 4.2, 12.2], rim);
     box(m, [0, H + 0.3, 7], [11, 0.6, 10.2], MAT.dark);                                  // hopper floor, dark so the scrap stands out
     const r = rng(77), SCRAP = [MAT.rust, MAT.rust, MAT.plate, MAT.rust, MAT.steel, MAT.amber, MAT.rust, MAT.gold];
     for (let i = 0; i < 16; i++){
@@ -65,36 +107,24 @@ export default {
     }
     box(m, [-1, H + 3.2, 7.5], [1, 0.9, 10], MAT.steel, 0.5, 0.2);                       // a bent girder across the pile
     m.tube(along([2.5, H + 2.6, 4], [2.5, H + 3.8, 10.5]), MAT.chrome, 0.6, 0.6, 8);     // and a length of pipe
-    // Cab, front left: visor at the front, team plate on the roof, sensor eye, beacon.
+    // Cab, centre front, between the arms: visor, team plate on the roof, sensor eye, beacon.
     const cab = patterned(MAT.plate, p => {
-      if (p[2] < -7.3 && p[1] > y0 + 7.5) return MAT.glass;
-      if (p[1] > y0 + 10.4 && Math.abs(p[0] + 3.5) < 1.6 && p[2] > -6.8) return MAT.team;
-      if (near(p[2], -5.4, 0.25)) return -1;
+      if (p[2] < -6.3 && p[1] > y0 + 7.5) return MAT.glass;
+      if (p[1] > y0 + 10.4 && Math.abs(p[0]) < 1.5 && p[2] > -5.8) return MAT.team;
+      if (near(p[2], -4.4, 0.25)) return -1;
       return grime(p, 0.8);
     });
-    box(m, [-3.5, y0 + 7.8, -5.5], [5.4, 5.2, 5.6], cab);
-    ball(m, [-3.5, y0 + 9.4, -8.6], 1.1, MAT.glow);
+    box(m, [0, y0 + 7.8, -4.5], [5.2, 5.2, 5.6], cab);
+    ball(m, [0, y0 + 9.4, -7.6], 1.1, MAT.glow);
     const beaconOn = anim === 'work' || (anim === 'idle' ? frame === 0 : frame % 2 === 0);
-    ball(m, [-1.5, y0 + 11, -3.6], 0.95, beaconOn ? MAT.lampAmber : MAT.amber);
-    drum(m, [5, y0 + 5, 0], 0.9, 5.5, MAT.dark);                                         // exhaust stack
-    ball(m, [5, y0 + 10.6, 0], [1.1, 0.4, 1.1], MAT.dark);
-    // Grinder arm, front right: a boom on a pivot with a hydraulic piston, and a spinning
-    // cutting disc under a hazard-striped guard.
-    const pivot = [3.8, y0 + 6, -8], head = [GRINDER[0], y0 + 4.2, GRINDER[2]];
-    drum(m, [pivot[0], pivot[1] - 1, pivot[2]], 1.8, 2, MAT.dark);
-    m.tube(along(pivot, head), MAT.steel, 1.2, 1.2, 10);
-    piston(m, [pivot[0] + 1.3, pivot[1] + 1.2, pivot[2] + 1], [head[0] + 1.2, head[1] + 1.4, head[2] + 2.5], 0.55);
-    drum(m, [head[0], head[1] - 1.6, head[2]], 4, 1.8, hazard, 18);                      // guard
-    const disc = patterned(MAT.chrome, p => {
-      const dx = p[0] - head[0], dz = p[2] - head[2], a = Math.atan2(dz, dx) + spin, d = Math.hypot(dx, dz);
-      if (d < 0.9) return MAT.dark;                                                      // hub
-      if (d > 2.9) return (Math.floor((a + 7) * 12 / Math.PI) & 1) ? -2 : 1;            // teeth
-      return near(d, 1.8, 0.25) ? -1 : 0;
-    });
-    drum(m, [head[0], head[1] + 0.2, head[2]], 3.4, 0.5, disc, 24);
-    if (anim === 'work'){
-      const sr = rng(90 + frame);
-      for (let i = 0; i < 5; i++){ const a = -Math.PI / 2 - 0.9 + sr() * 1.8, d = 3.6 + sr() * 2; ball(m, [head[0] + Math.cos(a) * d, head[1] + 0.6, head[2] + Math.sin(a) * d * 0.6], 0.45 + sr() * 0.3, sr() < 0.5 ? MAT.lampAmber : MAT.glow, 6); }
+    ball(m, [-1.9, y0 + 11, -2.4], 0.9, beaconOn ? MAT.lampAmber : MAT.amber);
+    drum(m, [1.9, y0 + 7.8, -2.2], 0.7, 4.4, MAT.dark);                                  // exhaust stack beside the beacon
+    ball(m, [1.9, y0 + 12.3, -2.2], [0.9, 0.35, 0.9], MAT.dark);
+    // Two saw arms. At work they take turns: one reaches forward and cuts while the other pulls back.
+    for (const s of [-1, 1]){
+      const phase = anim === 'work' ? t + (s > 0 ? 0.5 : 0) : 0, e = anim === 'work' ? (1 - Math.cos(phase * Math.PI * 2)) / 2 : 0;
+      const spin = anim === 'work' ? frame * Math.PI / 20 * (s > 0 ? 1 : -1) : 0;
+      sawArm(m, s, y0, e, spin, anim === 'work' && e > 0.45, frame);
     }
     return m;
   }
