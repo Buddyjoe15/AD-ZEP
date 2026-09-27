@@ -1,5 +1,5 @@
-/* Tree effects (Genesis maps): a felled tree falling away from the saw or blast and landing
-   in a cloud of dust, sawdust from a working Salvage Crawler, splinters when a stump or
+/* Tree effects (Genesis maps): a felled tree falling away from the saw or blast and bursting
+   into dust as it lands, sawdust from a working Salvage Crawler, splinters when a stump or
    fallen tree is cleared, and dust and a scorch mark where anything explodes (any map).
    Falling trees and dust are drawn above units; scorch marks are drawn into the terrain
    chunks, under the trees. Driven by the simulation's 'tree:changed' and 'blast' events and
@@ -8,10 +8,11 @@
 (function(){
   'use strict';
   const G = GW, TAU = Math.PI * 2;
-  const FALL = 1.3, SETTLE = 0.9, MAX_DUST = 1500, MAX_SCORCH = 400;
-  // How tall each species stands, in crown diameters: how far its crown lands from the stump.
-  const HEIGHT = { spruce: 2.8, pine: 2.5, birch: 2.3, maple: 1.9, snag: 2.4 };
-  const DUST = ['#9e896b', '#b09c7e', '#8e7a5e'], SAWDUST = ['#e1bd76', '#b09c7e', '#c98a2e'], SMOKE = ['#433a33', '#5e4f3d', '#231f1c'], FIRE = ['#f2c66a', '#c98a2e', '#ffffff'];
+  const MAX_DUST = 1500, MAX_SCORCH = 400;
+  // How far a felled crown lands from its stump, in crown diameters (a short trunk reads
+  // better from straight above than the tree's true height).
+  const HEIGHT = { spruce: 1.5, pine: 1.4, birch: 1.3, maple: 1.1, snag: 1.4 };
+  const DUST = ['#9e896b', '#b09c7e', '#8e7a5e'], SAWDUST = ['#e1bd76', '#b09c7e', '#c98a2e'], SMOKE = ['#433a33', '#5e4f3d', '#231f1c'], LEAF = ['#3f6f3e', '#28502d', '#5d7a4f'], FIRE = ['#f2c66a', '#c98a2e', '#ffffff'];
   const now = () => G.State.time;
 
   const FX = G.TreeFX = {
@@ -49,24 +50,25 @@
     draw(g, z){
       const t = now();
       if (this.falls.length){
+        const FALL = G.TREES.FALL_TIME;
         this.falls = this.falls.filter(f => {
           const age = t - f.t0, p = Math.min(1, age / FALL);
-          if (age >= FALL && !f.landed){
-            f.landed = true;
-            // Dust along the trunk and around the crown where it hits the ground.
-            for (let s = 0.2; s <= 1; s += 0.2) this.puff(f.x + f.dx * f.H * s, f.y + f.dy * f.H * s, 3, 5, 22, 2.5, DUST);
-            this.puff(f.x + f.dx * f.H, f.y + f.dy * f.H, 14, f.crown * 0.4, 40, 3, DUST, 1.4);
+          if (age >= FALL){
+            // It hits the ground and is gone in a burst of dust along the trunk and crown (the
+            // Crawler takes the wood at the same moment).
+            for (let s = 0.15; s <= 0.85; s += 0.14) this.puff(f.x + f.dx * f.H * s, f.y + f.dy * f.H * s, 5, f.w, 24, 2.5, DUST, 1);
+            this.puff(f.x + f.dx * f.H, f.y + f.dy * f.H, 30, f.crown * 0.45, 36, 3, DUST, 1.3);
+            this.puff(f.x + f.dx * f.H, f.y + f.dy * f.H, 10, f.crown * 0.4, 20, 2.5, LEAF, 0.9);
+            return false;
           }
-          const alpha = age < FALL ? 1 : 1 - (age - FALL) / SETTLE;
-          if (alpha <= 0) return false;
           // Top down, the crown swings out from above the stump to the ground, faster and
           // faster, and the trunk comes into view behind it.
           const off = f.H * Math.sin(Math.PI / 2 * p * p), cx = f.x + f.dx * off, cy = f.y + f.dy * off;
-          g.save(); g.globalAlpha = alpha; g.lineCap = 'round';
+          g.save(); g.lineCap = 'round';
           g.strokeStyle = '#5e4f3d'; g.lineWidth = f.w; g.beginPath(); g.moveTo(f.x, f.y); g.lineTo(cx, cy); g.stroke();
           g.strokeStyle = '#8e7a5e'; g.lineWidth = Math.max(1, f.w * 0.35); g.beginPath(); g.moveTo(f.x - f.w * 0.2, f.y - f.w * 0.2); g.lineTo(cx - f.w * 0.2, cy - f.w * 0.2); g.stroke();
           g.restore();
-          G.TreeArt.drawCrown(g, f.kind, f.size, f.variant, cx, cy, alpha);
+          G.TreeArt.drawCrown(g, f.kind, f.size, f.variant, cx, cy);
           return true;
         });
       }

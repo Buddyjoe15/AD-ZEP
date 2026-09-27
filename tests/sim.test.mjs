@@ -869,7 +869,11 @@ test('genesis trees, stumps and fallen trees can be blown up and sawn down; save
   for (let s = 0; s < 40 && Tr.state(saw) === Tr.ALIVE; s++) G.Sim.run(1);
   assert.equal(Tr.state(saw), Tr.CUT, 'sawn down');
   assert.equal(Tr.kind(saw), 'stump_cut');
-  // Its wood goes into the Crawler's hold, and it hauls it to the ship, then stops.
+  // Its wood goes into the Crawler's hold once the tree hits the ground, and it hauls it
+  // to the ship, then stops.
+  assert.equal(crawler.haulState, 'felling');
+  assert.equal(crawler.cargo.wood || 0, 0, 'no wood while it is still falling');
+  G.Sim.run(G.TREES.FALL_TIME + 0.1);
   assert.equal(crawler.cargo.wood, wood, 'the wood is in the hold');
   assert.equal(crawler.haulState, 'return');
   for (let s = 0; s < 90 && crawler.command !== 'idle'; s++) G.Sim.run(1);

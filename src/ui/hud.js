@@ -246,6 +246,7 @@
         const k = G.Gather.chopTarget(u), kind = G.Trees.kind(k) || '', what = kind === 'log' ? 'fallen tree' : kind.startsWith('stump') ? 'stump' : 'tree';
         s = u.haulState === 'return' ? `Hauling ${Math.floor(u.cargo?.wood || 0)} wood to the nearest drop-off`
           : u.haulState === 'unloadFirst' ? 'Unloading before sawing'
+          : u.haulState === 'felling' ? 'Timber! The tree is coming down'
           : u.haulState === 'collecting' ? `Sawing down a ${what} (${Math.round(100 * (1 - G.Trees.hp(k) / (G.Trees.maxHp(k) || 1)))}%)` : `Heading to a ${what}`;
       } else if (u.command === 'gather'){
         const where = u.mineId ? 'Resource Extractor' : (G.Gather.node(u.nodeId)?.name || 'salvage');

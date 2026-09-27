@@ -84,6 +84,12 @@
     kind(k){ return ensure() ? kindNow(k) : null; },
     hp(k){ return ensure() ? Math.max(0, maxHp(k) - cur.damage[k]) : 0; },
     maxHp(k){ return ensure() ? maxHp(k) : 0; },
+    // Wood in tree k as it was planted, standing (what a felled tree yields once it lands).
+    treeWood(k){
+      if (!ensure() || !isTree(k)) return 0;
+      const kind = G.TREES.ALL[cur.tr.kind[k]];
+      return Math.round(G.TREES.WOOD.tree[cur.tr.size[k]] * (G.TREES.species[kind].wood || 1));
+    },
     // Wood a Salvage Crawler gets from sawing down tree k as it stands now (GW.TREES.WOOD).
     wood(k){
       if (!ensure() || !present(k)) return 0;

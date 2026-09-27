@@ -32,6 +32,9 @@ GW.TREES.CHOP_RATE = 25;
 GW.TREES.WOOD = { tree: [8, 20, 40], stump: [4, 8], log: [25, 40] };
 GW.TREES.species.snag.wood = 0.5;
 GW.TREES.species.maple.wood = 1.2;
+// Seconds a felled tree takes to fall. The Crawler gets the wood when it hits the ground
+// (the renderer's falling animation takes the same time).
+GW.TREES.FALL_TIME = 1.3;
 GW.TREES.species.snag.tough = 0.6;
 GW.TREES.species.maple.tough = 1.2;
 // Dead wood among the trees, placed and drawn with them but under every crown. `sizes` are

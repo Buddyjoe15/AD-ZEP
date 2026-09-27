@@ -131,11 +131,18 @@
       return done;
     },
     // Sawing: walk up, saw, take the wood, haul it to the nearest dropoff (the ship, unless
-    // another dropoff is closer), then stop. With a full hold it unloads first and comes back
-    // (haulState 'unloadFirst'); after the wood is delivered the job is done ('return').
+    // another dropoff is closer), then stop. A felled tree's wood comes once it has hit the
+    // ground (haulState 'felling', until commandNextPath); a stump's or fallen tree's at once.
+    // With a full hold it unloads first and comes back (haulState 'unloadFirst'); after the
+    // wood is delivered the job is done ('return').
     updateChop(u, dt){
       const S = G.State, k = this.chopTarget(u);
       if (u.haulState === 'return'){ this.returnLeg(u, () => this.stop(u)); return; }
+      if (u.haulState === 'felling'){
+        if (S.time < u.commandNextPath) return;
+        this.takeWood(u, G.Trees.treeWood(k), 'felled a tree');
+        return;
+      }
       if (u.haulState === 'unloadFirst'){ this.returnLeg(u, () => { u.haulState = 'toNode'; }); return; }
       if (!(k >= 0) || !G.Trees.present(k)){ this.stop(u); return; }
       if (u.cargoCapacity && G.Units.cargoTotal(u) >= u.cargoCapacity - 0.001){ u.haulState = 'unloadFirst'; u.commandNextPath = 0; return; }
@@ -152,13 +159,18 @@
       u.heading = Math.atan2(p.y - u.y, p.x - u.x);
       const def = G.Defs.units.get(u.type), wood = G.Trees.wood(k);
       if (!G.Trees.damage(k, G.TREES.CHOP_RATE * (def.gatherRate || 1) * dt, 'cut', { x: u.x, y: u.y })) return;
-      const felled = G.Trees.state(k) !== G.Trees.GONE, room = Math.max(0, (u.cargoCapacity || 0) - G.Units.cargoTotal(u)), got = Math.min(room, wood);
+      if (G.Trees.state(k) === G.Trees.GONE) this.takeWood(u, wood, 'cleared it away');
+      else { u.haulState = 'felling'; u.commandNextPath = S.time + G.TREES.FALL_TIME; }   // timber!
+    },
+    // Puts up to `wood` into the hold, then heads for the dropoff (or stops with nothing to carry).
+    takeWood(u, wood, what){
+      const got = Math.min(Math.max(0, (u.cargoCapacity || 0) - G.Units.cargoTotal(u)), wood);
       if (got > 0){
         u.cargo.wood = G.round6((u.cargo.wood || 0) + got);
-        G.notify(`${u.name} ${felled ? 'felled a tree' : 'cleared it away'}: ${Math.floor(got)} wood`);
+        G.notify(`${u.name} ${what}: ${Math.floor(got)} wood`);
         u.haulState = 'return'; u.commandNextPath = 0;
       } else {
-        G.notify(u.name + (felled ? ' felled a tree' : ' cleared it away'));
+        G.notify(u.name + ' ' + what);
         this.stop(u);
       }
     },
