@@ -71,7 +71,7 @@ export default {
   elevation: 'ground',
   frame: unitFrame('standard'),
   animations: { idle: { frames: 2, fps: 2 }, walk: { frames: 4, fps: 8 }, work: { frames: 6, fps: 8 } },
-  variants: { label: 'Hopper', by: 'cargoTotal / cargoCapacity', values: Object.keys(FILL), at: Object.values(FILL), pick: 'empty only when nothing is aboard, otherwise the nearest of quarter, half and full' },
+  variants: { label: 'Hopper', by: 'cargo', values: Object.keys(FILL), at: Object.values(FILL), pick: 'cargoTotal / cargoCapacity; empty only when nothing is aboard, otherwise the nearest of quarter, half and full' },
   fit: {
     lore: 'Fabricated by ARIA as crew field tech: it crawls out to wrecks and ruined settlements, saws them apart and hauls the scrap back as metal, the way a Scavenging Mine is worked by hand. Suited to salvage Earths such as Earth at War and the abandoned towns of Woods World.',
     style: 'Crew steel and plate, worn with grime and rust from the work. Two saw arms with chrome telescoping booms, hydraulic pistons and hazard-striped collars. Team colour rims the scrap hopper and marks the cab roof, both seen from above. Cyan sensor eye, amber beacon, sparks where the blades bite.',

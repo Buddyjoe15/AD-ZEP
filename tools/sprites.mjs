@@ -5,6 +5,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { PALETTE, TEAMS, ALPHABET, C, Grid, rng, painter, rotate, finish, png, sheetRGBA } from './pixelart.mjs';
+import { renderSprite, LIFT, OUTLINE } from './sprite-kit.mjs';
+import salvageCrawler from '../art/sprite-lab/specs/salvage_crawler.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const OUT = path.join(ROOT, 'art/pixel-test');
@@ -157,6 +159,22 @@ function unitFrames(def){
     return frames;
   });
   return FACINGS.map((_, i) => authored[i % 2].map(g => finish(rotate(g, i >> 1))));
+}
+
+// Units modelled in 3D in the sprite lab (art/sprite-lab/specs/, rules section 5). Every facing
+// is rendered from the model with the light staying top left, in the game's odd frame size.
+// A spec with variants (the crawler's hopper fill) repeats its animations once per variant.
+export const MODELLED = {
+  salvage_crawler: { size: 49, spec: salvageCrawler, shadow: [2, 4], elevation: 'ground' }
+};
+function modelFrames(def){
+  const N = def.size * SPRITE_RES, spec = def.spec, seq = [];
+  for (const variant of spec.variants ? spec.variants.values : [null])
+    for (const [anim, a] of Object.entries(spec.animations)) for (let frame = 0; frame < a.frames; frame++) seq.push({ anim, frame, frames: a.frames, variant });
+  return FACINGS.map((_, i) => seq.map(s => {
+    const { px } = renderSprite(spec.build(s), { w: N, h: N, ox: N / 2, oy: N / 2, res: SPRITE_RES, heading: i * DIAG, lift: LIFT, outline: OUTLINE });
+    const g = new Grid(N, N); g.p.set(px); return g;
+  }));
 }
 
 // ---- Repair station (2×2 tiles = 96×96 world px, 192×192 art px), no facings ----
@@ -686,6 +704,19 @@ export function build(){
     sprites[name] = { ...meta, frames: rows.map(r => r.map(g => g.encode())) };
     sheets[name] = { meta, rows };
   }
+  for (const [name, def] of Object.entries(MODELLED)){
+    const rows = modelFrames(def), animations = {}, V = def.spec.variants, N = def.size * SPRITE_RES;
+    let start = 0;
+    for (const [anim, { frames, fps }] of Object.entries(def.spec.animations)){ animations[anim] = { start, frames, fps }; start += frames; }
+    const meta = {
+      name, frameWidth: N, frameHeight: N, origin: [(N - 1) / 2, (N - 1) / 2],
+      worldPxPerArtPx: 1 / SPRITE_RES, rows: 'facing', facings: FACINGS, renderedFacings: 'all 8, each from the model', model: 'art/sprite-lab/specs/' + def.spec.key + '.mjs',
+      animations, ...(V ? { variants: { by: V.by, values: V.values, at: V.at, framesEach: start, column: 'variant index × framesEach + start + frame' } } : {}),
+      shadow: { drawnBy: 'engine', offset: def.shadow.map(v => v * SPRITE_RES), elevation: def.elevation }, team: 'team0..team2 (magenta ramp)'
+    };
+    sprites[name] = { ...meta, frames: rows.map(r => r.map(g => g.encode())) };
+    sheets[name] = { meta, rows };
+  }
   const st = stationFrames(), states = {};
   st.forEach(([state], i) => { (states[state] ||= { start: i, frames: 0 }).frames++; });
   states.working.fps = 6;
@@ -776,7 +807,7 @@ async function capture(){
   for (const [z, tag] of [['0.333', '033'], ['0.667', '067'], ['1', '100']]) await shot(`zoom=${z}&t=0.4&hud=0`, `scene-zoom-${tag}.png`, phone);
   await shot('zoom=0.333&t=0.4&hud=0&tiles=v1', 'scene-zoom-033-tiles-v1.png', phone);
   const desk = { viewport: { width: 1200, height: 800 }, deviceScaleFactor: 1, fullPage: true };
-  for (const s of ['spider', 'drone', 'vance', 'repair_station', 'terrain', 'woodlands']) await shot(`view=sheets&only=${s}&hud=0`, `sheet-${s}.png`, desk);
+  for (const s of ['spider', 'salvage_crawler', 'drone', 'vance', 'repair_station', 'terrain', 'woodlands']) await shot(`view=sheets&only=${s}&hud=0`, `sheet-${s}.png`, desk);
   await browser.close();
 }
 

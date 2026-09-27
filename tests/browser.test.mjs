@@ -526,6 +526,9 @@ test('pixel-art sprites: eight facings, engine shadows, structure states, dust t
         const gx = Math.floor(h.x / T) - 1, gy = Math.floor(h.y / T) + 3;
         const hurt = G.Buildings.add('repair', gx, gy, { team: 'blue' }); hurt.hp = 100;
         const spider = G.Units.spawn('utility_spider', h.x - 120, h.y); spider.hp = 100;
+        // The Salvage Crawler's hopper shows how full it is: empty, a quarter, half or full.
+        const crawler = G.Units.spawn('salvage_crawler', h.x + 120, h.y + 60), ce = G.SpriteAtlas.entryFor(G.Defs.units.get('salvage_crawler'), 'blue');
+        const hopper = [0, 40, 200, 400].map(n => { crawler.cargo = { metal: n }; return G.SpriteAtlas.frame(ce, crawler, 0); });
         const drones = [];
         for (let i = 0; i < 8; i++){ const u = G.Units.spawn('hostile_machine', h.x + 150 + i * 40, h.y - 150); u.heading = i * Math.PI / 4 - Math.PI / 2; drones.push(u); }
         G.rebuildSpatial(); G.centerCamera(h.x, h.y, 1);
@@ -536,6 +539,7 @@ test('pixel-art sprites: eight facings, engine shadows, structure states, dust t
           enabled: P.enabled, pixel: !!e.pixel, facings: e.facings.length, shadow: !!e.shadow,
           distinct: new Set(frames).size, facingOf: drones.map(u => P.facing(u.heading)),
           damaged: P.stationState(hurt, 0) === P.data.sprites.repair_station.states.damaged.start,
+          crawler: !!ce.pixel, hopper: hopper.map(f => f - hopper[0]), framesEach: ce.variants && ce.variants.framesEach,
           dust: P.dustIds().has(S.grid.get(Math.floor(h.x / T), Math.floor(h.y / T))), gpu: G.GPU.ok, sprites: S.metrics.gpuSprites
         };
       });
@@ -544,6 +548,8 @@ test('pixel-art sprites: eight facings, engine shadows, structure states, dust t
       assert.deepEqual(r.facingOf, [0, 1, 2, 3, 4, 5, 6, 7], 'each heading picks its facing');
       assert.equal(r.distinct, 8, 'one frame per facing');
       assert.ok(r.damaged, 'a station below half health shows its damaged state');
+      assert.ok(r.crawler, 'the Salvage Crawler has pixel art');
+      assert.deepEqual(r.hopper, [0, 1, 2, 3].map(v => v * r.framesEach), 'its hopper fill picks the variant block');
       assert.ok(r.dust, 'grass is drawn as the dust plain');
       assert.equal(r.gpu, renderer === 'gpu');
       if (r.gpu) assert.ok(r.sprites > 10, 'units drawn by the GPU');

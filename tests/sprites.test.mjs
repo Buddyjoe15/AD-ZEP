@@ -126,5 +126,7 @@ test('sprite lab: the example spec renders top-down at 96 × 96 and passes every
   assert.equal(RV.rows[0].length, 20, 'two blocks of idle 2 + walk 4 + work 4');
   assert.deepEqual([RV.seq[0].variant, RV.seq[10].variant, RV.seq[10].anim], ['empty', 'full', 'idle']);
   assert.ok(seen.includes('empty') && seen.includes('full'));
-  assert.ok(check(varied, RV).some(c => c.name === 'Variants' && c.level === 'warn'));
+  assert.ok(check(varied, RV).some(c => c.name === 'Variants' && c.level === 'warn'), 'no fill levels: the engine can\'t pick one');
+  const byCargo = { ...varied, variants: { ...varied.variants, at: [0, 1] } };
+  assert.ok(check(byCargo, RV).some(c => c.name === 'Variants' && c.level === 'pass'), 'cargo fill levels: the engine picks one');
 });

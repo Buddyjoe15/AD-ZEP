@@ -101,8 +101,11 @@ export function check(spec, R, ref = referenceSpider()){
   add(extra.length ? 'warn' : 'pass', unit ? 'Animations' : 'States', extra.length ? `${extra.join(', ')} need engine work; the engine plays ${known.join(', ')}` : names.join(', '));
   if (unit && !names.includes('idle')) add('warn', 'Idle', 'No idle animation; the engine shows idle when a unit stands still');
   if (!unit && !names.includes('finished')) add('warn', 'Finished state', 'No finished state; the engine shows it when the structure is built and idle');
-  // Variants: the engine draws one block per sprite today, so picking one needs engine work.
-  if (spec.variants) add('warn', 'Variants', `${spec.variants.values.join(', ')} by ${spec.variants.by}: the engine needs to pick the block (see the metadata)`);
+  // Variants: the engine picks cargo variants (G.PixelArt.variant); any other kind needs engine work.
+  if (spec.variants){
+    const V = spec.variants, cargo = V.by === 'cargo' && Array.isArray(V.at) && V.at.length === V.values.length && V.at[0] === 0;
+    add(cargo ? 'pass' : 'warn', 'Variants', `${V.values.join(', ')} by ${V.by}` + (cargo ? ': the engine picks one from the cargo aboard' : ': the engine needs to pick the block (see the metadata)'));
+  }
   // Silhouette against the in-game Utility Spider: a unit should not be mistaken for one.
   if (unit && spec.gameKey !== 'utility_spider'){
     const a = R.rows[3][0].px, b = ref.rows[3][0].px, RO = ref.meta.origin, px = (buf, W, H, x, y) => x >= 0 && y >= 0 && x < W && y < H && buf[y * W + x];

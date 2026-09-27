@@ -277,7 +277,7 @@
   V.lasers = function(g, units, t){
     for (const u of units){
       const target = this.laserTarget(u);
-      if (!target) continue;
+      if (!target || G.Defs.units.get(u.type)?.beam === false) continue;   // cuts with tools, not a laser
       const sx = u.x + Math.cos(u.heading) * 21, sy = u.y + Math.sin(u.heading) * 21;
       const tx = target.x + Math.sin(t * 7) * 4, ty = target.y + Math.cos(t * 11) * 4, col = target.mode === 'mine' ? '#72e9ff' : '#f1cc78';
       g.save();

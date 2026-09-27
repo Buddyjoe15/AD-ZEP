@@ -32,6 +32,7 @@ GW.Defs.recipes.defineAll({
   survey_drone:   { name: 'Survey Drone',   unit: 'survey_drone',   cost: { metal: 100 }, time: 8,  blurb: 'Investigate signals and discoveries' },
   security_drone: { name: 'Security Drone', unit: 'security_drone', cost: { metal: 140 }, time: 10, blurb: 'Protect the expedition' },
   utility_spider: { name: 'Utility Spider', unit: 'utility_spider', cost: { metal: 160 }, time: 12, blurb: 'Mine, carry cargo and build with a laser' },
+  salvage_crawler: { name: 'Salvage Crawler', unit: 'salvage_crawler', cost: { metal: 220 }, time: 16, blurb: 'Saw wrecks apart and haul the scrap: faster salvage, bigger hopper' },
   // Ore Processor
   steel:       { name: 'Steel',       produces: { steel: 1 },       cost: { metal: 2 },   time: 5,  blurb: '2 metal → 1 steel' },
   electronics: { name: 'Electronics', produces: { electronics: 1 }, cost: { copper: 6 },  time: 12, blurb: '6 copper → 1 electronics' },
