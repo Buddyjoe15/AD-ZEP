@@ -54,7 +54,8 @@ const armour = (damaged) => patterned(MAT.plate, p => {
   if (grime([p[0] + 3, p[1], p[2] + 5], 0.8, 0.9)) return -1;                    // chips
   return 0;
 });
-function head(m, { recoil = 0, flash = false, damaged = false, frame = 0, plated = true, barrel = true, spin = 0 } = {}){
+// feed moves the belts toward the front (world px, one cartridge every 1.6).
+function head(m, { recoil = 0, flash = false, damaged = false, frame = 0, plated = true, barrel = true, spin = 0, feed = 0 } = {}){
   const y = HEAD_Y, by = y + 4.6, plate = plated ? armour(damaged) : MAT.steel;
   // Dark chassis under everything, and the raised hatch deck at the back.
   box(m, [0, y + 1.5, 2.5], [22, 3, 20], patterned(MAT.dark, p => near(p[2], [-3, 3, 9], 0.3) ? -1 : 0));
@@ -86,11 +87,12 @@ function head(m, { recoil = 0, flash = false, damaged = false, frame = 0, plated
   box(m, [0, by + 5.9, 2.2], [3, 0.8, 2], MAT.dark);
   ball(m, [0, by + 6.3, 2.2], [0.8, 0.5, 0.6], damaged ? MAT.red : MAT.lampAmber, 8);
   // Ammunition belts down both sides: rows of brass cartridges, tips inward, on a dark link
-  // strip, fed from the shoulders to the cannon's breech.
+  // strip. They come out from under the shoulder blocks and run forward under the vented
+  // blocks into the feed; `feed` slides them along, and every 1.6 the belt looks the same.
   for (const s of [-1, 1]){
-    box(m, [s * 11.6, y + 2.8, 0], [5, 1.2, 15], MAT.dark);
-    for (let i = 0; i < 9; i++){
-      const z = -6.5 + i * 1.6;
+    box(m, [s * 11.6, y + 2.8, 0], [5, 1.2, 16], MAT.dark);
+    for (let i = 0; i < 10; i++){
+      const z = 7.9 - ((i * 1.6 + feed) % 16);
       if (damaged && (i === 2 || i === 6) && s > 0) continue;                    // lost rounds
       m.tube(along([s * 13.7, y + 3.9, z], [s * 10.3, y + 3.9, z]), MAT.gold, 0.62, 0.62, 8);
       ball(m, [s * 9.9, y + 3.9, z], [0.55, 0.5, 0.5], MAT.amber, 6);
@@ -129,7 +131,7 @@ export default {
   key: 'sentry_turret',
   name: 'Sentry Turret',
   gameKey: 'sentry_turret',
-  request: 'Sentry Turret (the existing 1 × 1 structure, drawn today as a placeholder). Revised: a smaller base, a bigger gun base (slewing ring) and a bigger gun turret. Then: engine work so the gun turret turns and tracks enemies. Then: a new look for the head, taking the requester\'s reference art (a six-barrel rotary gun with ammo belts) as inspiration.',
+  request: 'Sentry Turret (the existing 1 × 1 structure, drawn today as a placeholder). Revised: a smaller base, a bigger gun base (slewing ring) and a bigger gun turret. Then: engine work so the gun turret turns and tracks enemies. Then: a new look for the head, taking the requester\'s reference art (a six-barrel rotary gun with ammo belts) as inspiration. Then: when firing, the gatling barrels turn and the ammo belts on either side move, as if fed into the turret.',
   kind: 'structure',
   faction: 'crew',
   team: true,
@@ -143,15 +145,22 @@ export default {
   },
   // Head layer: turns on the ring to track its target, drawn in 16 facings (every 22.5°),
   // each rendered from the model with the light top left. `on` says which head state goes
-  // over which base state; firing plays for one shot (flash, then recoil) after each round.
+  // over which base state. While the turret has a target it plays `firing`: the barrels spin
+  // (a quarter of the 60° between barrels each frame) and the ammo belts feed forward one
+  // cartridge per loop. For a moment after each round it plays `flash`, the same frames with
+  // the muzzle flash and recoil.
   head: {
     facings: 16,
-    states: { idle: { frames: 1 }, firing: { frames: 2, fps: 16 }, damaged: { frames: 2, fps: 3 } },
+    states: { idle: { frames: 1 }, firing: { frames: 4, fps: 16 }, flash: { frames: 4, fps: 16 }, damaged: { frames: 2, fps: 3 } },
+    flashTime: 0.12,             // seconds the flash frames show after each round
     on: { finished: 'idle', damaged: 'damaged' },
     turnRate: 2 * Math.PI,       // radians per second the head is drawn turning toward its aim
     build({ state, frame }){
       const m = new Model();
-      if (state === 'firing') head(m, { recoil: frame === 0 ? 1 : 0.4, flash: frame === 0, spin: (frame + 1) * Math.PI / 6, frame });
+      if (state === 'firing' || state === 'flash'){
+        const flash = state === 'flash';
+        head(m, { recoil: flash ? 0.8 : 0, flash, spin: frame * Math.PI / 12, feed: frame * 0.4, frame });
+      }
       else head(m, { damaged: state === 'damaged', frame });
       return m;
     }
@@ -164,8 +173,8 @@ export default {
       'The head is its own layer in 16 facings, drawn over the base and turned toward the target the game aims at, easing round at one turn a second. This is new engine work: structures had no turning layer before.',
       'Head redesigned after the reference art: a six-barrel rotary cannon instead of the single barrel, ammo belts, vented armour blocks, amber lamps and blue capsule lights, fitted inside the 1 × 1 tile so every one of the 16 facings clears the frame.',
       'The reference\'s cream armour is drawn in the palette\'s pale plate with amber scuffs; the palette has no cream, and adding a colour would change it for every asset.',
-      'The reference\'s long flame fan is cut down to a short burst at the muzzles, so the flash stays inside the tile; the barrels turn a sixth between the two firing frames.',
-      'Firing replaces the working state: after each round the head shows a muzzle flash and recoil (2 frames at 16 fps), then settles back to idle until the next shot.',
+      'The reference\'s long flame fan is cut down to a short burst at the muzzles, so the flash stays inside the tile; while it is engaging a target the barrels spin and the ammo belts feed forward into the gun (4 looping frames at 16 fps), with the muzzle flash and recoil shown for a moment after each round.',
+      'Firing replaces the working state: the head spins its barrels and feeds its belts the whole time it has a target, not only for the shot.',
       'Damaged rusts the armour, bends the barrel cluster, drops a few rounds from a belt and turns the rear lamp into a blinking red fault lamp; the damaged head still tracks and fires.',
       'Revised: the pad shrank from 39 to 32 world px, leaving grass round it inside the tile; the slewing ring grew from 22 to 27 world px across with a gold bolt rim; the head is wider and now overhangs the ring.'
     ]

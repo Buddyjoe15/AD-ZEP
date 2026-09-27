@@ -588,17 +588,23 @@ test('pixel-art Sentry Turret: its head layer turns toward the aim at its turn r
       let stamped = null; const orig = P.stampFrame; P.stampFrame = function(g, spr, str){ if (spr === sp) stamped = str; return orig.apply(this, arguments); };
       P.drawBuilding(document.createElement('canvas').getContext('2d'), b, 1, S.time + 0.3);
       P.stampFrame = orig;
-      const facingEast = H.facings / 4;
-      const firing = stamped === H.frames[facingEast][H.states.firing.start];
+      const facingEast = H.facings / 4, at = t => Math.floor(t * H.states.firing.fps) % H.states.firing.frames;
+      const firing = stamped === H.frames[facingEast][H.states.flash.start + at(S.time + 0.3)];
+      // Between rounds, while it still has a target, the barrels spin and the belts feed.
+      s.cool = 0.2; stamped = null; P.stampFrame = function(g, spr, str){ if (spr === sp) stamped = str; return orig.apply(this, arguments); };
+      const spun = [0.3, 0.37, 0.44].map(dt => { P.drawBuilding(document.createElement('canvas').getContext('2d'), b, 1, S.time + dt); return H.frames[facingEast].lastIndexOf(stamped) - H.states.firing.start; });   // firing frame 0 is the idle frame too
+      P.stampFrame = orig;
       b.hp = 0; S.paused = false;
-      return new Promise(res => setTimeout(() => res({ sprite: P.buildingSprite('sentry_turret'), facings: H.facings, start, drawn, firing, removed: !P.aims.has(b.id), rubble: P.rubble.some(x => x.type === 'sentry_turret') }), 300));
+      return new Promise(res => setTimeout(() => res({ sprite: P.buildingSprite('sentry_turret'), facings: H.facings, start, drawn, firing, spun, spinFrames: H.states.firing.frames, removed: !P.aims.has(b.id), rubble: P.rubble.some(x => x.type === 'sentry_turret') }), 300));
     });
     assert.equal(r.sprite, 'sentry_turret');
     assert.equal(r.facings, 16);
     assert.ok(Math.abs(r.start + Math.PI / 2) < 1e-9, 'built aiming up');
     assert.ok(r.drawn[0] > r.start && r.drawn[0] < r.drawn[1] && r.drawn[1] < r.drawn[2], 'the head eases round, not snapping');
     assert.ok(Math.abs(r.drawn[3]) < 1e-9, 'and settles on the aim');
-    assert.ok(r.firing, 'firing frames play facing the target after a round');
+    assert.ok(r.firing, 'the flash frame plays facing the target just after a round');
+    assert.equal(new Set(r.spun).size, 3, 'between rounds the firing frames loop: barrels spin, belts feed');
+    assert.ok(r.spun.every(f => f >= 0 && f < r.spinFrames), 'and they are firing frames, not flash frames');
     assert.ok(r.removed && r.rubble, 'a destroyed turret drops its head and leaves rubble');
     await page.screenshot({ path: path.join(OUT, 'pixel-art-sentry-turret.png') });
     assert.deepEqual(errors, []);

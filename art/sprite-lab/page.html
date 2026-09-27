@@ -202,7 +202,7 @@ $('animTitle').textContent = (unit ? 'Every frame, facing down-right' : 'Every s
 if (H){
   $('headSec').hidden = false;
   $('headTitle').textContent = `${H.facings} directions, turning on the ring`;
-  $('headNote').textContent = `The head is its own layer, drawn over the ${Object.keys(H.on).join(' and ')} base in the facing nearest its aim, easing round at ${H.turnRate ? Math.round(H.turnRate / TAU * 10) / 10 + ' turns' : 'a set rate'} a second, as the game draws it. Above: it tracks a hostile Spider circling it and fires at it; the flash and recoil play after each round. Below: every facing.`;
+  $('headNote').textContent = `The head is its own layer, drawn over the ${Object.keys(H.on).join(' and ')} base in the facing nearest its aim, easing round at ${H.turnRate ? Math.round(H.turnRate / TAU * 10) / 10 + ' turns' : 'a set rate'} a second, as the game draws it. Above: it tracks a hostile Spider circling it and fires at it: the barrels spin and the belts feed while it is on target, with the muzzle flash after each round. Below: every facing.`;
 }
 if (V){
   $('variantCtl').hidden = false; $('variantSec').hidden = false; $('variantLabel').textContent = V.label;
@@ -378,8 +378,10 @@ Promise.all([load(D.sheet), load(D.ref.sheet), ...D.ground.grass.tiles.map(load)
     TR.aim = S.motion ? (Math.abs(d) <= step ? want : TR.aim + Math.sign(d) * step) : want;
     d = ((want - TR.aim + Math.PI) % TAU + TAU) % TAU - Math.PI;
     if (Math.abs(d) < 0.2 && tt - TR.shot > 0.5) TR.shot = tt;
-    const since = tt - TR.shot, fire = H.states.firing, firing = fire && since < fire.frames / fire.fps;
-    const head = firing ? { state: 'firing', frame: Math.min(fire.frames - 1, Math.floor(since * fire.fps)) } : { state: H.on[base], frame: 0 };
+    // On target it loops `firing`; for a moment after each round, the matching `flash` frame.
+    const since = tt - TR.shot, fire = H.states.firing, onTarget = Math.abs(d) < 0.6, firing = fire && onTarget && since < 0.12;
+    const spinF = fire && S.motion ? Math.floor(tt * fire.fps) % fire.frames : 0;
+    const head = fire && onTarget ? { state: firing && H.states.flash ? 'flash' : 'firing', frame: spinF } : { state: H.on[base], frame: 0 };
     const heading = ang + Math.PI / 2, erow = Math.round((heading + Math.PI / 2) / (Math.PI / 4));
     const spiderRow = ((erow % 8) + 8) % 8;
     draw(g, 'ref', 'shadow', spiderRow, col(RM, 'walk', t), ex, ey);

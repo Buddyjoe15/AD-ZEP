@@ -59,11 +59,16 @@
       },
       "firing": {
         "start": 1,
-        "frames": 2,
+        "frames": 4,
+        "fps": 16
+      },
+      "flash": {
+        "start": 5,
+        "frames": 4,
         "fps": 16
       },
       "damaged": {
-        "start": 3,
+        "start": 9,
         "frames": 2,
         "fps": 3
       }
@@ -73,6 +78,7 @@
       "damaged": "damaged"
     },
     "turnRate": 6.283185307179586,
+    "flashTime": 0.12,
     "image": "sentry_turret_head.png"
   },
   "image": "sentry_turret.png",

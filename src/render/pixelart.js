@@ -131,9 +131,10 @@
       if (b.hp < b.maxHp) G.Visuals.bar(g, b.x, b.gy * G.CONFIG.TILE - 7, b.w * G.CONFIG.TILE * 0.8, b.hp / b.maxHp);
     },
     // A turret's head layer: the facing nearest the aim it is drawn at, which eases toward the
-    // aim the simulation last set (G.Turrets) at the head's turn rate. After each round it
-    // plays `firing` (muzzle flash, then recoil) over the idle head; a damaged head keeps
-    // its damaged look. Its shadow falls on the base under it.
+    // aim the simulation last set (G.Turrets) at the head's turn rate. While the turret has a
+    // target it loops `firing` (barrels spinning, belts feeding) over the idle head, and for
+    // `flashTime` after each round the matching `flash` frame (muzzle flash and recoil); a
+    // damaged head keeps its damaged look. Its shadow falls on the base under it.
     aims: new Map(),       // building id → { a: drawn aim (radians, 0 = +x), t: last draw time }
     headAim(b, H, t){
       const want = G.Turrets.get(b).aim;
@@ -145,11 +146,12 @@
       return d.a;
     },
     drawHead(g, b, sp, hs, t){
-      const H = sp.head, s = G.Turrets.get(b), fire = H.states.firing;
-      let a = H.states[hs], f = this.frameOf(a, t);
+      const H = sp.head, s = G.Turrets.get(b), fire = H.states.firing, flash = H.states.flash;
+      let f = this.frameOf(H.states[hs], t);
       if (hs === 'idle' && fire && s.targetId != null && !s.noAmmo){
         const cfg = (G.Defs.buildables.get(b.type)?.behaviors || []).find(x => x.type === 'turret'), since = cfg ? cfg.reload - s.cool : Infinity;
-        if (since >= 0 && since < fire.frames / fire.fps){ a = fire; f = fire.start + Math.min(fire.frames - 1, Math.floor(since * fire.fps)); }
+        f = this.frameOf(fire, t);
+        if (flash && since >= 0 && since < (H.flashTime || 0.12)) f += flash.start - fire.start;
       }
       const facing = ((Math.round((this.headAim(b, H, t) + Math.PI / 2) / (Math.PI * 2 / H.facings)) % H.facings) + H.facings) % H.facings;
       this.stampFrame(g, sp, H.frames[facing][f], b.gx, b.gy, b.team);
