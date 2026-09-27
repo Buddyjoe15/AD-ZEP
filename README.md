@@ -54,6 +54,12 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
 
 ## What changed in v0.7
 
+- **Wood, falling trees, dust and scorch marks (Genesis maps).**
+  - **Wood (new resource):** whatever a Salvage Crawler saws down goes into its hold as wood: 8, 20 or 40 from a small, medium or large tree (maples 20% more, dead snags half), 4–8 from a stump and 25–40 from a fallen tree. It then hauls the wood to the nearest drop-off (the ship, unless another is closer) and stops. With a full hold it unloads first, then comes back to saw. Blasts give no wood. Wood shows in the top bar once you have some, and up to 200 crosses to the next Earth.
+  - **Falling trees:** a felled tree falls away from the saw or blast, faster as it goes, with its trunk coming into view, and lands in a cloud of dust. A Crawler throws up sawdust while it cuts, and cleared stumps and fallen trees burst into splinters.
+  - **Blasts** flash, throw up smoke and dust, and leave a scorch mark on the ground, on any map. Scorch marks last for the session and aren't saved.
+  - **Treetops over units:** a tree's crown is now drawn over the ground units under it, slightly see-through, so a Crawler working in the woods is under the canopy rather than on top of it. Drones fly above the trees.
+  - Saves are unchanged (still schema 9): wood is a new resource in the existing stockpile and cargo.
 - **Trees can be destroyed (Genesis maps).** Trees, stumps and fallen trees now take damage.
   - **Explosions:** shells and missiles from the Heavy Turret and Missile Battery explode among the trees wherever they land, hit or miss. A tree that is blown down leaves a snapped stump, and blasts clear stumps and fallen trees away.
   - **Salvage Crawler:** select one (or several) and right-click or tap a tree, stump or fallen tree. It walks up and saws it down with its arms; a tree leaves a sawn stump, and sending it again clears the stump.

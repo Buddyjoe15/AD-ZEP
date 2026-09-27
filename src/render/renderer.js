@@ -258,6 +258,10 @@
     // Everything drawn above units, in world coordinates.
     drawOverlay(g, visible, z, t, inView, lod2d){
       const S = G.State, C = G.CONFIG, T = C.TILE;
+      // Treetops over the units under them, then falling trees, dust and sawdust (Genesis).
+      G.TreeArt.drawOverUnits(g, S.grid, visible, t, z);
+      for (const u of visible){ const p = u.command === 'gather' && G.Gather.chopTarget(u) >= 0 && G.Visuals.laserTarget(u); if (p) G.TreeFX.saw(p.x, p.y); }
+      G.TreeFX.draw(g, z);
       const sel = visible.filter(u => S.selected.has(u.id) && !u.isShip);
       if (sel.length){
         g.fillStyle = 'rgba(115,190,255,.025)'; g.strokeStyle = 'rgba(145,210,255,.12)'; g.lineWidth = 1 / z;

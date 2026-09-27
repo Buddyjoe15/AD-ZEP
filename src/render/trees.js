@@ -140,11 +140,15 @@
   }
   // Draws trees ids[0..count) of index I: one merged shadow, then the crowns. Pose (lean
   // shift `I.dx` in world px, rustle step `I.step`) must be filled in for each.
-  function drawPixel(g, I, count, A){
-    const ALL = G.TREES.ALL, smooth = g.imageSmoothingEnabled;
+  // The mip level to draw at in `g`, and whether it still needs averaging (fewer device px
+  // than art px) rather than sampling.
+  function levelFor(g){
     const perArt = Math.abs(g.getTransform().a) / 2;   // device px per art px
     const level = perArt >= 1 ? 0 : perArt >= 0.5 ? 1 : 2;
-    const shrink = perArt * (1 << level) < 1 - 1e-6;   // still fewer device px than art px: average, don't sample
+    return { level, shrink: perArt * (1 << level) < 1 - 1e-6 };
+  }
+  function drawPixel(g, I, count, A){
+    const ALL = G.TREES.ALL, smooth = g.imageSmoothingEnabled, { level, shrink } = levelFor(g);
     const frame = j => { const set = A.art[ALL[I.EK[j]]][I.ES[j]], v = set[I.VR[j] % set.length]; return v; };
     const shadow = j => layer(I.EK[j]) ? A.shadow[I.ES[j]] : A.propShadow[ALL[I.EK[j]]];
     const m = mask(g);
@@ -238,6 +242,57 @@
         I.dx[j] = pose.lean * LEAN[I.ES[j]]; I.step[j] = pose.rustle;
       }
       drawPixel(g, I, count, A);
+    },
+    // The crowns of trees standing over ground units in `units`, drawn again above them
+    // (CANOPY_ALPHA, so a unit still shows through), as a tree's top is higher than any
+    // crew machine. Flying units stay above the trees.
+    CANOPY_ALPHA: 0.78,
+    drawOverUnits(g, grd, units, t, z){
+      if (!this.has(grd) || z < G.CONFIG.LOD_ZOOM) return;
+      const I = index(grd), A = pixelArt(), st = states(grd), tiles = grd.tiles, T = G.CONFIG.TILE, cols = grd.cols, SP = G.TREES.species, KINDS = G.TREES.KINDS;
+      const stamp = ++I.stamp;
+      let count = 0, extras = false, n = 0;
+      const test = (j, u) => {
+        if (I.seen[j] === stamp || !layer(I.KD[j]) || !visible(I, j, st, tiles) || !layer(I.EK[j])) return;
+        const r = SP[KINDS[I.EK[j]]].crown[I.ES[j]] / 2;
+        if (Math.hypot(I.X[j] - u.x, I.Y[j] - u.y) < r + u.radius * 0.8){ I.seen[j] = stamp; I.ids[count++] = j; return true; }
+      };
+      for (const u of units){
+        if (u.isShip || u.hp <= 0 || ++n > 4000) continue;
+        if (G.Defs.units.get(u.type)?.flying) continue;
+        const gx = Math.floor(u.x / T), gy = Math.floor(u.y / T);
+        for (let y = gy - 1; y <= gy + 1; y++) for (let x = gx - 1; x <= gx + 1; x++){
+          if (!grd.inBounds(x, y)) continue;
+          const i = y * cols + x;
+          for (let k = I.head[i]; k >= 0; k = I.next[k]) test(k, u);
+          const e = I.extraAt.get(i);
+          if (e !== undefined && test(e, u)) extras = true;
+        }
+      }
+      if (!count) return;
+      sortIds(I, count, extras);
+      const live = this.live(grd, z), LEAN = G.TREES.LEAN_PX;
+      g.save(); g.globalAlpha = this.CANOPY_ALPHA;
+      for (let k = 0; k < count; k++){
+        const j = I.ids[k], pose = live ? G.Weather.treePose(I.X[j], I.Y[j], t, SP[KINDS[I.EK[j]]]) : { lean: 0, rustle: 0 };
+        this.drawCrown(g, KINDS[I.EK[j]], I.ES[j], I.VR[j], I.X[j] + pose.lean * LEAN[I.ES[j]], I.Y[j], 1, pose.rustle, A);
+      }
+      g.restore();
+    },
+    // One crown (no shadow) of `kind` at world point (x, y): pixel art, or a plain circle.
+    drawCrown(g, kind, size, variant, x, y, alpha = 1, step = 0, A = pixelArt()){
+      const a0 = g.globalAlpha;
+      g.globalAlpha = a0 * alpha;
+      if (A){
+        const set = A.art[kind][size], v = set[variant % set.length], str = expand(v.frames[step % v.frames.length]), w = v.n / 2, { level, shrink } = levelFor(g), smooth = g.imageSmoothingEnabled;
+        g.imageSmoothingEnabled = shrink;
+        g.drawImage(mip(str, v.n, level, false), x - w / 2, y - w / 2, w, w);
+        g.imageSmoothingEnabled = smooth;
+      } else {
+        const r = G.TREES.species[kind].crown[size] / 2, c = CLASSIC[kind];
+        g.fillStyle = `rgb(${c})`; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+      }
+      g.globalAlpha = a0;
     },
     // True when a fallen tree drawn here lies across tile i (its tile art is left out).
     logOn(grd, i){ return this.has(grd) && index(grd).logs[i] === 1; },

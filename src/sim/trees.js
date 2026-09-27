@@ -1,8 +1,10 @@
 /* Destructible trees and dead wood on maps with free-standing trees (Genesis, grid.art.trees).
    Explosions (turret splash, where a shell or missile lands) damage everything within their
-   radius, and a Salvage Crawler ordered onto a tree saws it down. A tree that is destroyed
-   leaves a stump: sawn when cut, snapped when blown apart. Destroying a stump or a fallen
-   tree clears it away. Toughness is in GW.TREES (src/data/trees.js).
+   radius, and a Salvage Crawler ordered onto a tree saws it down and takes its wood (see
+   G.Gather.chop). A tree that is destroyed leaves a stump: sawn when cut, snapped when blown
+   apart. Destroying a stump or a fallen tree clears it away. Toughness and wood are in
+   GW.TREES (src/data/trees.js). Events: 'tree:changed' when something is destroyed, 'blast'
+   for every explosion (the renderer draws the fall, dust and scorch marks from them).
 
    Saved state (`trees` in a save, schema 9): [index, state, damage] for every tree touched,
    where index is the tree's place in grid.art.trees (fixed by the seed), state is ALIVE,
@@ -82,6 +84,15 @@
     kind(k){ return ensure() ? kindNow(k) : null; },
     hp(k){ return ensure() ? Math.max(0, maxHp(k) - cur.damage[k]) : 0; },
     maxHp(k){ return ensure() ? maxHp(k) : 0; },
+    // Wood a Salvage Crawler gets from sawing down tree k as it stands now (GW.TREES.WOOD).
+    wood(k){
+      if (!ensure() || !present(k)) return 0;
+      const W = G.TREES.WOOD, kind = kindNow(k), z = cur.tr.size[k];
+      if (cur.state[k] === CUT || cur.state[k] === SNAPPED) return W.stump[z >= 2 ? 1 : 0];
+      if (kind === 'log') return W.log[z];
+      if (kind === 'stump_cut' || kind === 'stump_broken') return W.stump[z];
+      return Math.round(W.tree[z] * (G.TREES.species[kind].wood || 1));
+    },
     pos(k){ return ensure() ? { x: cur.tr.x[k], y: cur.tr.y[k] } : null; },
     // The point of tree k nearest to (x, y): its trunk, or for a fallen tree a point on its trunk.
     nearestPoint(k, x, y){
@@ -116,9 +127,10 @@
       });
       return best;
     },
-    // Deals `amount` damage to tree k. `how` is 'cut' (sawn down) or 'blast'. Returns true
-    // when it was destroyed (a tree becomes a stump; a stump or fallen tree goes).
-    damage(k, amount, how = 'blast'){
+    // Deals `amount` damage to tree k. `how` is 'cut' (sawn down) or 'blast'; `from` ({x, y},
+    // optional) is where the saw or blast is, so a felled tree falls away from it. Returns
+    // true when it was destroyed (a tree becomes a stump; a stump or fallen tree goes).
+    damage(k, amount, how = 'blast', from = null){
       if (!ensure() || !(amount > 0) || !present(k)) return false;
       cur.damage[k] += amount;
       if (cur.damage[k] < maxHp(k)) return false;
@@ -134,17 +146,19 @@
           G.TREES.logTiles(tr.x[k], tr.y[k], tr.size[k], tr.variant[k] >> 1, T, (tx, ty) => { if (G.State.grid.inBounds(tx, ty)) free(ty * W + tx, logId); });
         }
       }
-      G.Events.emit('tree:changed', { k, x: tr.x[k], y: tr.y[k], was, now: kindNow(k), state: cur.state[k] });
+      G.Events.emit('tree:changed', { k, x: tr.x[k], y: tr.y[k], size: tr.size[k], variant: tr.variant[k], was, now: kindNow(k), state: cur.state[k], how, from: from ? { x: from.x, y: from.y } : null });
       return true;
     },
     // An explosion: `amount` damage to everything within r of (x, y). Returns how many
     // things it destroyed.
+    // On every map, an explosion is announced ('blast': dust and a scorch mark are drawn).
     blast(x, y, r, amount){
+      G.Events.emit('blast', { x, y, r });
       if (!ensure()) return 0;
       const hit = [];
       this.within(x, y, r, k => hit.push(k));
       let n = 0;
-      for (const k of hit) if (this.damage(k, amount, 'blast')) n++;
+      for (const k of hit) if (this.damage(k, amount, 'blast', { x, y })) n++;
       return n;
     },
     // Save data: [index, state, damage] for every tree that isn't untouched.

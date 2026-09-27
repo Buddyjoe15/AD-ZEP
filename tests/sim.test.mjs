@@ -864,14 +864,33 @@ test('genesis trees, stumps and fallen trees can be blown up and sawn down; save
   const at = G.openPoint(tr.x[saw], tr.y[saw]), crawler = G.Units.spawn('salvage_crawler', at.x, at.y);
   assert.equal(G.Gather.chop([crawler], saw).length, 1);
   assert.equal(G.Gather.chopTarget(crawler), saw);
+  const wood = Tr.wood(saw), stock = G.Economy.get('wood');
+  assert.equal(wood, Math.round(G.TREES.WOOD.tree[2] * (G.TREES.species[kind(saw)].wood || 1)));
   for (let s = 0; s < 40 && Tr.state(saw) === Tr.ALIVE; s++) G.Sim.run(1);
   assert.equal(Tr.state(saw), Tr.CUT, 'sawn down');
   assert.equal(Tr.kind(saw), 'stump_cut');
-  assert.equal(crawler.command, 'idle', 'the Crawler stops once it is down');
-  // Sent back, it clears the stump too.
+  // Its wood goes into the Crawler's hold, and it hauls it to the ship, then stops.
+  assert.equal(crawler.cargo.wood, wood, 'the wood is in the hold');
+  assert.equal(crawler.haulState, 'return');
+  for (let s = 0; s < 90 && crawler.command !== 'idle'; s++) G.Sim.run(1);
+  assert.equal(crawler.command, 'idle', 'done once the wood is delivered');
+  assert.equal(crawler.cargo.wood || 0, 0);
+  assert.equal(G.Economy.get('wood'), stock + wood, 'delivered to the ship');
+  // Sent back, it clears the stump too, for a little more wood.
   G.Gather.chop([crawler], saw);
-  for (let s = 0; s < 20 && Tr.present(saw); s++) G.Sim.run(1);
+  for (let s = 0; s < 60 && Tr.present(saw); s++) G.Sim.run(1);
   assert.equal(Tr.state(saw), Tr.GONE);
+  assert.equal(crawler.cargo.wood, G.TREES.WOOD.stump[1]);
+  // With a full hold it unloads first, then comes back to saw.
+  const next = near(k => standing(k) && tr.size[k] === 1 && Math.hypot(tr.x[k] - crawler.x, tr.y[k] - crawler.y) < 800);
+  crawler.cargo.metal = crawler.cargoCapacity;
+  G.Gather.chop([crawler], next);
+  G.Sim.run(0.2);
+  assert.equal(crawler.haulState, 'unloadFirst');
+  for (let s = 0; s < 120 && Tr.state(next) === Tr.ALIVE; s++) G.Sim.run(1);
+  assert.equal(Tr.state(next), Tr.CUT, 'came back and sawed it down');
+  // Blasts give no wood.
+  assert.equal(S.units.some(u => u.cargo && u.cargo.wood && u !== crawler), false);
 
   // Partly sawn: a save keeps it, and everything destroyed, with the tiles opened.
   const half = near(k => standing(k) && tr.size[k] === 2 && Math.hypot(tr.x[k] - sh.x, tr.y[k] - sh.y) > 600);

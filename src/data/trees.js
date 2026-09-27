@@ -27,6 +27,11 @@ GW.TREES.KINDS = Object.keys(GW.TREES.species);
 // A Salvage Crawler saws at CHOP_RATE × its gatherRate damage a second.
 GW.TREES.HP = { tree: [60, 160, 320], stump: [90, 150], log: [200, 320] };
 GW.TREES.CHOP_RATE = 25;
+// Wood a Salvage Crawler gets from what it saws down (explosions leave none): living trees
+// by size, times the species' `wood`; stumps and fallen trees by their size.
+GW.TREES.WOOD = { tree: [8, 20, 40], stump: [4, 8], log: [25, 40] };
+GW.TREES.species.snag.wood = 0.5;
+GW.TREES.species.maple.wood = 1.2;
 GW.TREES.species.snag.tough = 0.6;
 GW.TREES.species.maple.tough = 1.2;
 // Dead wood among the trees, placed and drawn with them but under every crown. `sizes` are

@@ -131,6 +131,7 @@
           if (r() < 0.06){ g.strokeStyle = '#758761'; g.lineWidth = 1; g.beginPath(); const ax = px + 8 + r() * 32, ay = py + 10 + r() * 28; g.moveTo(ax, ay + 4); g.lineTo(ax - 2, ay); g.moveTo(ax, ay + 4); g.lineTo(ax + 2, ay); g.stroke(); }
         }
       }
+      if (G.TreeFX) G.TreeFX.paintScorch(g, cx * size, cy * size, size);   // blast marks
       WA.paintTops(g, grid, cx * ct, cy * ct, ct, T, false);
       return cv;
     }

@@ -583,6 +583,7 @@
         const gx = x0 + lx, gy = y0 + ly;
         if (gx < cols && gy < rows) heightShade(ctx, gx, gy, lx * S, ly * S, S);
       }
+      if (G.TreeFX) G.TreeFX.paintScorch(ctx, x0 * S, y0 * S, ct * S);   // blast marks, under everything tall
       bakeTrees = !!(opts && opts.trees);
       this.paintTops(ctx, grd, x0, y0, ct, S, true);
       if (art.trees && bakeTrees) G.TreeArt.paintChunk(ctx, grd, Math.floor(x0 / ct), Math.floor(y0 / ct));

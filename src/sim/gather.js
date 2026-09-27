@@ -8,7 +8,8 @@
    to the ship. Deposits are effectively endless.
    Trees: a unit whose `gathers` lists 'tree' (the Salvage Crawler) can be sent to saw down a
    tree, stump or fallen tree on a Genesis map (G.Trees). It keeps the gather order, with
-   `nodeId` 'tree-<index>', until the thing is destroyed; a tree leaves a sawn stump. */
+   `nodeId` 'tree-<index>', until the thing is destroyed (a tree leaves a sawn stump), then
+   hauls the wood to the nearest dropoff like any other cargo. */
 (function(){
   'use strict';
   const G = GW;
@@ -129,9 +130,15 @@
       else if (us.length) G.notify('Only a Salvage Crawler can saw down trees');
       return done;
     },
+    // Sawing: walk up, saw, take the wood, haul it to the nearest dropoff (the ship, unless
+    // another dropoff is closer), then stop. With a full hold it unloads first and comes back
+    // (haulState 'unloadFirst'); after the wood is delivered the job is done ('return').
     updateChop(u, dt){
       const S = G.State, k = this.chopTarget(u);
+      if (u.haulState === 'return'){ this.returnLeg(u, () => this.stop(u)); return; }
+      if (u.haulState === 'unloadFirst'){ this.returnLeg(u, () => { u.haulState = 'toNode'; }); return; }
       if (!(k >= 0) || !G.Trees.present(k)){ this.stop(u); return; }
+      if (u.cargoCapacity && G.Units.cargoTotal(u) >= u.cargoCapacity - 0.001){ u.haulState = 'unloadFirst'; u.commandNextPath = 0; return; }
       const p = G.Trees.nearestPoint(k, u.x, u.y), d = Math.hypot(p.x - u.x, p.y - u.y);
       // Walk up close; the route ends at the nearest open ground when the tree stands in a
       // thicket. Saw from there if it is within the arms' reach, else give up.
@@ -143,9 +150,15 @@
       }
       u.path = []; u.pathIndex = 0; u.haulState = 'collecting';
       u.heading = Math.atan2(p.y - u.y, p.x - u.x);
-      const def = G.Defs.units.get(u.type);
-      if (G.Trees.damage(k, G.TREES.CHOP_RATE * (def.gatherRate || 1) * dt, 'cut')){
-        G.notify(u.name + (G.Trees.state(k) === G.Trees.GONE ? ' cleared it away' : ' felled a tree'));
+      const def = G.Defs.units.get(u.type), wood = G.Trees.wood(k);
+      if (!G.Trees.damage(k, G.TREES.CHOP_RATE * (def.gatherRate || 1) * dt, 'cut', { x: u.x, y: u.y })) return;
+      const felled = G.Trees.state(k) !== G.Trees.GONE, room = Math.max(0, (u.cargoCapacity || 0) - G.Units.cargoTotal(u)), got = Math.min(room, wood);
+      if (got > 0){
+        u.cargo.wood = G.round6((u.cargo.wood || 0) + got);
+        G.notify(`${u.name} ${felled ? 'felled a tree' : 'cleared it away'}: ${Math.floor(got)} wood`);
+        u.haulState = 'return'; u.commandNextPath = 0;
+      } else {
+        G.notify(u.name + (felled ? ' felled a tree' : ' cleared it away'));
         this.stop(u);
       }
     },
