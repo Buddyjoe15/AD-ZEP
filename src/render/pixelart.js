@@ -150,6 +150,11 @@
       return 0;
     },
     tileCanvas(str){ return this.canvas(str, D.tileArt, D.tileArt); },
+    tileArt(){ return D ? D.tileArt : 48; },
+    // True when `art` px of art drawn `size` units across in `g` land on fewer device px than
+    // art px (96 px terrain in a 1× chunk, or zoomed out). Such draws are averaged (smoothed)
+    // rather than sampled, so fine terrain detail doesn't shimmer.
+    shrinks(g, size, art){ return Math.abs(g.getTransform().a) * size < art - 1e-6; },
     // A tree canopy prop with its engine shadow (unless `noShadow`), drawn at world rect
     // (x, y, size). Shadow and canopy are composed once per frame string and size, so each
     // tree is a single draw.
@@ -172,7 +177,7 @@
         this.propCache.set(key, c);
       }
       const smooth = g.imageSmoothingEnabled;
-      g.imageSmoothingEnabled = false;
+      g.imageSmoothingEnabled = this.shrinks(g, c.width * c.scale, c.width);
       g.drawImage(c, x, y, c.width * c.scale, c.height * c.scale);
       g.imageSmoothingEnabled = smooth;
     }

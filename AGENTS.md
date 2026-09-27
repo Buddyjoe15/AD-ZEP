@@ -10,6 +10,7 @@ Instructions for AI agents working on this repository. `CLAUDE.md` has the same 
 - The simulation layers (`src/core`, `src/data`, `src/world`, `src/sim`) never touch the DOM.
 - Commands: `npm test` (static checks + headless tests), `npm run test:browser` (Playwright, if installed), `npm run build`, `npm run save:snapshot`.
 - New pixel art follows `art/PIXEL_ART_RULES.md` (scale, palette, facings, shadows, and the questions to ask before drawing).
+- Test sprites are made in the sprite lab (`art/sprite-lab/`, `npm run sprite`; rules section 5). In Claude Code, `/sprite <description>` goes from an idea to a published test page.
 
 ## Save format rules
 

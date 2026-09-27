@@ -65,7 +65,9 @@ test('sheet PNGs are fully opaque or fully transparent', () => {
 
 test('woodlands pilot: full terrain tiles, edge-matched variants, shoreline and cliff pieces, outlined tree props', () => {
   const W = data.woodlands, T = data.tileArt;
-  assert.equal(T, 48, 'woodlands art is drawn at 1 art px per world px');
+  assert.equal(T, 96, 'terrain art is drawn at 2 art px per world px: 96 × 96 per tile');
+  assert.equal(data.worldPxPerArtPx, 0.5);
+  for (const v of ['v1', 'v2']) for (const s of data.terrain[v].tiles) assert.equal(s.length, T * T, 'dust plain ' + v);
   for (const key of ['grass', 'tall_grass', 'water', 'deep_water', 'shore', 'cliff']){
     for (const s of W[key].tiles){ assert.equal(s.length, T * T, key); assert.ok(!s.includes('.'), key + ' tiles are fully opaque'); }
   }
@@ -76,12 +78,12 @@ test('woodlands pilot: full terrain tiles, edge-matched variants, shoreline and 
   // A south face has rock across its middle rows; a north rim keeps grass there.
   const S = decode(W.cliff.tiles[W.cliff.pieces.indexOf('S')], T), N = decode(W.cliff.tiles[W.cliff.pieces.indexOf('N')], T);
   const name = i => PALETTE[i - 1][0];
-  assert.ok(name(S.get(24, 24)).startsWith('dust') || name(S.get(24, 24)).startsWith('char'));
-  assert.ok(name(N.get(24, 24)).startsWith('grass'));
+  assert.ok(name(S.get(T / 2, T / 2)).startsWith('dust') || name(S.get(T / 2, T / 2)).startsWith('char'));
+  assert.ok(name(N.get(T / 2, T / 2)).startsWith('grass'));
   // Tree props: three kinds, each variant with 9 frames (lean * 3 + rustle): leans move further
   // downwind (east), rustle steps change the leaves without moving the crown;
   // transparent 1 px margin, outlined, engine shadow offset.
-  assert.deepEqual([...W.tree.shadow.offset], [4, 4]);
+  assert.deepEqual([...W.tree.shadow.offset], [8, 8], 'the tree shadow sits 4 world px down and right');
   assert.equal(W.tree.types.join(), 'oak,pine,birch');
   assert.equal(W.tree.animations.lean.frames * W.tree.animations.rustle.frames, 9);
   const cx = g => { let sum = 0, n = 0; for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) if (g.get(x, y)){ sum += x; n++; } return sum / n; };
@@ -101,4 +103,28 @@ test('woodlands pilot: full terrain tiles, edge-matched variants, shoreline and 
       }
     }
   }
+});
+
+test('sprite lab: the example spec renders top-down at 96 × 96 and passes every check; a sprite too big for its frame fails', async () => {
+  const { loadSpec, renderSpec, check } = await import('../tools/sprite-lab.mjs');
+  const { Model, MAT, mul, translate, scale, unitFrame, LIFT } = await import('../tools/sprite-kit.mjs');
+  assert.equal(LIFT, 0, 'straight top-down');
+  assert.deepEqual([unitFrame().w, unitFrame().h], [96, 96], 'a one-tile unit frame is 96 × 96 art px');
+  const spec = await loadSpec(path.join(path.dirname(new URL(import.meta.url).pathname), '../art/sprite-lab/specs/example_spider.mjs'));
+  const R = renderSpec(spec);
+  assert.equal(R.rows.length, 8, 'eight facings');
+  assert.equal(R.rows[0].length, 10, 'idle 2 + walk 4 + work 4');
+  const results = check(spec, R);
+  assert.deepEqual(results.filter(c => c.level !== 'pass').map(c => c.name), [], JSON.stringify(results));
+  // A box reaching past the inscribed circle, with no team colour where one is required.
+  const big = { ...spec, key: 'too_big', gameKey: null, animations: { idle: { frames: 1, fps: 1 } }, build: () => new Model().box(mul(translate(0, 5, 0), scale(40, 10, 40)), MAT.steel) };
+  const bad = check(big, renderSpec(big)).filter(c => c.level === 'fail').map(c => c.name);
+  assert.ok(bad.includes('Inside the frame') && bad.includes('Team colour'), bad.join());
+  // Variants repeat every animation, one block per variant, and build() is told which.
+  const seen = [], varied = { ...spec, variants: { label: 'Load', by: 'cargo', values: ['empty', 'full'] }, build: a => { seen.push(a.variant); return spec.build(a); } };
+  const RV = renderSpec(varied);
+  assert.equal(RV.rows[0].length, 20, 'two blocks of idle 2 + walk 4 + work 4');
+  assert.deepEqual([RV.seq[0].variant, RV.seq[10].variant, RV.seq[10].anim], ['empty', 'full', 'idle']);
+  assert.ok(seen.includes('empty') && seen.includes('full'));
+  assert.ok(check(varied, RV).some(c => c.name === 'Variants' && c.level === 'warn'));
 });

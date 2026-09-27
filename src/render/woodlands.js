@@ -123,9 +123,9 @@
     return null;
   }
   function blit(ctx, str, px, py, S){
-    const smooth = ctx.imageSmoothingEnabled;
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(G.PixelArt.tileCanvas(str), px, py, S + .5, S + .5);
+    const smooth = ctx.imageSmoothingEnabled, P = G.PixelArt;
+    ctx.imageSmoothingEnabled = P.shrinks(ctx, S, P.tileArt());
+    ctx.drawImage(P.tileCanvas(str), px, py, S + .5, S + .5);
     ctx.imageSmoothingEnabled = smooth;
   }
 

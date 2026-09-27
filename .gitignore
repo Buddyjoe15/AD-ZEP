@@ -2,3 +2,4 @@ node_modules/
 dist/
 tests/output/
 .DS_Store
+art/sprite-lab/out/
