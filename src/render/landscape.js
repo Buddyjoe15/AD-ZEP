@@ -47,6 +47,31 @@
     return n;
   })();
   const noise = (ax, ay) => NOISE[(ay & (NS - 1)) * NS + (ax & (NS - 1))];
+  // Fractured rock, 128 × 128 art px, repeating: irregular slabs (wider than tall) from a
+  // jittered Voronoi pattern. ROCK_SHADE is each slab's tone (0–1); ROCK_EDGE is 2 on a crack
+  // between slabs, 1 on a slab's lit top edge, 0 inside.
+  const ROCK_SHADE = new Float32Array(NS * NS), ROCK_EDGE = new Uint8Array(NS * NS);
+  (() => {
+    const CW = 26, CH = 12, nx = NS / CW | 0, ny = NS / CH | 0, pts = [];
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) pts.push([(i + 0.15 + G.hashRandom3(i, j, 801) * 0.7) * NS / nx, (j + 0.15 + G.hashRandom3(i, j, 803) * 0.7) * NS / ny, G.hashRandom3(i, j, 805)]);
+    const id = new Int32Array(NS * NS);
+    for (let y = 0; y < NS; y++) for (let x = 0; x < NS; x++){
+      let b1 = 1e9, b2 = 1e9, bi = 0;
+      for (let k = 0; k < pts.length; k++){
+        let dx = Math.abs(x - pts[k][0]), dy = Math.abs(y - pts[k][1]);
+        dx = Math.min(dx, NS - dx); dy = Math.min(dy, NS - dy) * 1.7;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < b1){ b2 = b1; b1 = d; bi = k; } else if (d < b2) b2 = d;
+      }
+      id[y * NS + x] = bi; ROCK_SHADE[y * NS + x] = pts[bi][2];
+      ROCK_EDGE[y * NS + x] = b2 - b1 < 1.4 ? 2 : 0;
+    }
+    for (let y = 0; y < NS; y++) for (let x = 0; x < NS; x++){
+      const i = y * NS + x, up = ((y + NS - 1) % NS) * NS + x;
+      if (!ROCK_EDGE[i] && ROCK_EDGE[up] === 2 && id[up] !== id[i]) ROCK_EDGE[i] = 1;
+      else if (!ROCK_EDGE[i] && id[up] !== id[i]) ROCK_EDGE[i] = 1;
+    }
+  })();
 
   // Per-tile fields for a Genesis grid: effective height E (a cliff tile dropping to the south
   // counts as the low side, so its face hangs over it), water W (1 water), depth D (1 deep),
@@ -199,7 +224,9 @@
           if (wet){ across(L.W, wx / t - 0.5, j0, colW); across(L.D, wx / t - 0.5, j0, colD); }
           if (trail) across(L.P, wx / t - 0.5, j0, colP);
           const nx7 = NOISE[7 * NS + axm] + NOISE[3 * NS + ((ax >> 1) & (NS - 1))] * 0.5;   // waterfall streak strength of this column
-          const nCol = NOISE[11 * NS + ((ax >> 3) & (NS - 1))];
+          // A ragged foot (faces vary in height), grass hanging over the lip, water stains.
+          const Fc = F + Math.round((NOISE[23 * NS + ((ax >> 2) & (NS - 1))] - 0.5) * 10 * res), overhang = Math.max(0, (NOISE[41 * NS + ((ax >> 1) & (NS - 1))] - 0.55) * 12 * res);
+          const stain = NOISE[5 * NS + ((ax >> 1) & (NS - 1))];
           // Walk down the column from a face's height above the tile (or from where the tile
           // above left off), tracking the last rim.
           let prev = -128, rimY = -1e9, rimL = -128;
@@ -215,27 +242,30 @@
             const ay = rowAY[r], aym = ay & (NS - 1), n = NOISE[aym * NS + axm], dith = BAYER[(ay & 3) * 4 + (ax & 3)];
             let col = -1, alpha = 255;
             const ft = cy - rimY;
-            const face = cliffs && ft < F && rimL > lp && !L.noFace[Math.min(rows - 1, Math.max(0, Math.floor((oy + (rimY + 0.5) * step) / t))) * cols + gx];
+            const face = cliffs && ft < Fc && rimL > lp && !L.noFace[Math.min(rows - 1, Math.max(0, Math.floor((oy + (rimY + 0.5) * step) / t))) * cols + gx];
             let w = Wi;
             if (wet){ const q = rowJ[r], a0 = colW[q]; w = a0 + (colW[q + 1] - a0) * rowF[r] + (NOISE[((ay + 31) & (NS - 1)) * NS + ((ax + 57) & (NS - 1))] - 0.5) * 0.14; }
             if (face){
-              const f = ft / F;
+              const f = ft / Fc;
               if (w >= 0.5){
                 // Falling water: streaks down the face, foam at the foot.
                 col = f > 0.84 ? (n + dith * 0.4 > 0.7 ? P.white : P.water3) : nx7 > 0.95 ? P.white : nx7 > 0.72 ? P.water3 : nx7 > 0.45 ? P.water2 : P.water1;
               } else {
-                // Rock in courses: a lit lip, blocks with mortar lines and offset joints (each
-                // block's top row catching the light), cracks, moss near the top, a dark foot.
-                const off = Math.floor(nCol * 3), row = Math.floor((ay + off) / 11), inRow = (ay + off) % 11;
-                const joint = (ax + row * 9 + Math.floor(NOISE[13 * NS + (row & (NS - 1))] * 24)) % 18 === 0;
-                if (f < 0.05) col = P.dust4;
+                // Natural rock: fractured slabs of different tones, each catching the light on
+                // its top edge, dark cracks between them, water stains running down, moss on the
+                // upper ledges, grass hanging over the lip, and a dark foot.
+                const ri = aym * NS + axm, edge = ROCK_EDGE[ri], shade = ROCK_SHADE[ri], crackOn = NOISE[((ay >> 2) & (NS - 1)) * NS + ((ax >> 2) + 17 & (NS - 1))];
+                if (ft < overhang) col = n + dith * 0.4 > 0.7 ? P.grass1 : P.grass0;
+                else if (f < 0.04) col = P.dust4;
                 else if (f > 0.9) col = dith < 0.6 ? P.char1 : P.dust0;
-                else if (f > 0.8) col = dith < 0.35 ? P.dust0 : P.dust1;
-                else if (inRow === 0 || joint) col = P.dust0;
-                else if (NOISE[((ay >> 1) & (NS - 1)) * NS + ((ax * 3) & (NS - 1))] > 0.86) col = P.char1;   // cracks
-                else if (f < 0.32 && n > 0.7) col = n > 0.76 ? P.leaf1 : P.grass1;
-                else if (inRow === 1) col = f < 0.5 ? P.dust4 : P.dust3;
-                else col = f < 0.35 ? (n + dith * 0.3 > 0.75 ? P.dust4 : P.dust3) : f < 0.65 ? (n + dith * 0.3 > 0.7 ? P.dust3 : P.dust2) : (n > 0.6 ? P.dust2 : P.dust1);
+                else if (edge === 2 && crackOn > 0.32) col = f > 0.5 || n > 0.7 ? P.char1 : P.dust0;
+                else if (f > 0.8) col = dith < 0.4 ? P.dust0 : P.dust1;
+                else if (edge === 1 && crackOn > 0.32) col = f < 0.5 ? P.dust5 : P.dust4;
+                else if (f < 0.36 && shade > 0.55 && n > 0.62) col = n > 0.7 ? P.leaf1 : P.grass1;
+                else {
+                  let tone = shade + (n - 0.5) * 0.5 + dith * 0.2 - f * 0.55 - (stain > 0.78 && f > 0.25 ? 0.35 : 0);
+                  col = tone > 0.72 ? P.dust4 : tone > 0.42 ? P.dust3 : tone > 0.12 ? P.dust2 : P.dust1;
+                }
               }
             } else if (w >= 0.5){
               // Shallows along the edge, open water, and dark where the channel runs deep.
@@ -271,7 +301,12 @@
             }
             if (col < 0 && cliffs){
               // The face's shadow on the ground at its foot.
-              if (rimL > lp && ft >= F && ft < F + fx7 && dith < 0.75 - (ft - F) / fx7 * 0.6){ col = P.char0; alpha = 110; }
+              if (rimL > lp && ft >= Fc && ft < Fc + fx7 && dith < 0.75 - (ft - Fc) / fx7 * 0.6){
+                // Scree fallen from the face lies in its shadow.
+                const sc = NOISE[((ay * 3 + 5) & (NS - 1)) * NS + ((ax * 3) & (NS - 1))];
+                if (sc > 0.8 && ft < Fc + fx7 * 0.7){ col = sc > 0.86 ? P.dust4 : P.dust2; }
+                else { col = P.char0; alpha = 110; }
+              }
               else {
                 // Where no rock face shows: a lit lip on the high side of a rim, a shadow line below it.
                 const lx1 = Lbuf[cb - nRows + r], rx1 = Lbuf[cb + nRows + r];
