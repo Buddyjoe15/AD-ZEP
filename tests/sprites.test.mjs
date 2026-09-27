@@ -138,7 +138,10 @@ test('Sentry Turret: modelled base states and a head layer in 16 facings, turned
   assert.equal(tu.frames[0].length, Object.values(tu.states).reduce((n, s) => n + s.frames, 0));
   assert.equal(H.facings, 16); assert.equal(H.frames.length, 16);
   assert.deepEqual(H.on, { finished: 'idle', damaged: 'damaged' });
-  assert.equal(H.states.firing.frames, H.states.flash.frames, 'a flash frame for every firing frame');
+  assert.deepEqual(H.firing, { idle: ['firing', 'flash'], damaged: ['damaged-firing', 'damaged-flash'] });
+  for (const [fire, flash] of Object.values(H.firing)) assert.equal(H.states[fire].frames, H.states[flash].frames, 'a flash frame for every firing frame');
+  const dmg = H.states['damaged-firing'];
+  assert.equal(new Set(H.frames[0].slice(dmg.start, dmg.start + dmg.frames)).size, dmg.frames, 'the damaged gun spins and feeds too');
   assert.equal(new Set(H.frames[0].slice(H.states.firing.start, H.states.firing.start + H.states.firing.frames)).size, H.states.firing.frames, 'the barrels and belts move every firing frame');
   const cols = Object.values(H.states).reduce((n, s) => n + s.frames, 0);
   for (const row of H.frames){ assert.equal(row.length, cols); for (const str of row) assert.equal(str.length, N * N); }

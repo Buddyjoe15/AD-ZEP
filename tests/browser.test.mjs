@@ -593,9 +593,13 @@ test('pixel-art Sentry Turret: its head layer turns toward the aim at its turn r
       // Between rounds, while it still has a target, the barrels spin and the belts feed.
       s.cool = 0.2; stamped = null; P.stampFrame = function(g, spr, str){ if (spr === sp) stamped = str; return orig.apply(this, arguments); };
       const spun = [0.3, 0.37, 0.44].map(dt => { P.drawBuilding(document.createElement('canvas').getContext('2d'), b, 1, S.time + dt); return H.frames[facingEast].lastIndexOf(stamped) - H.states.firing.start; });   // firing frame 0 is the idle frame too
+      // Below half health it plays the damaged firing loop instead.
+      b.hp = b.maxHp * 0.3; const df = H.states['damaged-firing'];
+      P.stampFrame = function(g, spr, str){ if (spr === sp) stamped = str; return orig.apply(this, arguments); };
+      const damagedSpin = [0.3, 0.37, 0.44].map(dt => { P.drawBuilding(document.createElement('canvas').getContext('2d'), b, 1, S.time + dt); return H.frames[facingEast].lastIndexOf(stamped) - df.start; });
       P.stampFrame = orig;
       b.hp = 0; S.paused = false;
-      return new Promise(res => setTimeout(() => res({ sprite: P.buildingSprite('sentry_turret'), facings: H.facings, start, drawn, firing, spun, spinFrames: H.states.firing.frames, removed: !P.aims.has(b.id), rubble: P.rubble.some(x => x.type === 'sentry_turret') }), 300));
+      return new Promise(res => setTimeout(() => res({ sprite: P.buildingSprite('sentry_turret'), facings: H.facings, start, drawn, firing, spun, damagedSpin, damagedFrames: df.frames, spinFrames: H.states.firing.frames, removed: !P.aims.has(b.id), rubble: P.rubble.some(x => x.type === 'sentry_turret') }), 300));
     });
     assert.equal(r.sprite, 'sentry_turret');
     assert.equal(r.facings, 16);
@@ -605,6 +609,8 @@ test('pixel-art Sentry Turret: its head layer turns toward the aim at its turn r
     assert.ok(r.firing, 'the flash frame plays facing the target just after a round');
     assert.equal(new Set(r.spun).size, 3, 'between rounds the firing frames loop: barrels spin, belts feed');
     assert.ok(r.spun.every(f => f >= 0 && f < r.spinFrames), 'and they are firing frames, not flash frames');
+    assert.equal(new Set(r.damagedSpin).size, 3, 'a damaged turret spins and feeds too');
+    assert.ok(r.damagedSpin.every(f => f >= 0 && f < r.damagedFrames), 'with its damaged firing frames');
     assert.ok(r.removed && r.rubble, 'a destroyed turret drops its head and leaves rubble');
     await page.screenshot({ path: path.join(OUT, 'pixel-art-sentry-turret.png') });
     assert.deepEqual(errors, []);

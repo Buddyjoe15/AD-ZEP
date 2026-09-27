@@ -29,6 +29,16 @@
       "start": 9,
       "frames": 2,
       "fps": 3
+    },
+    "damaged-firing": {
+      "start": 11,
+      "frames": 4,
+      "fps": 16
+    },
+    "damaged-flash": {
+      "start": 15,
+      "frames": 4,
+      "fps": 16
     }
   },
   "on": {
@@ -36,6 +46,16 @@
     "damaged": "damaged"
   },
   "turnRate": 6.283185307179586,
+  "firing": {
+    "idle": [
+      "firing",
+      "flash"
+    ],
+    "damaged": [
+      "damaged-firing",
+      "damaged-flash"
+    ]
+  },
   "flashTime": 0.12,
   "shadow": {
     "drawnBy": "engine",
@@ -46,6 +66,6 @@
     "elevation": "structure"
   },
   "image": "sentry_turret_head.png",
-  "sheetWidth": 1056,
+  "sheetWidth": 1824,
   "sheetHeight": 1536
 }

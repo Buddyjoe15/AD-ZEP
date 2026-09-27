@@ -132,9 +132,10 @@
     },
     // A turret's head layer: the facing nearest the aim it is drawn at, which eases toward the
     // aim the simulation last set (G.Turrets) at the head's turn rate. While the turret has a
-    // target it loops `firing` (barrels spinning, belts feeding) over the idle head, and for
-    // `flashTime` after each round the matching `flash` frame (muzzle flash and recoil); a
-    // damaged head keeps its damaged look. Its shadow falls on the base under it.
+    // target it loops the firing frames for its resting state (`head.firing`: idle → firing,
+    // damaged → damaged-firing; barrels spinning, belts feeding), and for `flashTime` after
+    // each round the matching flash frame (muzzle flash and recoil). Its shadow falls on the
+    // base under it.
     aims: new Map(),       // building id → { a: drawn aim (radians, 0 = +x), t: last draw time }
     headAim(b, H, t){
       const want = G.Turrets.get(b).aim;
@@ -146,9 +147,9 @@
       return d.a;
     },
     drawHead(g, b, sp, hs, t){
-      const H = sp.head, s = G.Turrets.get(b), fire = H.states.firing, flash = H.states.flash;
+      const H = sp.head, s = G.Turrets.get(b), [fireName, flashName] = (H.firing && H.firing[hs]) || [], fire = H.states[fireName], flash = H.states[flashName];
       let f = this.frameOf(H.states[hs], t);
-      if (hs === 'idle' && fire && s.targetId != null && !s.noAmmo){
+      if (fire && s.targetId != null && !s.noAmmo){
         const cfg = (G.Defs.buildables.get(b.type)?.behaviors || []).find(x => x.type === 'turret'), since = cfg ? cfg.reload - s.cool : Infinity;
         f = this.frameOf(fire, t);
         if (flash && since >= 0 && since < (H.flashTime || 0.12)) f += flash.start - fire.start;

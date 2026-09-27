@@ -55,7 +55,7 @@ const armour = (damaged) => patterned(MAT.plate, p => {
   return 0;
 });
 // feed moves the belts toward the front (world px, one cartridge every 1.6).
-function head(m, { recoil = 0, flash = false, damaged = false, frame = 0, plated = true, barrel = true, spin = 0, feed = 0 } = {}){
+function head(m, { recoil = 0, flash = false, damaged = false, frame = 0, plated = true, barrel = true, spin = 0, feed = 0, lampOn = frame === 0 } = {}){
   const y = HEAD_Y, by = y + 4.6, plate = plated ? armour(damaged) : MAT.steel;
   // Dark chassis under everything, and the raised hatch deck at the back.
   box(m, [0, y + 1.5, 2.5], [22, 3, 20], patterned(MAT.dark, p => near(p[2], [-3, 3, 9], 0.3) ? -1 : 0));
@@ -72,7 +72,7 @@ function head(m, { recoil = 0, flash = false, damaged = false, frame = 0, plated
     box(m, [s * 8.8, y + 3.4, 9.6], [5.2, 6.8, 6.4], plate);
     box(m, [s * 8.8, y + 6.9, 7.6], [1.2, 0.4, 2.4], hot(MAT.lampAmber, s * 8.8, 7.6, 0.35));
   }
-  box(m, [0, y + 6.6, 13.9], [5, 1.4, 1.2], damaged ? (frame === 0 ? hot(MAT.lampRed, 0, 13.9, 0.8) : MAT.red) : hot(MAT.lampAmber, 0, 13.9, 0.8));
+  box(m, [0, y + 6.6, 13.9], [5, 1.4, 1.2], damaged ? (lampOn ? hot(MAT.lampRed, 0, 13.9, 0.8) : MAT.red) : hot(MAT.lampAmber, 0, 13.9, 0.8));
   if (!plated){
     // Near-complete: the cowling frame and an open cable run where the belts will go.
     for (const s of [-1, 1]) m.tube(along([s * 4, y + 3, 6], [s * 11, y + 3.4, -6]), MAT.amber, 0.5, 0.5, 6);
@@ -122,8 +122,8 @@ function head(m, { recoil = 0, flash = false, damaged = false, frame = 0, plated
   if (flash){
     // Muzzle flash: a fan of flame tongues from the barrels, kept inside the tile.
     const r = rng(40 + frame * 13);
-    ball(m, [0, by, tipZ - 1.3], [3, 1.4, 1.2], hot(MAT.lampAmber, 0, tipZ - 1.3, 0.9), 10);
-    for (const x of [-2.4, 0, 2.4]) ball(m, [x + (r() - 0.5) * 0.4, by, tipZ - 2.6 - r() * 0.3], [0.6, 0.6, 0.9], patterned(MAT.lampAmber, () => -1), 6);
+    ball(m, [bend, by - bend * 0.3, tipZ - 1.3], [3, 1.4, 1.2], hot(MAT.lampAmber, bend, tipZ - 1.3, 0.9), 10);   // at the (bent) muzzles
+    for (const x of [-2.4, 0, 2.4]) ball(m, [bend + x + (r() - 0.5) * 0.4, by - bend * 0.3, tipZ - 2.6 - r() * 0.3], [0.6, 0.6, 0.9], patterned(MAT.lampAmber, () => -1), 6);
   }
 }
 
@@ -131,7 +131,7 @@ export default {
   key: 'sentry_turret',
   name: 'Sentry Turret',
   gameKey: 'sentry_turret',
-  request: 'Sentry Turret (the existing 1 × 1 structure, drawn today as a placeholder). Revised: a smaller base, a bigger gun base (slewing ring) and a bigger gun turret. Then: engine work so the gun turret turns and tracks enemies. Then: a new look for the head, taking the requester\'s reference art (a six-barrel rotary gun with ammo belts) as inspiration. Then: when firing, the gatling barrels turn and the ammo belts on either side move, as if fed into the turret.',
+  request: 'Sentry Turret (the existing 1 × 1 structure, drawn today as a placeholder). Revised: a smaller base, a bigger gun base (slewing ring) and a bigger gun turret. Then: engine work so the gun turret turns and tracks enemies. Then: a new look for the head, taking the requester\'s reference art (a six-barrel rotary gun with ammo belts) as inspiration. Then: when firing, the gatling barrels turn and the ammo belts on either side move, as if fed into the turret. Then: the same firing frames for the damaged turret.',
   kind: 'structure',
   faction: 'crew',
   team: true,
@@ -151,15 +151,22 @@ export default {
   // the muzzle flash and recoil.
   head: {
     facings: 16,
-    states: { idle: { frames: 1 }, firing: { frames: 4, fps: 16 }, flash: { frames: 4, fps: 16 }, damaged: { frames: 2, fps: 3 } },
+    states: {
+      idle: { frames: 1 }, firing: { frames: 4, fps: 16 }, flash: { frames: 4, fps: 16 },
+      damaged: { frames: 2, fps: 3 }, 'damaged-firing': { frames: 4, fps: 16 }, 'damaged-flash': { frames: 4, fps: 16 }
+    },
+    // For each resting head state, the loop it plays while the turret has a target and the
+    // matching frames with the muzzle flash (shown for flashTime after each round).
+    firing: { idle: ['firing', 'flash'], damaged: ['damaged-firing', 'damaged-flash'] },
     flashTime: 0.12,             // seconds the flash frames show after each round
     on: { finished: 'idle', damaged: 'damaged' },
     turnRate: 2 * Math.PI,       // radians per second the head is drawn turning toward its aim
     build({ state, frame }){
       const m = new Model();
-      if (state === 'firing' || state === 'flash'){
-        const flash = state === 'flash';
-        head(m, { recoil: flash ? 0.8 : 0, flash, spin: frame * Math.PI / 12, feed: frame * 0.4, frame });
+      if (/firing|flash/.test(state)){
+        // The damaged gun spins and feeds too, its fault lamp blinking at 4 Hz.
+        const flash = state.endsWith('flash'), damaged = state.startsWith('damaged');
+        head(m, { recoil: flash ? 0.8 : 0, flash, damaged, spin: frame * Math.PI / 12, feed: frame * 0.4, frame, lampOn: frame < 2 });
       }
       else head(m, { damaged: state === 'damaged', frame });
       return m;
@@ -173,9 +180,9 @@ export default {
       'The head is its own layer in 16 facings, drawn over the base and turned toward the target the game aims at, easing round at one turn a second. This is new engine work: structures had no turning layer before.',
       'Head redesigned after the reference art: a six-barrel rotary cannon instead of the single barrel, ammo belts, vented armour blocks, amber lamps and blue capsule lights, fitted inside the 1 × 1 tile so every one of the 16 facings clears the frame.',
       'The reference\'s cream armour is drawn in the palette\'s pale plate with amber scuffs; the palette has no cream, and adding a colour would change it for every asset.',
-      'The reference\'s long flame fan is cut down to a short burst at the muzzles, so the flash stays inside the tile; while it is engaging a target the barrels spin and the ammo belts feed forward into the gun (4 looping frames at 16 fps), with the muzzle flash and recoil shown for a moment after each round.',
+      'The reference\'s long flame fan is cut down to a short burst at the muzzles, so the flash stays inside the tile; while it is engaging a target (damaged or not) the barrels spin and the ammo belts feed forward into the gun (4 looping frames at 16 fps), with the muzzle flash and recoil shown for a moment after each round.',
       'Firing replaces the working state: the head spins its barrels and feeds its belts the whole time it has a target, not only for the shot.',
-      'Damaged rusts the armour, bends the barrel cluster, drops a few rounds from a belt and turns the rear lamp into a blinking red fault lamp; the damaged head still tracks and fires.',
+      'Damaged rusts the armour, bends the barrel cluster, drops a few rounds from a belt and turns the rear lamp into a blinking red fault lamp; the damaged head still tracks and fires, spinning its bent barrels and feeding its gappy belt.',
       'Revised: the pad shrank from 39 to 32 world px, leaving grass round it inside the tile; the slewing ring grew from 22 to 27 world px across with a gold bolt rim; the head is wider and now overhangs the ring.'
     ]
   },
