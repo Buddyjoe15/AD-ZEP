@@ -13,12 +13,14 @@ export const DATA_FILE = path.join(ROOT, 'src/render/pixel-data.js');
 
 export const FACINGS = ['up', 'up-right', 'right', 'down-right', 'down', 'down-left', 'left', 'up-left'];
 const DIAG = Math.PI / 4;
-// World scale: one art pixel is 1 world px, so a 48 px tile is 48 art px.
-const WORLD_PX_PER_ART_PX = 1, TILE_ART = 48;
+// World scale. Terrain: one art pixel is 1 world px, so a 48 px tile is 48 art px. Units and
+// structures are drawn at SPRITE_RES art px per world px: their shapes are given in world px
+// and drawn with twice the pixels across, so a Spider is 49 world px and 98 art px.
+const WORLD_PX_PER_ART_PX = 1, TILE_ART = 48, SPRITE_RES = 2;
 
 // ---- Units: draw(p, anim, frame) in local coordinates, forward = -y ----
 
-// Utility Spider, 49×49. Eight legs in a radial layout (front pair forward-diagonal, middle
+// Utility Spider, 49×49 world px. Eight legs in a radial layout (front pair forward-diagonal, middle
 // pairs sideways, back pair back-diagonal) so the up-right facing keeps an X of legs
 // instead of turning into a plus sign. Each leg has a hip actuator, a thick upper segment,
 // a gold knee joint, a thinner lower segment and a clawed foot.
@@ -75,7 +77,7 @@ function spider(p, anim, f){
   }
 }
 
-// Security / hostile drone, 33×33. Quad rotor on four arms; the rotors spin through four frames.
+// Security / hostile drone, 33×33 world px. Quad rotor on four arms; the rotors spin through four frames.
 function drone(p, anim, f){
   const hubs = [[-7, -7], [7, -7], [-7, 7], [7, 7]];
   for (const [x, y] of hubs) p.thick(0, 0, x, y, 2, 'steel1');
@@ -99,7 +101,7 @@ function drone(p, anim, f){
   p.line(0, 7, 0, 9, 'steel1'); p.dot(0, 10, 'red1');  // antenna
 }
 
-// Commander Elias Vance, 49×49, straight down on a hovering suit.
+// Commander Elias Vance, 49×49 world px, straight down on a hovering suit.
 function vance(p, anim, f){
   const flame = anim === 'walk' ? [7, 9, 7, 9][f] : [2, 4, 6, 4][f];
   for (const x of [-6, 6]){
@@ -133,6 +135,7 @@ function vance(p, anim, f){
   p.line(4, -6, 6, -12, 'steel0'); p.dot(6, -13, 'red1');   // comms antenna
 }
 
+// `size` and `shadow` are in world px.
 export const UNITS = {
   spider: { size: 49, draw: spider, anims: { idle: [2, 2], walk: [4, 8], work: [4, 6] }, shadow: [2, 4], elevation: 'ground' },
   drone: { size: 33, draw: drone, anims: { fly: [4, 16] }, shadow: [8, 10], elevation: 'air' },
@@ -142,11 +145,12 @@ export const UNITS = {
 // Renders all eight facings of a unit: authored up and up-right, the rest rotated, then
 // shaded and outlined in their final orientation.
 function unitFrames(def){
+  const N = def.size * SPRITE_RES;
   const authored = [0, DIAG].map(angle => {
     const frames = [];
     for (const [anim, [n]] of Object.entries(def.anims)) for (let f = 0; f < n; f++){
-      const g = new Grid(def.size, def.size);
-      def.draw(painter(g, angle), anim, f);
+      const g = new Grid(N, N);
+      def.draw(painter(g, angle, undefined, SPRITE_RES), anim, f);
       frames.push(g);
     }
     return frames;
@@ -154,9 +158,10 @@ function unitFrames(def){
   return FACINGS.map((_, i) => authored[i % 2].map(g => finish(rotate(g, i >> 1))));
 }
 
-// ---- Repair station (2×2 tiles = 96×96 art px), no facings ----
-const S = 96, MID = 47.5;
-const sp = g => painter(g, 0, [0, 0]);
+// ---- Repair station (2×2 tiles = 96×96 world px, 192×192 art px), no facings ----
+// Drawn in world px like the units; S is the frame size in art px.
+const S = 96 * SPRITE_RES, MID = 47.5, R0 = (SPRITE_RES - 1) / 2;
+const sp = g => painter(g, 0, [R0, R0], SPRITE_RES);
 const CORNERS = [[10, 10], [80, 10], [10, 80], [80, 80]];
 function foundation(p){
   p.rect(6, 6, 89, 89, 'plate0');
@@ -201,7 +206,8 @@ function stationFrames(){
   out.push(['near-complete', paint((p, g) => {
     const done = new Grid(S, S); finished(sp(done), { lights: null });
     frame(p);
-    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (!(x >= 48 && y < 48) && done.get(x, y)) g.set(x, y, done.get(x, y));
+    const half = 48 * SPRITE_RES;   // the finished top-right quarter shows through
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (!(x >= half && y < half) && done.get(x, y)) g.set(x, y, done.get(x, y));
     for (let x = 52; x <= 86; x += 6) p.rect(x, 47, x + 1, 48, 'amber1');
     for (let y = 10; y <= 44; y += 6) p.rect(47, y, 48, y + 1, 'amber1');
   })]);
@@ -225,7 +231,7 @@ function stationFrames(){
     p.line(58, 18, 62, 22, 'steel1');
     p.rect(32, 42, 63, 53, 'green0'); p.rect(42, 30, 53, 65, 'green0');
     p.rect(10, 10, 13, 13, 'red1'); p.rect(80, 80, 83, 83, 'red0');
-    for (let x = 86; x <= 89; x++) for (let y = 38; y <= 42; y++) g.set(x, y, 0);   // chipped edge
+    for (let x = 86 * SPRITE_RES; x < 90 * SPRITE_RES; x++) for (let y = 38 * SPRITE_RES; y < 43 * SPRITE_RES; y++) g.set(x, y, 0);   // chipped edge
   })]);
   out.push(['rubble', paint(p => {
     const r = rng(77);
@@ -647,10 +653,11 @@ export function build(){
     const rows = unitFrames(def), animations = {};
     let start = 0;
     for (const [anim, [frames, fps]] of Object.entries(def.anims)){ animations[anim] = { start, frames, fps }; start += frames; }
+    const N = def.size * SPRITE_RES;
     const meta = {
-      name, frameWidth: def.size, frameHeight: def.size, origin: [(def.size - 1) / 2, (def.size - 1) / 2],
-      worldPxPerArtPx: WORLD_PX_PER_ART_PX, rows: 'facing', facings: FACINGS, authoredFacings: ['up', 'up-right'],
-      animations, shadow: { drawnBy: 'engine', offset: def.shadow, elevation: def.elevation }, team: 'team0..team2 (magenta ramp)'
+      name, frameWidth: N, frameHeight: N, origin: [(N - 1) / 2, (N - 1) / 2],
+      worldPxPerArtPx: 1 / SPRITE_RES, rows: 'facing', facings: FACINGS, authoredFacings: ['up', 'up-right'],
+      animations, shadow: { drawnBy: 'engine', offset: def.shadow.map(v => v * SPRITE_RES), elevation: def.elevation }, team: 'team0..team2 (magenta ramp)'
     };
     sprites[name] = { ...meta, frames: rows.map(r => r.map(g => g.encode())) };
     sheets[name] = { meta, rows };
@@ -660,7 +667,7 @@ export function build(){
   states.working.fps = 6;
   const stationMeta = {
     name: 'repair_station', frameWidth: S, frameHeight: S, origin: [0, 0], footprintTiles: [2, 2],
-    worldPxPerArtPx: WORLD_PX_PER_ART_PX, rows: 'single row', states, shadow: { drawnBy: 'engine', offset: [2, 2], elevation: 'ground' },
+    worldPxPerArtPx: 1 / SPRITE_RES, rows: 'single row', states, shadow: { drawnBy: 'engine', offset: [2 * SPRITE_RES, 2 * SPRITE_RES], elevation: 'ground' },
     team: 'team0..team2 (magenta ramp)'
   };
   sprites.repair_station = { ...stationMeta, frames: [st.map(([, g]) => g.encode())] };

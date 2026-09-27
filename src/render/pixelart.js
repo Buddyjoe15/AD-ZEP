@@ -1,6 +1,7 @@
 /* Pixel-art presentation (art/pixel-test, data in pixel-data.js). Units, the Repair Station
    and grass/clearing terrain get top-down pixel art; everything without pixel art keeps its
-   Canvas art. Units pick the nearest of eight authored facings instead of being rotated, and
+   Canvas art. Each sprite records its own world px per art px (units and structures are
+   drawn at 2 art px per world px, terrain at 1). Units pick the nearest of eight authored facings instead of being rotated, and
    shadows are drawn here, never baked into sprites: each sprite's silhouette, offset by its
    `shadow.offset`, darkens what is underneath by 55%, and overlapping shadows don't stack.
    Presentation only: nothing here is saved or read by the simulation.
@@ -45,7 +46,8 @@
     unitSprite(def){ return this.enabled && def ? this.UNITS[def.visual] || null : null; },
     buildingSprite(type){ return this.enabled ? this.BUILDINGS[type] || null : null; },
     sprite(name){ return D.sprites[name]; },
-    worldPerArt(){ return D.worldPxPerArtPx; },
+    // World px per art px of sprite `sp` (terrain and tiles use the data's top-level value).
+    worldPerArt(sp){ return (sp && sp.worldPxPerArtPx) || D.worldPxPerArtPx; },
     // Nearest of the eight facings (0 = up, clockwise) for a heading in radians (0 = +x).
     facing(heading){ return ((Math.round((heading + Math.PI / 2) / FACING_STEP) % 8) + 8) % 8; },
 
@@ -93,7 +95,7 @@
     },
     // Stamps one structure frame at grid position (gx, gy), with its engine shadow.
     stamp(g, name, col, gx, gy, team){
-      const sp = D.sprites[name], T = G.CONFIG.TILE, k = D.worldPxPerArtPx, str = sp.frames[0][col];
+      const sp = D.sprites[name], T = G.CONFIG.TILE, k = this.worldPerArt(sp), str = sp.frames[0][col];
       const w = sp.frameWidth * k, h = sp.frameHeight * k, x = gx * T, y = gy * T, smooth = g.imageSmoothingEnabled;
       g.imageSmoothingEnabled = false;
       g.globalAlpha = SHADOW_ALPHA;
@@ -118,7 +120,7 @@
       if (this.rubble.length && this.rubble[0].until < now) this.rubble = this.rubble.filter(r => r.until >= now);
       for (const r of this.rubble){
         const name = this.BUILDINGS[r.type], sp = D.sprites[name];
-        if (inView((r.gx + 1) * T, (r.gy + 1) * T, sp.frameWidth * D.worldPxPerArtPx)) this.stamp(g, name, sp.states.rubble.start, r.gx, r.gy, r.team);
+        if (inView((r.gx + 1) * T, (r.gy + 1) * T, sp.frameWidth * this.worldPerArt(sp))) this.stamp(g, name, sp.states.rubble.start, r.gx, r.gy, r.team);
       }
     },
 

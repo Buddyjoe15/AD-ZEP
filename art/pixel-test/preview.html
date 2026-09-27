@@ -118,7 +118,7 @@ let shadowCv = document.createElement('canvas');
 function drawScene(time){
   const dpr = window.devicePixelRatio || 1, W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
   if (cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; shadowCv.width = W; shadowCv.height = H; }
-  const k = S.zoom * dpr, ap = D.worldPxPerArtPx * k;         // device px per world px / per art px
+  const k = S.zoom * dpr, ap = D.sprites.spider.worldPxPerArtPx * k;   // device px per world px / per sprite art px
   const ox = W / 2 - scene.cx * k, oy = H / 2 - scene.cy * k;
   g.imageSmoothingEnabled = false;
   // Terrain
@@ -129,10 +129,12 @@ function drawScene(time){
     g.drawImage(frameCanvas(T.tiles[tileVariant(S.tiles, tx, ty)], D.tileArt, D.tileArt), x0, y0, x1 - x0, y1 - y0);
   }
   // Sprites are placed on whole device pixels and scaled by nearest neighbour.
-  const place = (str, w, h, wx, wy, origin, team, mode, off) => {
-    const x = Math.round(ox + wx * k - origin[0] * ap + (off ? off[0] * ap : 0)), y = Math.round(oy + wy * k - origin[1] * ap + (off ? off[1] * ap : 0));
+  // Each sprite has its own world px per art px (units and structures: ½).
+  const place = (str, w, h, wx, wy, origin, team, mode, off, sp) => {
+    const a = (sp ? sp.worldPxPerArtPx : D.worldPxPerArtPx) * k;
+    const x = Math.round(ox + wx * k - (origin[0] + 0.5) * a + (off ? off[0] * a : 0)), y = Math.round(oy + wy * k - (origin[1] + 0.5) * a + (off ? off[1] * a : 0));
     const c = frameCanvas(str, w, h, team, mode);
-    return [c, x, y, Math.round(w * ap), Math.round(h * ap)];
+    return [c, x, y, Math.round(w * a), Math.round(h * a)];
   };
   const unitFrame = u => {
     const sp = D.sprites[u.sprite], a = sp.animations[u.anim], t = time + u.phase * 3;
@@ -151,11 +153,11 @@ function drawScene(time){
     g.globalAlpha = 0.55; g.drawImage(shadowCv, 0, 0); g.globalAlpha = 1;
   };
   const st = D.sprites.repair_station;
-  shadowPass(scene.stations.map(s => place(stationFrame(s), st.frameWidth, st.frameHeight, s.x, s.y, st.origin, null, 'silhouette', st.shadow.offset)));
-  for (const s of scene.stations){ const [c, x, y, w, h] = place(stationFrame(s), st.frameWidth, st.frameHeight, s.x, s.y, st.origin, 'blue'); g.drawImage(c, x, y, w, h); }
-  shadowPass(scene.units.map(u => { const sp = D.sprites[u.sprite]; return place(unitFrame(u), sp.frameWidth, sp.frameHeight, u.x, u.y, sp.origin, null, 'silhouette', sp.shadow.offset); }));
+  shadowPass(scene.stations.map(s => place(stationFrame(s), st.frameWidth, st.frameHeight, s.x, s.y, st.origin, null, 'silhouette', st.shadow.offset, st)));
+  for (const s of scene.stations){ const [c, x, y, w, h] = place(stationFrame(s), st.frameWidth, st.frameHeight, s.x, s.y, st.origin, 'blue', undefined, undefined, st); g.drawImage(c, x, y, w, h); }
+  shadowPass(scene.units.map(u => { const sp = D.sprites[u.sprite]; return place(unitFrame(u), sp.frameWidth, sp.frameHeight, u.x, u.y, sp.origin, null, 'silhouette', sp.shadow.offset, sp); }));
   const order = [...scene.units].sort((a, b) => (a.air ? 2 : a.sprite === 'vance' ? 1 : 0) - (b.air ? 2 : b.sprite === 'vance' ? 1 : 0));
-  for (const u of order){ const sp = D.sprites[u.sprite], [c, x, y, w, h] = place(unitFrame(u), sp.frameWidth, sp.frameHeight, u.x, u.y, sp.origin, u.team); g.drawImage(c, x, y, w, h); }
+  for (const u of order){ const sp = D.sprites[u.sprite], [c, x, y, w, h] = place(unitFrame(u), sp.frameWidth, sp.frameHeight, u.x, u.y, sp.origin, u.team, undefined, undefined, sp); g.drawImage(c, x, y, w, h); }
   // Label, so screenshots say what they show.
   const label = `zoom ${({ 0.333: '⅓', 0.667: '⅔', 1: '1' })[S.zoom] || S.zoom} · ${innerWidth}×${innerHeight} @${dpr}x · tiles ${S.tiles} · ${ap.toFixed(2)} device px per art px`;
   g.font = `${12 * dpr}px system-ui, sans-serif`;
@@ -188,7 +190,7 @@ function buildSheets(){
   for (const name of ['spider', 'drone', 'vance']) if (want(name)){
     const sp = D.sprites[name], anims = Object.entries(sp.animations).map(([a, v]) => `${a} ${v.frames}f @ ${v.fps} fps`).join(' · ');
     const [d, row] = section(`${name} — ${sp.frameWidth}×${sp.frameHeight}`, `Rows: ${sp.facings.join(', ')} (only up and up-right authored). Columns: ${anims}. Shadow: engine, offset ${sp.shadow.offset.join(',')} art px.`);
-    const k = name === 'drone' ? 3 : 2;
+    const k = name === 'drone' ? 2 : 1;   // frames are 2 art px per world px
     row.append(fig(sheetCanvas(sp.frames, sp.frameWidth, sp.frameHeight, null, k, '#3a3129'), 'raw sheet (magenta team ramp)'));
     row.append(fig(sheetCanvas(sp.frames, sp.frameWidth, sp.frameHeight, 'blue', k, '#3a3129'), 'blue team'));
     row.append(fig(sheetCanvas(sp.frames, sp.frameWidth, sp.frameHeight, 'red', k, '#3a3129'), 'red team'));
@@ -198,7 +200,7 @@ function buildSheets(){
     const st = D.sprites.repair_station, names = [];
     for (const [s, v] of Object.entries(st.states)) for (let i = 0; i < v.frames; i++) names.push(v.frames > 1 ? `${s} ${i + 1}` : s);
     const [d, row] = section(`repair station — ${st.frameWidth}×${st.frameHeight} (2×2 tiles)`, 'Stand-in design. States left to right: ' + names.join(', ') + '.');
-    for (const team of [null, 'blue', 'red']) row.append(fig(sheetCanvas(st.frames, st.frameWidth, st.frameHeight, team, 2, '#3a3129'), team ? team + ' team' : 'raw sheet (magenta)'));
+    for (const team of [null, 'blue', 'red']) row.append(fig(sheetCanvas(st.frames, st.frameWidth, st.frameHeight, team, 1, '#3a3129'), team ? team + ' team' : 'raw sheet (magenta)'));
     root.append(d);
   }
   if (want('woodlands') && D.woodlands){

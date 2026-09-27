@@ -5,7 +5,7 @@
    Two kinds of entry share the atlas:
    - Canvas art from visuals.js, one 512 px cell per frame at 4 atlas px per world px,
      rotated to the unit's heading when drawn.
-   - Pixel art (pixelart.js), 128 px slots at 2 atlas px per art px, one frame per facing
+   - Pixel art (pixelart.js), 128 px slots at 2 atlas px per world px, one frame per facing
      and animation step; never rotated, the facing is picked from the heading instead. */
 (function(){
   'use strict';
@@ -14,10 +14,10 @@
   // Canvas art stays sharp at maximum zoom on high-DPI screens.
   const BOX = 128, RES = 4, CELL = BOX * RES, ATLAS_W = 4096, PER_ROW = ATLAS_W / CELL;
   const ORIGIN_X = 64, ORIGIN_Y = 76;   // unit position inside the box (tall art reaches up)
-  // Pixel art: 2 atlas px per art px (1 art px = 1 world px), so the half-size atlas level
-  // the Canvas 2D fallback uses around zoom 1 still keeps every art pixel. A slot holds
-  // frames up to 64 art px (the 49×49 Spider and Vance).
-  const SLOT = 128, SLOTS_PER_CELL = (CELL / SLOT) ** 2, PIXEL_RES = 2;   // pixel art: atlas px per art px
+  // Pixel art: 2 atlas px per world px, which is 1 atlas px per art px for sprites drawn at
+  // 2 art px per world px. A slot holds frames up to 64 world px (the 49×49 Spider and Vance
+  // are 98×98 art px).
+  const SLOT = 128, SLOTS_PER_CELL = (CELL / SLOT) ** 2, PIXEL_DENSITY = 2;   // pixel art: atlas px per world px
 
   G.SpriteAtlas = {
     RES, CELL,
@@ -155,9 +155,10 @@
       const key = 'px:' + sprite + '|' + team, A = this;
       let e = A.cells.get(key);
       if (e) return e;
-      const P = G.PixelArt, sp = P.sprite(sprite), k = P.worldPerArt(), w = sp.frameWidth, h = sp.frameHeight;
-      const pad = [Math.floor((SLOT - w * PIXEL_RES) / 2), Math.floor((SLOT - h * PIXEL_RES) / 2)];
-      e = { pixel: true, upright: true, anims: sp.animations, facings: [], at: [], scale: PIXEL_RES / k,
+      const P = G.PixelArt, sp = P.sprite(sprite), k = P.worldPerArt(sp), w = sp.frameWidth, h = sp.frameHeight;
+      const res = PIXEL_DENSITY * k;   // atlas px per art px
+      const pad = [Math.floor((SLOT - w * res) / 2), Math.floor((SLOT - h * res) / 2)];
+      e = { pixel: true, upright: true, anims: sp.animations, facings: [], at: [], scale: PIXEL_DENSITY,
         shadow: sp.shadow.offset.map(v => v * k),
         rect: { x: -(sp.origin[0] + 0.5) * k, y: -(sp.origin[1] + 0.5) * k, w: w * k, h: h * k } };
       for (const row of sp.frames){
@@ -166,7 +167,7 @@
           const [sx, sy] = A.allocSlot(), x = sx + pad[0], y = sy + pad[1], g = A.g;   // (the atlas may have grown)
           g.imageSmoothingEnabled = false;
           g.clearRect(sx, sy, SLOT, SLOT);
-          g.drawImage(P.canvas(str, w, h, team), x, y, w * PIXEL_RES, h * PIXEL_RES);
+          g.drawImage(P.canvas(str, w, h, team), x, y, w * res, h * res);
           list.push(e.at.length); e.at.push([x, y]);
         }
         e.facings.push(list);
