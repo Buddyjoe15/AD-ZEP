@@ -251,13 +251,14 @@ If a request doesn't fit (a dragon, a wizard), reinterpret it inside the world, 
   - Structures and props: footprint × 96.
   - The game's current Spider and drone use odd world sizes (98 and 66 art px); the lab uses whole tiles. Both are 2 art px per world px, and the engine reads the size from the metadata.
 - **Facings.** A unit's 8 facings are each rendered from the model, with the light staying top left. This replaces the rule to author `up` and `up-right` and rotate them: it gives the same silhouettes with the same light.
+- **Variants** (optional). A spec may set `variants: { label, by, values, at, pick }` for a look that follows game state rather than time, such as a hopper's fill level by `cargoTotal / cargoCapacity`. `build()` gets the value as `variant`. Each variant repeats every animation or state, left to right in the sheet, and the metadata says how the engine picks one. The engine doesn't pick variants yet, so the check warns.
 - **Shadows** stay engine-drawn from the silhouette, at the offset for the elevation (section 2.3).
 - **Checks** (`npm run sprite -- <spec>`). A fail must be fixed; a warn is for the requester to decide.
   - Frame size.
   - Inside the frame, and for units inside the inscribed circle less 1 world px.
   - Palette only.
   - Team colour: at least 6 × 6 world px on a Spider-sized unit (scaled by frame area), and none on teamless art.
-  - Animation and state names the engine plays (warn).
+  - Animation and state names the engine plays (warn), and variants (warn: engine work).
   - Silhouette overlap with the in-game Utility Spider above 75% (warn).
 - **Output** in `art/sprite-lab/out/<key>/` (not committed): `sheet.png`, `meta.json` and `index.html`. The page has the fit report, the frame at every zoom, the facings, the animations or states, the sprite beside today's Spiders, a crowd at ⅓ zoom, the checks and the metadata.
 - **Into the game.** A lab sprite goes into the game only once the requester confirms it, through section 3: its sheet and metadata into the pipeline, mapped in `src/render/pixelart.js`.

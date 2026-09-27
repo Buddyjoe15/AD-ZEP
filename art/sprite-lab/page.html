@@ -79,6 +79,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--raised);padding:1px
 
   <div class="controls" role="group" aria-label="View controls">
     <div class="ctl" id="teamCtl"><label>Team</label><span class="seg" id="teamSeg"><button type="button" data-v="blue">Blue</button><button type="button" data-v="red">Red</button><button type="button" data-v="neutral">Neutral</button></span></div>
+    <div class="ctl" id="variantCtl" hidden><label id="variantLabel">Variant</label><span class="seg" id="variantSeg"></span></div>
     <div class="ctl"><label>Motion</label><span class="seg" id="motionSeg"><button type="button" data-v="on">On</button><button type="button" data-v="off">Off</button></span></div>
     <div class="ctl"><label>Zoom</label><span class="seg" id="zoomSeg"><button type="button" data-v="1">1×</button><button type="button" data-v="2">2×</button><button type="button" data-v="3">3×</button></span></div>
     <div class="ctl"><label>Guides</label><span class="seg" id="guideSeg"><button type="button" data-v="on">Show</button><button type="button" data-v="off">Hide</button></span></div>
@@ -105,6 +106,12 @@ code{font-family:var(--mono);font-size:12px;background:var(--raised);padding:1px
   <section>
     <div><span class="kicker" id="animKicker">Animations</span><h2 id="animTitle"></h2></div>
     <div id="anims" style="display:flex;flex-direction:column;gap:14px"></div>
+  </section>
+
+  <section id="variantSec" hidden>
+    <div><span class="kicker">Variants</span><h2 id="variantTitle"></h2>
+    <p class="note" id="variantNote"></p></div>
+    <div class="row" id="variants"></div>
   </section>
 
   <section>
@@ -141,7 +148,8 @@ code{font-family:var(--mono);font-size:12px;background:var(--raised);padding:1px
 const D = /*@DATA@*/null;
 const M = D.meta, RM = D.ref.meta, unit = D.spec.kind === 'unit';
 const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-const S = { team: D.spec.faction === 'hostile' ? 'red' : 'blue', motion: !reduced, zoom: 2, guides: true, ground: 'grass' };
+const S = { team: D.spec.faction === 'hostile' ? 'red' : 'blue', motion: !reduced, zoom: 2, guides: true, ground: 'grass', variant: 0 };
+const V = M.variants || null;
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
@@ -177,7 +185,13 @@ $('copyMeta').onclick = () => {
 function selectMeta(){ const r = document.createRange(); r.selectNodeContents($('metaPre')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
 if (!D.spec.team) $('teamCtl').hidden = true;
 if (!unit){ $('facingSec').hidden = true; $('crowdSec').hidden = true; $('animKicker').textContent = 'States'; }
-$('animTitle').textContent = unit ? 'Every frame, facing down-right' : 'Every state';
+$('animTitle').textContent = (unit ? 'Every frame, facing down-right' : 'Every state') + (V ? ', ' + V.label.toLowerCase() + ' as picked above' : '');
+if (V){
+  $('variantCtl').hidden = false; $('variantSec').hidden = false; $('variantLabel').textContent = V.label;
+  $('variantSeg').innerHTML = V.values.map((v, i) => `<button type="button" data-v="${i}">${esc(v)}</button>`).join('');
+  $('variantTitle').textContent = `${V.label}: ${V.values.length} variants, facing down-right`;
+  $('variantNote').textContent = `Each variant repeats every animation. The engine picks one by ${V.by}${V.pick ? ': ' + V.pick : ''}. The last cell steps through them.`;
+}
 
 // ---- Images ----
 Promise.all([load(D.sheet), load(D.ref.sheet), ...D.ground.grass.tiles.map(load), ...D.ground.dust.tiles.map(load)]).then(imgs => {
@@ -207,7 +221,9 @@ Promise.all([load(D.sheet), load(D.ref.sheet), ...D.ground.grass.tiles.map(load)
     }
   }
   const timeline = meta => meta.animations || meta.states;
-  const col = (meta, anim, t, offset = 0) => { const a = timeline(meta)[anim]; return a.start + (S.motion && a.fps ? (Math.floor(t * a.fps) + offset) % a.frames : 0); };
+  // Sheet column: the variant's block (this sprite only), then the animation frame.
+  const block = (meta, v = S.variant) => meta === M && V ? v * V.framesEach : 0;
+  const col = (meta, anim, t, offset = 0, v) => { const a = timeline(meta)[anim]; return block(meta, v) + a.start + (S.motion && a.fps ? (Math.floor(t * a.fps) + offset) % a.frames : 0); };
   const mainAnim = meta => { const tl = timeline(meta); return tl.working ? 'working' : tl.walk ? 'walk' : tl.idle ? 'idle' : Object.keys(tl)[0]; };
   // Draws one frame with its origin at (x, y): 'shadow' and 'body' are separate passes so
   // shadows always sit under every sprite.
@@ -276,12 +292,28 @@ Promise.all([load(D.sheet), load(D.ref.sheet), ...D.ground.grass.tiles.map(load)
     for (const r of animRows){
       const g = sized(r.strip, w * r.a.frames, h, w * r.a.frames * z);
       ground(g, w * r.a.frames, h, M.origin[0] - 48 - 96, M.origin[1] - 48 - 96, 7);
-      for (let f = 0; f < r.a.frames; f++){ draw(g, 'new', 'shadow', row, r.a.start + f, M.origin[0] + f * w, M.origin[1]); }
-      for (let f = 0; f < r.a.frames; f++){ draw(g, 'new', 'body', row, r.a.start + f, M.origin[0] + f * w, M.origin[1]); }
+      for (let f = 0; f < r.a.frames; f++){ draw(g, 'new', 'shadow', row, block(M) + r.a.start + f, M.origin[0] + f * w, M.origin[1]); }
+      for (let f = 0; f < r.a.frames; f++){ draw(g, 'new', 'body', row, block(M) + r.a.start + f, M.origin[0] + f * w, M.origin[1]); }
       const g2 = sized(r.live, w, h, w * z);
       ground(g2, w, h, M.origin[0] - 48 - 96, M.origin[1] - 48 - 96, 7);
       draw(g2, 'new', 'shadow', row, col(M, r.name, t), M.origin[0], M.origin[1]); draw(g2, 'new', 'body', row, col(M, r.name, t), M.origin[0], M.origin[1]);
     }
+  }
+
+  // ---- Variants: each one, then a cell stepping through them ----
+  const variantCvs = V ? [...V.values, 'Stepping through'].map(name => {
+    const cell = document.createElement('div'); cell.className = 'cell';
+    cell.innerHTML = `<canvas class="px"></canvas><span class="cap">${esc(name)}</span>`;
+    $('variants').appendChild(cell); return cell.querySelector('canvas');
+  }) : [];
+  function drawVariants(t){
+    const anim = mainAnim(M), w = M.frameWidth, h = M.frameHeight;
+    variantCvs.forEach((cv, i) => {
+      const v = i < V.values.length ? i : (S.motion ? Math.floor(t / 0.8) % V.values.length : V.values.length - 1);
+      const g = sized(cv, w, h, w * Math.min(S.zoom, 2));
+      ground(g, w, h, M.origin[0] - 48 - 96, M.origin[1] - 48 - 96, 5);
+      draw(g, 'new', 'shadow', 3, col(M, anim, t, 0, v), M.origin[0], M.origin[1]); draw(g, 'new', 'body', 3, col(M, anim, t, 0, v), M.origin[0], M.origin[1]);
+    });
   }
 
   // ---- Scale scene ----
@@ -317,7 +349,7 @@ Promise.all([load(D.sheet), load(D.ref.sheet), ...D.ground.grass.tiles.map(load)
     ground(g, CW, CH, 0, 0, 23);
     for (const part of ['shadow', 'body']) for (const it of CROWD){
       const meta = it.which === 'new' ? M : RM, anim = timeline(meta).walk ? 'walk' : mainAnim(meta);
-      draw(g, it.which, part, it.row, col(meta, anim, t, it.off), it.x, it.y, it.which === 'ref' && part === 'body' ? (S.team === 'blue' ? 'red' : 'blue') : S.team);
+      draw(g, it.which, part, it.row, col(meta, anim, t, it.off, V ? it.off % V.values.length : undefined), it.x, it.y, it.which === 'ref' && part === 'body' ? (S.team === 'blue' ? 'red' : 'blue') : S.team);
     }
     // 1:3 zoom: 1 world px = 2 art px, so one screen px covers 6 art px.
     const w = CW / 6, h = CH / 6, small = sized($('crowdSmall'), w, h, w);
@@ -327,13 +359,14 @@ Promise.all([load(D.sheet), load(D.ref.sheet), ...D.ground.grass.tiles.map(load)
 
   // ---- Controls and loop ----
   const t0 = performance.now(), now = () => (performance.now() - t0) / 1000;
-  function drawAll(){ const t = now(); drawFrame(t); drawFacings(t); drawAnims(t); drawScene(t); drawCrowd(t); }
+  function drawAll(){ const t = now(); drawFrame(t); drawFacings(t); drawAnims(t); drawVariants(t); drawScene(t); drawCrowd(t); }
   function seg(id, key, parse){
     const el = $(id), sync = () => el.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(parse(b.dataset.v) === S[key])));
     el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S[key] = parse(b.dataset.v); sync(); drawAll(); });
     sync();
   }
   seg('teamSeg', 'team', String); seg('motionSeg', 'motion', v => v === 'on'); seg('zoomSeg', 'zoom', Number); seg('guideSeg', 'guides', v => v === 'on'); seg('groundSeg', 'ground', String);
+  if (V) seg('variantSeg', 'variant', Number);
   drawAll();
   window.LAB_READY = true;
   let last = 0;

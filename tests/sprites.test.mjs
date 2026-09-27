@@ -120,4 +120,11 @@ test('sprite lab: the example spec renders top-down at 96 × 96 and passes every
   const big = { ...spec, key: 'too_big', gameKey: null, animations: { idle: { frames: 1, fps: 1 } }, build: () => new Model().box(mul(translate(0, 5, 0), scale(40, 10, 40)), MAT.steel) };
   const bad = check(big, renderSpec(big)).filter(c => c.level === 'fail').map(c => c.name);
   assert.ok(bad.includes('Inside the frame') && bad.includes('Team colour'), bad.join());
+  // Variants repeat every animation, one block per variant, and build() is told which.
+  const seen = [], varied = { ...spec, variants: { label: 'Load', by: 'cargo', values: ['empty', 'full'] }, build: a => { seen.push(a.variant); return spec.build(a); } };
+  const RV = renderSpec(varied);
+  assert.equal(RV.rows[0].length, 20, 'two blocks of idle 2 + walk 4 + work 4');
+  assert.deepEqual([RV.seq[0].variant, RV.seq[10].variant, RV.seq[10].anim], ['empty', 'full', 'idle']);
+  assert.ok(seen.includes('empty') && seen.includes('full'));
+  assert.ok(check(varied, RV).some(c => c.name === 'Variants' && c.level === 'warn'));
 });

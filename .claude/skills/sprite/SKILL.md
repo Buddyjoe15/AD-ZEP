@@ -35,7 +35,8 @@ Put each question with your recommended answer.
 
 1. Write `art/sprite-lab/specs/<key>.mjs`, where `<key>` is snake_case. Copy the structure of the closest spec:
    - a default export with `key`, `name`, `gameKey` (if it exists in the game), `request` (the user's words), `kind`, `faction`, `team`, `elevation`, `frame`, `animations` (units) or `states` and `footprint` (structures and props), `fit` { `lore`, `style`, `silhouette`, `changes`: [] };
-   - `build({ anim, frame, frames, state })` returning a `Model`.
+   - optionally `variants` for a look that follows game state, such as a hopper's fill level (rules, section 5.2);
+   - `build({ anim, frame, frames, state, variant })` returning a `Model`.
 2. Build from the kit (`tools/sprite-kit.mjs`):
    - `Model` shapes: `box`, `tube`, `ball`, `lathe` with `mul`, `translate`, `scale`, `rotX` and `along`;
    - materials from `MAT`, and `patterned()` for seams, stripes and plates, `grime()` for wear, `piston()` for hydraulics.

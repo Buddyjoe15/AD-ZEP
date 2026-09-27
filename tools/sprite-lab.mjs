@@ -40,9 +40,12 @@ export function referenceSpider(){
 }
 
 // Frames in sheet order: a unit's animations, or a structure's states, each frame in turn.
+// A spec with variants (spec.variants.values, such as a hopper's fill levels) repeats that
+// whole block once per variant, left to right.
 function sequence(spec){
   const list = spec.kind === 'unit' ? spec.animations : spec.states, seq = [];
-  for (const [anim, a] of Object.entries(list)) for (let frame = 0; frame < a.frames; frame++) seq.push({ anim, frame, frames: a.frames });
+  for (const variant of spec.variants ? spec.variants.values : [null])
+    for (const [anim, a] of Object.entries(list)) for (let frame = 0; frame < a.frames; frame++) seq.push({ anim, frame, frames: a.frames, variant });
   return seq;
 }
 
@@ -72,7 +75,7 @@ export function check(spec, R, ref = referenceSpider()){
   // Inside the frame with a 1 px margin; units also inside the inscribed circle less 1 world px.
   const r = unit ? Math.min(F.w, F.h) / 2 - RES : Infinity;
   let outside = 0, circle = 0, bad = 0, where = '';
-  const at = (ri, c, x, y) => `${unit ? FACINGS[ri] + ', ' : ''}${R.seq[c].anim} ${R.seq[c].frame} at ${x}, ${y}`;
+  const at = (ri, c, x, y) => `${unit ? FACINGS[ri] + ', ' : ''}${R.seq[c].variant ? R.seq[c].variant + ' ' : ''}${R.seq[c].anim} ${R.seq[c].frame} at ${x}, ${y}`;
   R.rows.forEach((row, ri) => row.forEach((f, c) => {
     for (let y = 0; y < R.BH; y++) for (let x = 0; x < R.BW; x++){
       const v = f.px[y * R.BW + x];
@@ -98,6 +101,8 @@ export function check(spec, R, ref = referenceSpider()){
   add(extra.length ? 'warn' : 'pass', unit ? 'Animations' : 'States', extra.length ? `${extra.join(', ')} need engine work; the engine plays ${known.join(', ')}` : names.join(', '));
   if (unit && !names.includes('idle')) add('warn', 'Idle', 'No idle animation; the engine shows idle when a unit stands still');
   if (!unit && !names.includes('finished')) add('warn', 'Finished state', 'No finished state; the engine shows it when the structure is built and idle');
+  // Variants: the engine draws one block per sprite today, so picking one needs engine work.
+  if (spec.variants) add('warn', 'Variants', `${spec.variants.values.join(', ')} by ${spec.variants.by}: the engine needs to pick the block (see the metadata)`);
   // Silhouette against the in-game Utility Spider: a unit should not be mistaken for one.
   if (unit && spec.gameKey !== 'utility_spider'){
     const a = R.rows[3][0].px, b = ref.rows[3][0].px, RO = ref.meta.origin, px = (buf, W, H, x, y) => x >= 0 && y >= 0 && x < W && y < H && buf[y * W + x];
@@ -129,11 +134,13 @@ function sheet(R, w, h){
 }
 function meta(spec, R, img){
   const F = spec.frame, unit = spec.kind === 'unit', timeline = {}, elevation = spec.elevation || (unit ? 'ground' : 'structure');
-  R.seq.forEach((s, i) => { (timeline[s.anim] ||= { start: i, frames: 0, fps: (unit ? spec.animations : spec.states)[s.anim].fps || 0 }).frames++; });
+  R.seq.forEach((s, i) => { if (s.variant === R.seq[0].variant) (timeline[s.anim] ||= { start: i, frames: 0, fps: (unit ? spec.animations : spec.states)[s.anim].fps || 0 }).frames++; });
+  const V = spec.variants, each = R.seq.length / (V ? V.values.length : 1);
   return {
     name: spec.name, key: spec.key, gameKey: spec.gameKey || null, kind: spec.kind, faction: spec.faction, team: !!spec.team, elevation,
     view: 'top-down', rules: 'art/PIXEL_ART_RULES.md', worldPxPerArtPx: 1 / RES, frameWidth: F.w, frameHeight: F.h, origin: [F.ox, F.oy],
     ...(unit ? { facings: FACINGS, renderedFacings: 'all 8, each from the model', animations: timeline } : { footprint: spec.footprint || [1, 1], footprintOrigin: [0, 0], states: timeline }),
+    ...(V ? { variants: { label: V.label || 'Variant', by: V.by, values: V.values, at: V.at || null, pick: V.pick || null, framesEach: each, column: 'variant index × framesEach + start + frame' } } : {}),
     shadow: { drawnBy: 'engine', offset: (SHADOW[elevation] || SHADOW.ground).map(v => v * RES), elevation },
     image: 'sheet.png', sheetWidth: img.W, sheetHeight: img.H, palette: 'shared (tools/pixelart.mjs)', teamRamp: spec.team ? 'team0..team2 (magenta)' : null
   };
