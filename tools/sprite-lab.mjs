@@ -57,6 +57,16 @@ export function renderSpec(spec){
     const model = spec.build({ ...s, state: s.anim });
     return renderSprite(model, { w: F.w, h: F.h, ox: F.ox, oy: F.oy, res: RES, heading, lift: LIFT, outline: OUTLINE });
   }));
+  return { rows, seq, BW: F.w, BH: F.h, head: spec.head ? renderHead(spec) : null };
+}
+
+// A structure's turning head layer (spec.head): one row per facing, clockwise from up, each
+// rendered from the model; columns are the head states' frames. Same frame as the base, its
+// origin on the footprint centre, which the head turns about.
+export const headSequence = H => Object.entries(H.states).flatMap(([anim, a]) => Array.from({ length: a.frames }, (_, frame) => ({ anim, frame, frames: a.frames })));
+export function renderHead(spec){
+  const F = spec.frame, H = spec.head, seq = headSequence(H);
+  const rows = Array.from({ length: H.facings }, (_, i) => seq.map(s => renderSprite(H.build({ ...s, state: s.anim }), { w: F.w, h: F.h, ox: F.ox, oy: F.oy, res: RES, heading: i * 2 * Math.PI / H.facings, lift: LIFT, outline: OUTLINE })));
   return { rows, seq, BW: F.w, BH: F.h };
 }
 
@@ -85,6 +95,14 @@ export function check(spec, R, ref = referenceSpider()){
       else if (Math.hypot(x + 0.5 - F.w / 2, y + 0.5 - F.h / 2) > r){ if (!circle && !outside) where = at(ri, c, x, y); circle++; }
     }
   }));
+  if (R.head) R.head.rows.forEach((row, ri) => row.forEach((f, c) => {
+    for (let y = 0; y < R.BH; y++) for (let x = 0; x < R.BW; x++){
+      const v = f.px[y * R.BW + x];
+      if (!v) continue;
+      if (v > PALETTE.length) bad++;
+      if (x < 1 || y < 1 || x > F.w - 2 || y > F.h - 2){ if (!outside) where = `head facing ${ri}, ${R.head.seq[c].anim} ${R.head.seq[c].frame} at ${x}, ${y}`; outside++; }
+    }
+  }));
   add(outside || circle ? 'fail' : 'pass', 'Inside the frame', outside ? `${outside} px outside the 1 px margin, first in ${where}`
     : circle ? `${circle} px outside the inscribed circle (radius ${r} art px), first in ${where}` : unit ? 'Every facing and frame stays inside the inscribed circle' : 'Every state keeps a 1 px margin');
   add(bad ? 'fail' : 'pass', 'Palette', bad ? `${bad} px outside the palette` : `Only the shared ${PALETTE.length} colours`);
@@ -101,6 +119,12 @@ export function check(spec, R, ref = referenceSpider()){
   add(extra.length ? 'warn' : 'pass', unit ? 'Animations' : 'States', extra.length ? `${extra.join(', ')} need engine work; the engine plays ${known.join(', ')}` : names.join(', '));
   if (unit && !names.includes('idle')) add('warn', 'Idle', 'No idle animation; the engine shows idle when a unit stands still');
   if (!unit && !names.includes('finished')) add('warn', 'Finished state', 'No finished state; the engine shows it when the structure is built and idle');
+  // Turning head: the engine draws one over finished and damaged structures (G.PixelArt.drawHead).
+  if (spec.head){
+    const H = spec.head, hn = Object.keys(H.states), on = Object.entries(H.on || {});
+    const ok = [16, 8].includes(H.facings) && hn.includes('idle') && on.length && on.every(([b, h]) => names.includes(b) && hn.includes(h));
+    add(ok ? 'pass' : 'fail', 'Turning head', ok ? `${H.facings} facings, ${hn.join(', ')}; over ${on.map(([b, h]) => b + ' → ' + h).join(', ')}` : 'Needs 8 or 16 facings, an idle state, and `on` mapping base states to head states');
+  }
   // Variants: the engine picks cargo variants (G.PixelArt.variant); any other kind needs engine work.
   if (spec.variants){
     const V = spec.variants, cargo = V.by === 'cargo' && Array.isArray(V.at) && V.at.length === V.values.length && V.at[0] === 0;
@@ -123,7 +147,8 @@ export function check(spec, R, ref = referenceSpider()){
 // ---- Output ----
 const hexRGB = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 const RGB = [null, ...PALETTE.map(([, h]) => hexRGB(h))];
-function sheet(R, w, h){
+function sheet(R0, w, h){
+  const R = R0.head ? { ...R0, rows: [...R0.rows, ...R0.head.rows] } : R0;
   const cols = Math.max(...R.rows.map(row => row.length)), rows = R.rows.length, W = cols * w, H = rows * h, rgba = new Uint8Array(W * H * 4);
   R.rows.forEach((row, r) => row.forEach((f, c) => {
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
@@ -144,9 +169,15 @@ function meta(spec, R, img){
     view: 'top-down', rules: 'art/PIXEL_ART_RULES.md', worldPxPerArtPx: 1 / RES, frameWidth: F.w, frameHeight: F.h, origin: [F.ox, F.oy],
     ...(unit ? { facings: FACINGS, renderedFacings: 'all 8, each from the model', animations: timeline } : { footprint: spec.footprint || [1, 1], footprintOrigin: [0, 0], states: timeline }),
     ...(V ? { variants: { label: V.label || 'Variant', by: V.by, values: V.values, at: V.at || null, pick: V.pick || null, framesEach: each, column: 'variant index × framesEach + start + frame' } } : {}),
+    ...(spec.head ? { head: headMeta(spec, R) } : {}),
     shadow: { drawnBy: 'engine', offset: (SHADOW[elevation] || SHADOW.ground).map(v => v * RES), elevation },
     image: 'sheet.png', sheetWidth: img.W, sheetHeight: img.H, palette: 'shared (tools/pixelart.mjs)', teamRamp: spec.team ? 'team0..team2 (magenta)' : null
   };
+}
+export function headMeta(spec, R){
+  const H = spec.head, states = {};
+  R.head.seq.forEach((s, i) => { (states[s.anim] ||= { start: i, frames: 0, fps: H.states[s.anim].fps || 0 }).frames++; });
+  return { facings: H.facings, rows: `sheet rows ${R.rows.length} to ${R.rows.length + H.facings - 1}, clockwise from up`, pivot: 'footprint centre', states, on: H.on, turnRate: H.turnRate || null };
 }
 const dataURI = buf => 'data:image/png;base64,' + Buffer.from(buf).toString('base64');
 // Grass and dust plain tiles from the game's art, as PNG data URIs.

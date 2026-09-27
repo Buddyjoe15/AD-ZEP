@@ -567,6 +567,44 @@ test('pixel-art sprites: eight facings, engine shadows, structure states, dust t
   }
 });
 
+test('pixel-art Sentry Turret: its head layer turns toward the aim at its turn rate, fires, and drops when destroyed', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    const r = await page.evaluate(() => {
+      const G = GW, S = G.State, h = G.Units.hero(), T = G.CONFIG.TILE, P = G.PixelArt;
+      S.paused = true;
+      const b = G.Buildings.add('sentry_turret', Math.floor(h.x / T) + 2, Math.floor(h.y / T) + 2, { team: 'blue' });
+      const sp = P.data.sprites.sentry_turret, H = sp.head, s = G.Turrets.get(b);
+      G.centerCamera(b.x, b.y, 1); G.Renderer.draw();
+      const start = P.aims.get(b.id).a;                       // up, as built
+      s.aim = 0;                                               // the simulation aims east
+      const drawn = [0.05, 0.1, 0.15, 0.3].map(t => P.headAim(b, H, S.time + t));
+      // Just fired: the firing frames play over the idle head.
+      s.targetId = 'x'; s.cool = G.Defs.buildables.get('sentry_turret').behaviors[0].reload - 0.01;
+      let stamped = null; const orig = P.stampFrame; P.stampFrame = function(g, spr, str){ if (spr === sp) stamped = str; return orig.apply(this, arguments); };
+      P.drawBuilding(document.createElement('canvas').getContext('2d'), b, 1, S.time + 0.3);
+      P.stampFrame = orig;
+      const facingEast = H.facings / 4;
+      const firing = stamped === H.frames[facingEast][H.states.firing.start];
+      b.hp = 0; S.paused = false;
+      return new Promise(res => setTimeout(() => res({ sprite: P.buildingSprite('sentry_turret'), facings: H.facings, start, drawn, firing, removed: !P.aims.has(b.id), rubble: P.rubble.some(x => x.type === 'sentry_turret') }), 300));
+    });
+    assert.equal(r.sprite, 'sentry_turret');
+    assert.equal(r.facings, 16);
+    assert.ok(Math.abs(r.start + Math.PI / 2) < 1e-9, 'built aiming up');
+    assert.ok(r.drawn[0] > r.start && r.drawn[0] < r.drawn[1] && r.drawn[1] < r.drawn[2], 'the head eases round, not snapping');
+    assert.ok(Math.abs(r.drawn[3]) < 1e-9, 'and settles on the aim');
+    assert.ok(r.firing, 'firing frames play facing the target after a round');
+    assert.ok(r.removed && r.rubble, 'a destroyed turret drops its head and leaves rubble');
+    await page.screenshot({ path: path.join(OUT, 'pixel-art-sentry-turret.png') });
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
 test('Ore Processor window lists its three products and queues them; the top bar shows resources as they arrive', { skip, timeout: 60000 }, async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const browser = await launch();

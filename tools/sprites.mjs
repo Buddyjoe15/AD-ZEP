@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { PALETTE, TEAMS, ALPHABET, C, Grid, rng, painter, rotate, finish, png, sheetRGBA } from './pixelart.mjs';
 import { renderSprite, LIFT, OUTLINE } from './sprite-kit.mjs';
 import salvageCrawler from '../art/sprite-lab/specs/salvage_crawler.mjs';
+import sentryTurret from '../art/sprite-lab/specs/sentry_turret.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const OUT = path.join(ROOT, 'art/pixel-test');
@@ -175,6 +176,35 @@ function modelFrames(def){
     const { px } = renderSprite(spec.build(s), { w: N, h: N, ox: N / 2, oy: N / 2, res: SPRITE_RES, heading: i * DIAG, lift: LIFT, outline: OUTLINE });
     const g = new Grid(N, N); g.p.set(px); return g;
   }));
+}
+
+// Structures modelled in the sprite lab: one row of states (footprint × 96 art px, origin at
+// the top-left of the footprint in the game), and, for a turret, a head layer that turns: one
+// row per facing, clockwise from up, each rendered from the model about the footprint centre.
+export const MODELLED_STRUCTURES = {
+  sentry_turret: { spec: sentryTurret, shadow: [4, 4], elevation: 'structure' }
+};
+function structureFrames(spec){
+  const F = spec.frame, render = (model, heading = 0) => {
+    const { px } = renderSprite(model, { w: F.w, h: F.h, ox: F.ox, oy: F.oy, res: SPRITE_RES, heading, lift: LIFT, outline: OUTLINE });
+    const g = new Grid(F.w, F.h); g.p.set(px); return g;
+  };
+  const cols = [], states = {};
+  for (const [state, a] of Object.entries(spec.states)){
+    states[state] = { start: cols.length, frames: a.frames, ...(a.fps ? { fps: a.fps } : {}) };
+    for (let frame = 0; frame < a.frames; frame++) cols.push(render(spec.build({ state, anim: state, frame, frames: a.frames })));
+  }
+  let head = null;
+  if (spec.head){
+    const H = spec.head, seq = [], hs = {};
+    for (const [state, a] of Object.entries(H.states)){
+      hs[state] = { start: seq.length, frames: a.frames, ...(a.fps ? { fps: a.fps } : {}) };
+      for (let frame = 0; frame < a.frames; frame++) seq.push({ state, anim: state, frame, frames: a.frames });
+    }
+    const rows = Array.from({ length: H.facings }, (_, i) => seq.map(s => render(H.build(s), i * 2 * Math.PI / H.facings)));
+    head = { facings: H.facings, states: hs, on: H.on, turnRate: H.turnRate, rows };
+  }
+  return { cols, states, head };
 }
 
 // ---- Repair station (2×2 tiles = 96×96 world px, 192×192 art px), no facings ----
@@ -717,6 +747,19 @@ export function build(){
     sprites[name] = { ...meta, frames: rows.map(r => r.map(g => g.encode())) };
     sheets[name] = { meta, rows };
   }
+  for (const [name, def] of Object.entries(MODELLED_STRUCTURES)){
+    const spec = def.spec, { cols, states, head } = structureFrames(spec), [fw, fh] = spec.footprint;
+    const shadow = { drawnBy: 'engine', offset: def.shadow.map(v => v * SPRITE_RES), elevation: def.elevation };
+    const meta = {
+      name, frameWidth: spec.frame.w, frameHeight: spec.frame.h, origin: [0, 0], footprintTiles: [fw, fh],
+      worldPxPerArtPx: 1 / SPRITE_RES, rows: head ? 'row 0 states; the head sheet has one row per facing' : 'single row', model: 'art/sprite-lab/specs/' + spec.key + '.mjs',
+      states, shadow, team: 'team0..team2 (magenta ramp)'
+    };
+    const headMeta = head && { facings: head.facings, rows: 'facing, clockwise from up', pivot: 'footprint centre', states: head.states, on: head.on, turnRate: head.turnRate };
+    sprites[name] = { ...meta, frames: [cols.map(g => g.encode())], ...(head ? { head: { ...headMeta, frames: head.rows.map(r => r.map(g => g.encode())) } } : {}) };
+    sheets[name] = { meta: { ...meta, ...(head ? { head: { ...headMeta, image: name + '_head.png' } } : {}) }, rows: [cols] };
+    if (head) sheets[name + '_head'] = { meta: { name: name + '_head', frameWidth: spec.frame.w, frameHeight: spec.frame.h, origin: [spec.frame.ox, spec.frame.oy], worldPxPerArtPx: 1 / SPRITE_RES, ...headMeta, shadow }, rows: head.rows };
+  }
   const st = stationFrames(), states = {};
   st.forEach(([state], i) => { (states[state] ||= { start: i, frames: 0 }).frames++; });
   states.working.fps = 6;
@@ -807,7 +850,7 @@ async function capture(){
   for (const [z, tag] of [['0.333', '033'], ['0.667', '067'], ['1', '100']]) await shot(`zoom=${z}&t=0.4&hud=0`, `scene-zoom-${tag}.png`, phone);
   await shot('zoom=0.333&t=0.4&hud=0&tiles=v1', 'scene-zoom-033-tiles-v1.png', phone);
   const desk = { viewport: { width: 1200, height: 800 }, deviceScaleFactor: 1, fullPage: true };
-  for (const s of ['spider', 'salvage_crawler', 'drone', 'vance', 'repair_station', 'terrain', 'woodlands']) await shot(`view=sheets&only=${s}&hud=0`, `sheet-${s}.png`, desk);
+  for (const s of ['spider', 'salvage_crawler', 'drone', 'vance', 'repair_station', 'sentry_turret', 'terrain', 'woodlands']) await shot(`view=sheets&only=${s}&hud=0`, `sheet-${s}.png`, desk);
   await browser.close();
 }
 

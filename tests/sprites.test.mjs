@@ -130,3 +130,21 @@ test('sprite lab: the example spec renders top-down at 96 × 96 and passes every
   const byCargo = { ...varied, variants: { ...varied.variants, at: [0, 1] } };
   assert.ok(check(byCargo, RV).some(c => c.name === 'Variants' && c.level === 'pass'), 'cargo fill levels: the engine picks one');
 });
+
+test('Sentry Turret: modelled base states and a head layer in 16 facings, turned about the footprint centre', () => {
+  const tu = data.sprites.sentry_turret, H = tu.head, N = tu.frameWidth;
+  assert.equal(N, 96, 'a 1 × 1 structure is 96 × 96 art px');
+  for (const s of ['foundation', 'frame', 'near-complete', 'finished', 'damaged', 'rubble']) assert.ok(tu.states[s], s);
+  assert.equal(tu.frames[0].length, Object.values(tu.states).reduce((n, s) => n + s.frames, 0));
+  assert.equal(H.facings, 16); assert.equal(H.frames.length, 16);
+  assert.deepEqual(H.on, { finished: 'idle', damaged: 'damaged' });
+  const cols = Object.values(H.states).reduce((n, s) => n + s.frames, 0);
+  for (const row of H.frames){ assert.equal(row.length, cols); for (const str of row) assert.equal(str.length, N * N); }
+  // Each facing is the model turned, not a copy: every facing differs, and the one pointing
+  // down is the up facing turned 180° (nearly: each is rasterised on its own).
+  assert.equal(new Set(H.frames.map(r => r[0])).size, 16);
+  const up = decode(H.frames[0][0], N), down = decode(H.frames[8][0], N), turned = rot90(rot90(up));
+  let differ = 0, solid = 0;
+  for (let i = 0; i < up.p.length; i++){ if (!!down.p[i] !== !!turned.p[i]) differ++; if (up.p[i]) solid++; }
+  assert.ok(differ < solid * 0.04, `down facing silhouette is the up facing turned (${differ} of ${solid} px differ)`);
+});

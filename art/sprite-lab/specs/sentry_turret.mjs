@@ -88,26 +88,42 @@ export default {
   key: 'sentry_turret',
   name: 'Sentry Turret',
   gameKey: 'sentry_turret',
-  request: 'Sentry Turret (the existing 1 × 1 structure, drawn today as a placeholder). Revised: a smaller base, a bigger gun base (slewing ring) and a bigger gun turret.',
+  request: 'Sentry Turret (the existing 1 × 1 structure, drawn today as a placeholder). Revised: a smaller base, a bigger gun base (slewing ring) and a bigger gun turret. Then: engine work so the gun turret turns and tracks enemies.',
   kind: 'structure',
   faction: 'crew',
   team: true,
   elevation: 'structure',
   footprint: [1, 1],
   frame: structureFrame(1, 1),
+  // Base layer: the pad and slewing ring. Built and damaged turrets draw the head on top.
   states: {
     foundation: { frames: 1 }, frame: { frames: 1 }, 'near-complete': { frames: 1 },
-    finished: { frames: 2, fps: 2 }, working: { frames: 4, fps: 12 }, damaged: { frames: 2, fps: 3 }, rubble: { frames: 1 }
+    finished: { frames: 1 }, damaged: { frames: 1 }, rubble: { frames: 1 }
+  },
+  // Head layer: turns on the ring to track its target, drawn in 16 facings (every 22.5°),
+  // each rendered from the model with the light top left. `on` says which head state goes
+  // over which base state; firing plays for one shot (flash, then recoil) after each round.
+  head: {
+    facings: 16,
+    states: { idle: { frames: 1 }, firing: { frames: 2, fps: 16 }, damaged: { frames: 2, fps: 3 } },
+    on: { finished: 'idle', damaged: 'damaged' },
+    turnRate: 2 * Math.PI,       // radians per second the head is drawn turning toward its aim
+    build({ state, frame }){
+      const m = new Model();
+      if (state === 'firing') head(m, { recoil: frame === 0 ? 1.4 : 0.6, flash: frame === 0, frame });
+      else head(m, { damaged: state === 'damaged', frame });
+      return m;
+    }
   },
   fit: {
     lore: 'Fabricated on site by the crew for early perimeter defence: a light rapid-fire gun on a slewing ring, bolted to a steel pad the Spiders lay down. It fires automatically at ground targets within 260, the first line against the hostile machines.',
     style: 'Crew field engineering: a riveted steel pad with amber hazard bands and gold anchor bolts, a rounded plate housing, a side ammo drum, a vented cooling jacket and an exposed elevation ram. Team colour rings the top of the housing, seen from above; a cyan sensor eye sits beside the barrel.',
     silhouette: 'A square hazard-banded pad with a round head and one long barrel poking north past it: a keyhole shape, square and still, unlike the Spider\'s X of legs, the drones\' rotors or Vance.',
     changes: [
-      'The game turns the turret head toward its target; the engine can\'t yet draw a separate rotating layer, so the head is drawn aiming north. Aiming would need engine work (a head layer in 8 facings).',
+      'The head is its own layer in 16 facings, drawn over the base and turned toward the target the game aims at, easing round at one turn a second. This is new engine work: structures had no turning layer before.',
       'Kept the single barrel of today\'s placeholder; the Anti-Air Turret keeps the twin barrels.',
-      'Working is firing: 4 frames at 12 fps, the barrel recoiling with a muzzle flash on alternate frames.',
-      'Finished blinks the sensor eye; damaged bends the barrel, rusts the plating and shows a blinking red fault lamp.',
+      'Firing replaces the working state: after each round the head shows a muzzle flash and recoil (2 frames at 16 fps), then settles back to idle until the next shot.',
+      'Damaged bends the barrel, rusts the plating and shows a blinking red fault lamp; the damaged head still tracks and fires.',
       'The muzzle flash stays inside the tile, so it may read short at close zoom.',
       'Revised: the pad shrank from 39 to 32 world px, leaving grass round it inside the tile; the slewing ring grew from 22 to 27 world px across with a gold bolt rim; the head and barrel are a quarter bigger and now overhang the ring.'
     ]
@@ -139,11 +155,7 @@ export default {
       box(m, [0, HEAD_Y + 1, 1], [2.4, 1.4, 18], MAT.dark);
       return m;
     }
-    if (state === 'near-complete'){ head(m, { plated: false, barrel: false }); return m; }
-    if (state === 'working'){ head(m, { recoil: frame % 2 === 0 ? 1.4 : 0, flash: frame % 2 === 0, frame }); return m; }
-    if (state === 'damaged'){ head(m, { damaged: true, frame }); return m; }
-    head(m, { frame });
-    if (frame === 1) ball(m, [-4.5 * K, HEAD_Y + 8.1, -6.2 * K], 0.7, MAT.glow, 6);         // finished: the eye brightens
+    if (state === 'near-complete') head(m, { plated: false, barrel: false });   // finished and damaged: the head is its own layer
     return m;
   }
 };

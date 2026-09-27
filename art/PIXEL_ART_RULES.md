@@ -47,7 +47,7 @@ These are the rules for making new pixel art for the game. They match the art al
 
 **D. Facings (units)**
 13. Does it face where it moves or aims? [yes: 8 facings] Does it look the same from every direction? [no]
-14. Does anything turn separately from the body, like a turret? This needs a second layer, which the engine doesn't support yet. Flag it.
+14. Does anything turn separately from the body, like a turret? Structures can have a turning head layer (section 2.5); units can't yet, so flag it for a unit.
 
 **E. Animations and states.** List every animation with its frame count and speed. The engine plays these names automatically:
 
@@ -169,6 +169,7 @@ Save change: none | <what and why>
 
 - Construction states build up visually: slab and anchors, then girders, then mostly plated with one section open.
 - Put team colour on the finished hull (stripes or edges). Construction states may show it too.
+- **Turning head (turrets).** A structure whose head turns to aim, like the Sentry Turret, draws the head as its own layer over the base. Model it in the sprite lab as `head` in the spec (section 5.2): the base states hold the pad and ring only for the states the head goes over (`on`, such as finished → idle and damaged → damaged), and the head is rendered in 16 facings (every 22.5°), clockwise from up, about the footprint centre, in the same frame as the base. Head states: `idle`, `firing` (plays once after each round) and optionally `damaged`. The engine draws the facing nearest the aim the simulation set, easing round at the head's `turnRate`, with the head's shadow falling on the base. Presentation only: the drawn aim is never saved.
 - Structures without pixel art keep their old Canvas art, so pixel art can be added one structure at a time.
 
 ### 2.6 Resource nodes, props and items
@@ -200,7 +201,7 @@ For each asset:
 3. **Preview** at ⅓, ⅔ and 1 zoom on a phone-sized screen, on dust terrain, next to Spiders and drones for scale. Show blue and red team versions.
 
 Inside this repository:
-- Add the art as a draw function in `tools/sprites.mjs` (`UNITS` for units, or next to the station for structures). A unit modelled in the sprite lab goes in `MODELLED` instead, pointing at its spec: every facing is rendered from the model at the game's odd frame size (49 world px, 98 art px, for a one-tile unit). Run `npm run sprites`, which writes `art/pixel-test/sheets/` and `src/render/pixel-data.js`. Never edit `pixel-data.js` by hand.
+- Add the art as a draw function in `tools/sprites.mjs` (`UNITS` for units, or next to the station for structures). A unit modelled in the sprite lab goes in `MODELLED` instead, pointing at its spec: every facing is rendered from the model at the game's odd frame size (49 world px, 98 art px, for a one-tile unit). A structure modelled in the lab goes in `MODELLED_STRUCTURES`, with its head layer if it has one. Run `npm run sprites`, which writes `art/pixel-test/sheets/` and `src/render/pixel-data.js`. Never edit `pixel-data.js` by hand.
 - Map the game's `visual` or buildable key to the sprite in `G.PixelArt.UNITS` or `G.PixelArt.BUILDINGS` (`src/render/pixelart.js`).
 - Add it to the preview scene in `art/pixel-test/preview.html` and run `npm run sprites:preview`.
 - `npm test` and `npm run test:browser` must pass.
@@ -252,6 +253,7 @@ If a request doesn't fit (a dragon, a wizard), reinterpret it inside the world, 
   - The game's current Spider and drone use odd world sizes (98 and 66 art px); the lab uses whole tiles. Both are 2 art px per world px, and the engine reads the size from the metadata.
 - **Facings.** A unit's 8 facings are each rendered from the model, with the light staying top left. This replaces the rule to author `up` and `up-right` and rotate them: it gives the same silhouettes with the same light.
 - **Variants** (optional). A spec may set `variants: { label, by, values, at, pick }` for a look that follows game state rather than time, such as a hopper's fill level by `cargoTotal / cargoCapacity`. `build()` gets the value as `variant`. Each variant repeats every animation or state, left to right in the sheet, and the metadata says how the engine picks one. The engine picks cargo variants (`by: 'cargo'`); any other kind needs engine work, so the check warns.
+- **Turning head** (optional, structures). A spec may set `head: { facings, states, on, turnRate, build }` for a part that turns to aim (section 2.5). The lab renders every facing from the model, checks it, adds the head rows to the sheet below the base row, and the test page shows every facing and the head tracking a hostile.
 - **Shadows** stay engine-drawn from the silhouette, at the offset for the elevation (section 2.3).
 - **Checks** (`npm run sprite -- <spec>`). A fail must be fixed; a warn is for the requester to decide.
   - Frame size.

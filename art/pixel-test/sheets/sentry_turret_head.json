@@ -1,0 +1,45 @@
+{
+  "name": "sentry_turret_head",
+  "frameWidth": 96,
+  "frameHeight": 96,
+  "origin": [
+    48,
+    48
+  ],
+  "worldPxPerArtPx": 0.5,
+  "facings": 16,
+  "rows": "facing, clockwise from up",
+  "pivot": "footprint centre",
+  "states": {
+    "idle": {
+      "start": 0,
+      "frames": 1
+    },
+    "firing": {
+      "start": 1,
+      "frames": 2,
+      "fps": 16
+    },
+    "damaged": {
+      "start": 3,
+      "frames": 2,
+      "fps": 3
+    }
+  },
+  "on": {
+    "finished": "idle",
+    "damaged": "damaged"
+  },
+  "turnRate": 6.283185307179586,
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      8,
+      8
+    ],
+    "elevation": "structure"
+  },
+  "image": "sentry_turret_head.png",
+  "sheetWidth": 480,
+  "sheetHeight": 1536
+}

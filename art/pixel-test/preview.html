@@ -118,7 +118,10 @@ const scene = (() => {
     units.push({ sprite: 'salvage_crawler', team: 'blue', x, y, facing: Math.floor(rc() * 8), anim: n % 2 ? 'walk' : 'work', variant: n, phase: rc() }); n++;
   }
   units.push(vance);
-  return { stations, units, cx: 15 * TILE, cy: 26 * TILE };
+  // Sentry Turrets in the gaps between the stations, their heads turned toward the drones (fixed places,
+  // so nothing above moves). One is damaged and one has just fired.
+  const turrets = [[13, 23, 'finished'], [16, 23, 'firing'], [16, 26, 'damaged']].map(([gx, gy, state]) => ({ x: gx * TILE, y: gy * TILE, state, aim: Math.atan2(15 * TILE - (gy + 0.5) * TILE, 15 * TILE - (gx + 0.5) * TILE) }));
+  return { stations, turrets, units, cx: 15 * TILE, cy: 26 * TILE };
 })();
 
 const cv = document.getElementById('scene'), g = cv.getContext('2d');
@@ -163,6 +166,17 @@ function drawScene(time){
   const st = D.sprites.repair_station;
   shadowPass(scene.stations.map(s => place(stationFrame(s), st.frameWidth, st.frameHeight, s.x, s.y, st.origin, null, 'silhouette', st.shadow.offset, st)));
   for (const s of scene.stations){ const [c, x, y, w, h] = place(stationFrame(s), st.frameWidth, st.frameHeight, s.x, s.y, st.origin, 'blue', undefined, undefined, st); g.drawImage(c, x, y, w, h); }
+  // Turrets: the base, then the head in the facing nearest its aim, its shadow on the base.
+  const tu = D.sprites.sentry_turret, TH = tu.head;
+  const turretBase = s => tu.frames[0][tu.states[s.state === 'damaged' ? 'damaged' : 'finished'].start];
+  const turretHead = s => { const f = ((Math.round((s.aim + Math.PI / 2) / (Math.PI * 2 / TH.facings)) % TH.facings) + TH.facings) % TH.facings, a = TH.states[s.state === 'finished' ? 'idle' : s.state]; return TH.frames[f][a.start + (a.fps ? Math.floor(time * a.fps) % a.frames : 0)]; };
+  shadowPass(scene.turrets.map(s => place(turretBase(s), tu.frameWidth, tu.frameHeight, s.x, s.y, tu.origin, null, 'silhouette', tu.shadow.offset, tu)));
+  for (const s of scene.turrets){
+    for (const [str, mode] of [[turretBase(s)], [turretHead(s), 'silhouette'], [turretHead(s)]]){
+      const [c, x, y, w, h] = place(str, tu.frameWidth, tu.frameHeight, s.x, s.y, tu.origin, mode ? null : 'blue', mode, mode ? tu.shadow.offset : undefined, tu);
+      if (mode){ g.globalAlpha = 0.55; g.drawImage(c, x, y, w, h); g.globalAlpha = 1; } else g.drawImage(c, x, y, w, h);
+    }
+  }
   shadowPass(scene.units.map(u => { const sp = D.sprites[u.sprite]; return place(unitFrame(u), sp.frameWidth, sp.frameHeight, u.x, u.y, sp.origin, null, 'silhouette', sp.shadow.offset, sp); }));
   const order = [...scene.units].sort((a, b) => (a.air ? 2 : a.sprite === 'vance' ? 1 : 0) - (b.air ? 2 : b.sprite === 'vance' ? 1 : 0));
   for (const u of order){ const sp = D.sprites[u.sprite], [c, x, y, w, h] = place(unitFrame(u), sp.frameWidth, sp.frameHeight, u.x, u.y, sp.origin, u.team, undefined, undefined, sp); g.drawImage(c, x, y, w, h); }
@@ -210,6 +224,15 @@ function buildSheets(){
     for (const [s, v] of Object.entries(st.states)) for (let i = 0; i < v.frames; i++) names.push(v.frames > 1 ? `${s} ${i + 1}` : s);
     const [d, row] = section(`repair station — ${st.frameWidth}×${st.frameHeight} (2×2 tiles)`, 'Stand-in design. States left to right: ' + names.join(', ') + '.');
     for (const team of [null, 'blue', 'red']) row.append(fig(sheetCanvas(st.frames, st.frameWidth, st.frameHeight, team, 1, '#3a3129'), team ? team + ' team' : 'raw sheet (magenta)'));
+    root.append(d);
+  }
+  if (want('sentry_turret')){
+    const tu = D.sprites.sentry_turret, H = tu.head, names = [];
+    for (const [s, v] of Object.entries(tu.states)) for (let i = 0; i < v.frames; i++) names.push(v.frames > 1 ? `${s} ${i + 1}` : s);
+    const heads = Object.entries(H.states).map(([s, v]) => `${s} ${v.frames}f${v.fps ? ' @ ' + v.fps + ' fps' : ''}`).join(' · ');
+    const [d, row] = section(`sentry turret — ${tu.frameWidth}×${tu.frameHeight} (1×1 tile), modelled in the sprite lab`, `Base states left to right: ${names.join(', ')}. The head is its own layer, drawn over ${Object.entries(H.on).map(([b, h]) => b + ' (' + h + ')').join(' and ')} in the facing nearest the turret's aim: ${H.facings} rows, clockwise from up; columns ${heads}.`);
+    for (const team of [null, 'blue', 'red']) row.append(fig(sheetCanvas(tu.frames, tu.frameWidth, tu.frameHeight, team, 1, '#3a3129'), team ? team + ' team base' : 'raw base (magenta)'));
+    for (const team of [null, 'blue']) row.append(fig(sheetCanvas(H.frames, tu.frameWidth, tu.frameHeight, team, 1, '#3a3129'), team ? team + ' team head' : 'raw head (magenta)'));
     root.append(d);
   }
   if (want('woodlands') && D.woodlands){
