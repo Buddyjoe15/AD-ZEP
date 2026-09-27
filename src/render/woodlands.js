@@ -131,7 +131,7 @@
 
   // Genesis: water and cliffs are drawn along contours over plain ground (G.Landscape), and
   // small features stand on grass rather than a flat square of colour.
-  const CONTOUR = new Set([K.WATER, K.DEEP, K.FALLS, K.CLIFF, K.CAVE]);
+  const CONTOUR = new Set([K.WATER, K.DEEP, K.FALLS, K.CLIFF, K.CAVE, K.PATH]);
   const ON_GRASS = new Set([K.REEDS, K.ROCKS, K.MOSSROCK, K.MUSHROOM, K.FLOWERS, K.BURROW, K.SHRUB, K.STUMP, K.LOGS, K.MOUND, K.VENT, K.ORE, K.CRYSTAL]);
   const genesis = () => !!(art && art.generator === 'genesis');
   function grassBase(ctx, gx, gy, px, py, S){
@@ -588,20 +588,30 @@
     // leaves them to drawTrees so they can sway.
     paintChunk(ctx, grd, x0, y0, ct, S, opts){
       bind(grd);
-      const cols = grd.cols, rows = grd.rows;
+      const cols = grd.cols, rows = grd.rows, gen = genesis();
       for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
         const gx = x0 + lx, gy = y0 + ly;
         if (gx >= cols || gy >= rows) continue;
         const i = gy * cols + gx, px = lx * S, py = ly * S;
         drawTile(ctx, i, grd.tiles[i], gx, gy, px, py, S);
         const d = art.detail[i];
-        if (d) drawDecal(ctx, d, gx, gy, px, py, S, art.angle[i] / 256 * TAU, seed);
+        if (d && !gen) drawDecal(ctx, d, gx, gy, px, py, S, art.angle[i] / 256 * TAU, seed);
+      }
+      // Genesis: water, shores, cliffs, waterfalls and trails along contours, then the ground
+      // detail on top (tracks and footprints show on the trails).
+      if (gen){
+        G.Landscape.paintChunk(ctx, grd, x0, y0, ct);
+        for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
+          const gx = x0 + lx, gy = y0 + ly;
+          if (gx >= cols || gy >= rows) continue;
+          const i = gy * cols + gx, d = art.detail[i];
+          if (d) drawDecal(ctx, d, gx, gy, lx * S, ly * S, S, art.angle[i] / 256 * TAU, seed);
+        }
       }
       for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
         const gx = x0 + lx, gy = y0 + ly;
         if (gx < cols && gy < rows) heightShade(ctx, gx, gy, lx * S, ly * S, S);
       }
-      if (genesis()) G.Landscape.paintChunk(ctx, grd, x0, y0, ct);   // water, shores, cliffs and waterfalls along contours
       if (G.TreeFX) G.TreeFX.paintScorch(ctx, x0 * S, y0 * S, ct * S);   // blast marks, under everything tall
       bakeTrees = !!(opts && opts.trees);
       this.paintTops(ctx, grd, x0, y0, ct, S, true);

@@ -55,14 +55,14 @@
   function ids(){
     if (K) return K;
     const id = k => G.Defs.terrain.get(k).id;
-    K = { WATER: id('water'), DEEP: id('deep_water'), FALLS: id('waterfall'), CLIFF: id('cliff'), CAVE: id('cave'), SLOPE: id('slope'), STAIRS: id('steps'), BRIDGE: id('bridge') };
+    K = { WATER: id('water'), DEEP: id('deep_water'), FALLS: id('waterfall'), CLIFF: id('cliff'), CAVE: id('cave'), SLOPE: id('slope'), STAIRS: id('steps'), BRIDGE: id('bridge'), PATH: id('path') };
     return K;
   }
   function fields(grd){
     const a = grd.art;
     if (a.land) return a.land;
     const n = grd.size;
-    a.land = { E: new Float32Array(n), W: new Float32Array(n), D: new Float32Array(n), noFace: new Uint8Array(n), near: new Uint8Array(n) };
+    a.land = { E: new Float32Array(n), W: new Float32Array(n), D: new Float32Array(n), noFace: new Uint8Array(n), near: new Uint8Array(n), P: new Float32Array(n) };
     update(grd, 0, 0, grd.cols, grd.rows);
     return a.land;
   }
@@ -75,6 +75,7 @@
       const i = y * cols + x, t = tiles[i], l = lvl[i];
       const wet = t === k.WATER || t === k.DEEP || t === k.FALLS;
       L.W[i] = wet ? 1 : 0;
+      L.P[i] = t === k.PATH ? 1 : 0;
       L.D[i] = t === k.DEEP ? 1 : 0;
       L.noFace[i] = t === k.SLOPE || t === k.STAIRS ? 1 : 0;
       let e = l;
@@ -84,16 +85,17 @@
       }
       L.E[i] = e;
     }
-    // Tiles to shade: water, and anything with a different height or water within reach (two
-    // rows up, for faces hanging from a rim above, one tile elsewhere).
+    // Tiles to shade (bits of `near`): 1 water or a shore, 2 a change of height within reach (two
+    // rows up, for faces hanging from a rim above, one tile elsewhere), 4 a path or its edge.
     for (let y = Math.max(0, y0 - 3); y < Math.min(rows, y0 + h + 3); y++) for (let x = Math.max(0, x0 - 2); x < Math.min(cols, x0 + w + 2); x++){
       const i = y * cols + x;
-      let near = L.W[i] ? 1 : 0;
-      for (let dy = -2; dy <= 1 && near < 3; dy++) for (let dx = -1; dx <= 1; dx++){
+      let near = (L.W[i] ? 1 : 0) | (L.P[i] ? 4 : 0);
+      for (let dy = -2; dy <= 1 && near < 7; dy++) for (let dx = -1; dx <= 1; dx++){
         if (!inb(x + dx, y + dy)) continue;
         const j = (y + dy) * cols + x + dx;
         if (L.E[j] !== L.E[i]) near |= 2;
         if (dy >= -1 && L.W[j] !== L.W[i]) near |= 1;
+        if (dy >= -1 && L.P[j] !== L.P[i]) near |= 4;
       }
       L.near[i] = near;
     }
@@ -158,7 +160,7 @@
       // Rows of one tile's column: which tile-centre row each canvas row falls between, and
       // how far (so a column's value is one lerp per pixel once interpolated across x).
       const rowJ = new Int32Array(Math.ceil((t + FACE) * res) + 4), rowF = new Float32Array(rowJ.length), rowA = new Int32Array(rowJ.length);
-      const colA = new Float32Array(8), colB = new Float32Array(8), colW = new Float32Array(8), colD = new Float32Array(8);
+      const colA = new Float32Array(8), colW = new Float32Array(8), colD = new Float32Array(8), colP = new Float32Array(8);
       // A field interpolated across x at column u (tile units) for tile rows j0..j0+7.
       const across = (Fd, u, j0, out) => {
         let i0 = Math.floor(u); const fx = u - i0;
@@ -173,7 +175,7 @@
       // was just shaded; then there is no need to look a face's height above this one.
       const shadeTile = (gx, gy, i, near, px0, px1, py0, py1, buf, BW, bx, by, carry) => {
         const d32 = new Uint32Array(buf.buffer, buf.byteOffset, buf.length >> 2);
-        const cliffs = near & 2, wet = near & 1, tintBase = TINT[lvl[i]] || 0, carried = !!(cliffs && carry && carry.ok);
+        const cliffs = near & 2, wet = near & 1, trail = near & 4, tintBase = TINT[lvl[i]] || 0, carried = !!(cliffs && carry && carry.ok);
         const yStart = cliffs && !carried ? py0 - F : cliffs ? py0 - 1 : py0, nRows = py1 - yStart, j0 = Math.floor((oy + (yStart + 0.5) * step) / t - 0.5);
         const rowAY = rowA;
         for (let r = 0; r < nRows; r++){ const wy = oy + (yStart + r + 0.5) * step, v = wy / t - 0.5, j = Math.floor(v); rowJ[r] = j - j0; rowF[r] = v - j; rowAY[r] = Math.floor(wy * 2); }
@@ -195,6 +197,7 @@
         for (let cx = px0; cx < px1; cx++){
           const wx = ox + (cx + 0.5) * step, ax = Math.floor(wx * 2), axm = ax & (NS - 1), c = cx - px0 + 1, cb = c * nRows;
           if (wet){ across(L.W, wx / t - 0.5, j0, colW); across(L.D, wx / t - 0.5, j0, colD); }
+          if (trail) across(L.P, wx / t - 0.5, j0, colP);
           const nx7 = NOISE[7 * NS + axm] + NOISE[3 * NS + ((ax >> 1) & (NS - 1))] * 0.5;   // waterfall streak strength of this column
           const nCol = NOISE[11 * NS + ((ax >> 3) & (NS - 1))];
           // Walk down the column from a face's height above the tile (or from where the tile
@@ -249,6 +252,22 @@
               col = w > 0.465 ? (dith < 0.7 ? P.dust0 : P.dust1) : dith < 0.55 ? P.dust1 : -1;   // wet mud bank
             } else if (wet && w > 0.33 && dith < 0.35){
               col = P.grass0;   // damp grass
+            }
+            if (col < 0 && trail && !face){
+              // Trails: packed dirt along the contour, with pebbles and a darker worn line down
+              // the middle, fraying into grass at the edges.
+              const q = rowJ[r], a0 = colP[q], pv = a0 + (colP[q + 1] - a0) * rowF[r] + (NOISE[((ay + 77) & (NS - 1)) * NS + ((ax + 13) & (NS - 1))] - 0.5) * 0.28;
+              if (pv >= 0.5){
+                const pb = NOISE[((ay * 5) & (NS - 1)) * NS + ((ax * 5 + 3) & (NS - 1))];
+                if (pb > 0.86) col = P.dust4;                                 // pebble
+                else if (pb > 0.83) col = P.char1;                            // its shadow
+                else if (pv > 0.78 && n + dith * 0.3 < 0.45) col = P.dust1;   // the worn middle
+                else col = n + dith * 0.35 > 0.72 ? P.dust3 : n > 0.3 ? P.dust2 : P.dust1;
+              } else if (pv > 0.4){
+                const k2 = (pv - 0.4) / 0.1;
+                if (dith < k2 * 0.8) col = n > 0.55 ? P.dust2 : P.dust1;     // bare patches in the grass
+                else if (dith > 0.9 && n > 0.6) col = P.grass3;              // tufts at the edge
+              }
             }
             if (col < 0 && cliffs){
               // The face's shadow on the ground at its foot.
