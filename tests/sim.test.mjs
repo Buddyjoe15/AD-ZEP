@@ -776,8 +776,8 @@ test('genesis plants free-standing trees in thick and thin clusters, off the til
   const grid = G.MapGen.genesis(72491), art = grid.art, tr = art.trees, cols = grid.cols;
   // Pinned: saves of this map type rebuild their terrain and trees from the seed.
   assert.equal(art.generator, 'genesis');
-  assert.equal(fnv(grid.tiles), 1837240040, 'genesis terrain unchanged');
-  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 3246375447, 'genesis trees unchanged');
+  assert.equal(fnv(grid.tiles), 2115186325, 'genesis terrain unchanged');
+  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 2223174621, 'genesis trees unchanged');
   const again = G.MapGen.genesis(72491);
   assert.equal(fnv(again.tiles), fnv(grid.tiles), 'same seed, same map');
   assert.equal(fnv(G.MapGen.woodlands(72491).tiles), 1031677493, 'woodlands itself is untouched');

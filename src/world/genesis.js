@@ -319,8 +319,8 @@
       if (!clearOf(Math.round(mx), Math.round(my), 14, [BRIDGE, FALLS])) continue;
       chosen.push({ ...c, mx, my });
     }
-    // Each crossing is rows of small rocks across the flow: three or four abreast mid-stream,
-    // widening to seven or eight at the banks, where a worn dirt apron (path) meets it.
+    // Each crossing is rows of small rocks across the flow: four or five abreast mid-stream,
+    // widening to eight or nine at the banks, where a worn dirt apron (path) meets it.
     const PATH = id('path'), GROUNDABLE = new Set(['grass', 'tall_grass', 'wildflowers', 'forest', 'bush', 'reeds', 'mushrooms', 'clearing', 'swamp'].map(id));
     const out = { x: [], y: [], r: [], fx: [], fy: [], land: [], c: [] };
     chosen.forEach((c, ci) => {
@@ -340,7 +340,7 @@
       let row = 0;
       for (let sT = w0 + 0.05; sT <= w1 - 0.05; row++){
         const hrow = q => hash(ci * 997 + row, 99, s + q);
-        const u = Math.min(1, Math.abs(sT - mid) / (half - 1.5)), count = Math.max(3, Math.round(3.5 + 4 * u ** 1.4 + (hrow(843) - 0.5) * 2));
+        const u = Math.min(1, Math.abs(sT - mid) / (half - 1.5)), count = Math.max(4, Math.round(4.5 + 4.5 * u ** 1.4 + (hrow(843) - 0.5) * 2));
         const step = 5.5 + 3 * u + hrow(845) * 3;   // rows closer together mid-stream, where they are narrow
         const centre = Math.sin(sT * 1.7 + phase) * drift * (0.4 + u);
         sT += step / TILE;
@@ -459,11 +459,28 @@
       // The old deck goes back to water, the new one goes down.
       for (const i of cells) put(i, water);
       for (let u = u0; u <= u1; u++) for (const v of [v0, v0 + 1]){ const x = X(u, v), y = Y(u, v); if (inb(x, y)){ put(y * W + x, BRIDGE); seen[y * W + x] = 1; } }
-      // The river straight under it: open water across the span for three tiles either side,
-      // firm bank beyond the ends.
-      for (const v of [v0 - 3, v0 - 2, v0 - 1, v0 + 2, v0 + 3, v0 + 4]){
-        for (let u = u0; u <= u1; u++){ const x = X(u, v), y = Y(u, v), i = y * W + x; if (inb(x, y) && NATURAL.has(tiles[i]) && lvl[i] === L) put(i, water); }
-        for (const u of [u0 - 1, u0 - 2, u1 + 1, u1 + 2]){ const x = X(u, v), y = Y(u, v), i = y * W + x; if (inb(x, y) && wetT(tiles[i]) && lvl[i] === L) put(i, GRASS); }
+      // The river runs square under the deck and bends gently back into its own course over
+      // the next few tiles either side (so a diagonal river doesn't become a square pool): in
+      // the row beside the deck the water spans the deck exactly, and each row further out
+      // moves a third of the way back towards where the river really runs.
+      const cU = Math.round((u0 + u1) / 2), wetAt = (u, v) => { const x = X(u, v), y = Y(u, v); return inb(x, y) && wetT(tiles[y * W + x]) && lvl[y * W + x] === L; };
+      const runAt = v => {
+        for (let d = 0; d <= 10; d++) for (const u of [cU - d, cU + d]){
+          if (!wetAt(u, v)) continue;
+          let a = u, b = u;
+          while (a > u - 20 && wetAt(a - 1, v)) a--;
+          while (b < u + 20 && wetAt(b + 1, v)) b++;
+          return [a, b];
+        }
+        return null;
+      };
+      for (const side of [-1, 1]) for (let k = 1; k <= 3; k++){
+        const v = side < 0 ? v0 - k : v0 + 1 + k, run = runAt(v), t = (k - 1) / 3;
+        const a = run ? Math.round(u0 + (run[0] - u0) * t) : u0, b = run ? Math.round(u1 + (run[1] - u1) * t) : u1;
+        if (!run && k > 1) continue;
+        for (let u = a; u <= b; u++){ const x = X(u, v), y = Y(u, v), i = y * W + x; if (inb(x, y) && NATURAL.has(tiles[i]) && lvl[i] === L) put(i, water); }
+        const lo = Math.min(a, run ? run[0] : a) - 2, hi = Math.max(b, run ? run[1] : b) + 2;
+        for (let u = lo; u <= hi; u++){ if (u >= a && u <= b) continue; const x = X(u, v), y = Y(u, v), i = y * W + x; if (inb(x, y) && wetT(tiles[i]) && lvl[i] === L) put(i, GRASS); }
       }
       // The trail meets it head on.
       const approach = new Set();
