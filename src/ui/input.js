@@ -99,7 +99,7 @@
       if (G.BuildUI.placing()){
         // Placement owns the pointer: no pan, box, formation or pinch can start.
         if (this.ptr.size > 1){ this.ptr.delete(e.pointerId); return; }
-        G.BuildUI.previewAt(q.x, q.y);
+        G.BuildUI.begin(q.x, q.y);
         this.buildGesture = { id: e.pointerId };
         this.dragCam = null; this.box = null; this.cancelTouchHold(); this.cancelFormationGesture(); return;
       }

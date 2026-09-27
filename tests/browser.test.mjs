@@ -669,6 +669,53 @@ test('pixel-art walls join their neighbours and gate ends (never diagonally); ga
   } finally { await browser.close(); }
 });
 
+test('building walls: press and drag builds a row in the direction dragged, previewed with its count and cost', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    // An open 8 × 8 patch south of the Spider, and the Spider in build mode with a wall picked.
+    const at = await page.evaluate(() => {
+      const G = GW, S = G.State, T = 48, u = S.units.find(u => u.type === 'utility_spider');
+      S.resources.metal = 2000; S.resources.steel = 200;
+      const free = (x, y) => { for (let j = 0; j < 8; j++) for (let i = 0; i < 8; i++) if (!G.Buildings.canPlace(x + i, y + j, 1, 1)) return false; return true; };
+      let spot = null;
+      for (let r = 3; r < 20 && !spot; r++) for (let dx = -r; dx <= r && !spot; dx++){ const x = Math.floor(u.x / T) + dx, y = Math.floor(u.y / T) + r; if (free(x, y)) spot = { gx: x, gy: y }; }
+      G.centerCamera((spot.gx + 4) * T, (spot.gy + 4) * T, 1);
+      G.BuildUI.enter(u); G.BuildUI.choose('wood_wall');
+      return spot;
+    });
+    const cellCentre = async (gx, gy) => screen(page, (gx + 0.5) * 48, (gy + 0.5) * 48);
+    // Drag east 4 tiles (and a little south): a row of 5 east-west.
+    let a = await cellCentre(at.gx, at.gy), b = await cellCentre(at.gx + 4, at.gy + 1);
+    await page.mouse.move(a.x, a.y); await page.mouse.down();
+    await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 3 }); await page.mouse.move(b.x, b.y, { steps: 3 });
+    const pv = await page.evaluate(() => GW.State.buildPreview && GW.State.buildPreview.cells.map(c => [c.gx, c.gy, c.afford]));
+    assert.equal(pv.length, 5, 'five cells previewed');
+    assert.ok(pv.every(([x, y, ok], i) => x === at.gx + i && y === at.gy && ok), JSON.stringify(pv));
+    await page.screenshot({ path: path.join(OUT, 'wall-row-preview.png') });
+    await page.mouse.up();
+    let sites = await page.evaluate(() => GW.State.constructionSites.map(s => [s.type, s.gx, s.gy]));
+    assert.equal(sites.length, 5, 'a row of five queued');
+    assert.ok(sites.every(([t, x, y], i) => t === 'wood_wall' && x === at.gx + i && y === at.gy));
+    // Cancel it, then drag north-south with a metal wall: the row follows the drag.
+    await page.evaluate(() => { const u = GW.State.units.find(u => u.type === 'utility_spider'); GW.Orders.move([u], u.x, u.y); GW.BuildUI.enter(u); GW.BuildUI.choose('defensive_wall'); });
+    a = await cellCentre(at.gx + 6, at.gy + 6); b = await cellCentre(at.gx + 7, at.gy + 1);
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up();
+    sites = await page.evaluate(() => GW.State.constructionSites.map(s => [s.type, s.gx, s.gy]));
+    assert.equal(sites.length, 6);
+    assert.ok(sites.every(([t, x, y], i) => t === 'defensive_wall' && x === at.gx + 6 && y === at.gy + 6 - i), JSON.stringify(sites));
+    // A tap still builds one section.
+    await page.evaluate(() => { const u = GW.State.units.find(u => u.type === 'utility_spider'); GW.Orders.move([u], u.x, u.y); GW.BuildUI.enter(u); GW.BuildUI.choose('reinforced_wall'); });
+    a = await cellCentre(at.gx + 2, at.gy + 4);
+    await page.mouse.click(a.x, a.y);
+    assert.equal(await page.evaluate(() => GW.State.constructionSites.length), 1);
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
 test('Ore Processor window lists its three products and queues them; the top bar shows resources as they arrive', { skip, timeout: 60000 }, async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const browser = await launch();

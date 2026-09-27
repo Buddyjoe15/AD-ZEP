@@ -323,10 +323,21 @@
         }
       }
       if (S.buildPreview){
-        const bp = S.buildPreview, d = G.Defs.buildables.get(bp.key) || { w: 1, h: 1, cost: {} };
-        const ok = G.Buildings.canPlaceKey(bp.key, bp.gx, bp.gy) && !!G.Construction.builder(S.buildMode.builderId) && G.Economy.canAfford(d.cost);
-        g.fillStyle = ok ? 'rgba(125,220,130,.30)' : 'rgba(230,90,80,.32)'; g.strokeStyle = ok ? '#8de295' : '#ee6b62'; g.lineWidth = 2 / z;
-        g.fillRect(bp.gx * T, bp.gy * T, T * d.w, T * d.h); g.strokeRect(bp.gx * T, bp.gy * T, T * d.w, T * d.h);
+        const bp = S.buildPreview, d = G.Defs.buildables.get(bp.key) || { w: 1, h: 1, cost: {} }, builder = !!G.Construction.builder(S.buildMode.builderId);
+        const cell = (gx, gy, ok) => {
+          g.fillStyle = ok ? 'rgba(125,220,130,.30)' : 'rgba(230,90,80,.32)'; g.strokeStyle = ok ? '#8de295' : '#ee6b62'; g.lineWidth = 2 / z;
+          g.fillRect(gx * T, gy * T, T * d.w, T * d.h); g.strokeRect(gx * T, gy * T, T * d.w, T * d.h);
+        };
+        if (bp.cells){
+          // A row of walls: green where it will be built, red where blocked or beyond the resources.
+          for (const c of bp.cells) cell(c.gx, c.gy, c.afford && builder);
+          const n = bp.cells.filter(c => c.afford).length, last = bp.cells[bp.cells.length - 1];
+          const cost = G.Economy.describe(Object.fromEntries(Object.entries(d.cost).map(([k, v]) => [k, v * n])));
+          g.font = `bold ${12 / z}px sans-serif`; g.textAlign = 'center';
+          const label = `${n} × ${d.name}${n ? ' · ' + cost : ''}`, lx = (last.gx + 0.5) * T, ly = last.gy * T - 8 / z, w = g.measureText(label).width + 12 / z;
+          g.fillStyle = 'rgba(10,16,12,.8)'; g.fillRect(lx - w / 2, ly - 14 / z, w, 18 / z);
+          g.fillStyle = n ? '#dff5c8' : '#ffb3a8'; g.fillText(label, lx, ly);
+        } else cell(bp.gx, bp.gy, G.Buildings.canPlaceKey(bp.key, bp.gx, bp.gy) && builder && G.Economy.canAfford(d.cost));
       }
       if (S.formationPreview){
         const fp = S.formationPreview;

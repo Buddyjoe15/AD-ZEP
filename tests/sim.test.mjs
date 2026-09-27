@@ -216,6 +216,44 @@ test('construction completes, blocks the tile and refunds when cancelled', () =>
   assert.equal(G.Economy.get('metal'), 100);
 });
 
+test('a row of walls: one Spider builds each in turn, skipping blocked tiles; cancelling refunds the rest; a save mid-row carries on', () => {
+  const G = newGame();
+  const S = G.State, spider = find(G, 'utility_spider'), p = field(G, 12, 14);
+  S.resources.metal = 1000;
+  // Five cells east of p, with a wall already on the third.
+  const cells = [0, 1, 2, 3, 4].map(i => ({ gx: p.x + i, gy: p.y }));
+  G.Buildings.add('defensive_wall', p.x + 2, p.y);
+  const sites = G.Construction.orderRow(spider, 'wood_wall', cells);
+  assert.equal(sites.length, 4, 'the blocked tile is skipped');
+  assert.equal(G.Economy.get('metal'), 1000 - 4 * 25, 'paid for four');
+  assert.equal(spider.buildSiteId, sites[0].id, 'works the first');
+  G.Sim.run(0.5);
+  assert.equal(S.constructionSites.length, 4, 'the queued sites wait their turn rather than being refunded');
+  // Save mid-row after the first is built, restore, and the rest still get built.
+  let t = 0;
+  while (S.buildings.filter(b => b.type === 'wood_wall' && !b.testZone).length < 1 && t < 30){ G.Sim.run(0.5); t += 0.5; }
+  const saved = JSON.parse(JSON.stringify(G.Save.serialize()));
+  G.Save.restore(saved, 1);
+  G.State.paused = false;                                     // loading pauses the game
+  G.Sim.run(40);
+  const built = G.State.buildings.filter(b => b.type === 'wood_wall' && !b.testZone).map(b => b.gx - p.x).sort((a, b) => a - b);
+  assert.equal(built.join(), '0,1,3,4', 'all four built');
+  assert.equal(G.State.constructionSites.length, 0);
+  const sp2 = find(G, 'utility_spider');
+  assert.equal(sp2.buildSiteId, null); assert.equal(sp2.command, 'idle');
+  // A new order cancels the whole queue and refunds it.
+  G.State.resources.metal = 1000;
+  const row = G.Construction.orderRow(sp2, 'defensive_wall', [0, 1, 2].map(i => ({ gx: p.x + i, gy: p.y + 2 })));
+  assert.equal(row.length, 3);
+  assert.equal(G.Economy.get('metal'), 1000 - 3 * 60);
+  G.Orders.move([sp2], sp2.x + 100, sp2.y);
+  assert.equal(G.Economy.get('metal'), 1000);
+  assert.equal(G.State.constructionSites.length, 0);
+  // The row stops where the metal runs out.
+  G.State.resources.metal = 130;
+  assert.equal(G.Construction.orderRow(sp2, 'defensive_wall', [0, 1, 2].map(i => ({ gx: p.x + i, gy: p.y + 3 }))).length, 2);
+});
+
 test('built chests are containers, not solid buildings', () => {
   const G = newGame();
   const spider = find(G, 'utility_spider'), p = openTileNear(G, 3, 5), n = G.State.containers.length;
