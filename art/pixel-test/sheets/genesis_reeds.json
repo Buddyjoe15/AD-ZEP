@@ -1,0 +1,28 @@
+{
+  "name": "genesis_reeds",
+  "frameWidth": 72,
+  "frameHeight": 72,
+  "origin": [
+    35.5,
+    35.5
+  ],
+  "worldPxPerArtPx": 0.5,
+  "rows": [
+    "{\"r\":9}"
+  ],
+  "frameSizes": [
+    72
+  ],
+  "columns": "3 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      3,
+      3
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_reeds.png",
+  "sheetWidth": 216,
+  "sheetHeight": 72
+}

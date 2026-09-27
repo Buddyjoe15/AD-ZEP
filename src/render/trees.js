@@ -167,6 +167,7 @@
   }
   // Without pixel art: plain round crowns, like the classic trees.
   const CLASSIC = { spruce: [24, 58, 34], pine: [34, 70, 40], birch: [80, 118, 66], maple: [44, 88, 46], snag: [92, 82, 70] };
+  const PROP_CLASSIC = { bush: '#3f6a3c', flowers: '#d8c060', boulder: '#8a918c', reeds: '#8ea05c', mushrooms: '#b0503c', fern: '#35603a' };
   function drawClassic(g, I, count){
     const KINDS = G.TREES.KINDS, SP = G.TREES.species, PR = G.TREES.props;
     for (let k = 0; k < count; k++){
@@ -174,7 +175,7 @@
       if (kind === 'log'){
         const d = PR.log.sizes[I.ES[j]], a = (I.VR[j] >> 1) / G.TREES.LOG_ANGLES * TAU, ux = Math.cos(a) * d.length / 2, uy = Math.sin(a) * d.length / 2;
         g.strokeStyle = '#6f5e48'; g.lineWidth = d.width; g.lineCap = 'round'; g.beginPath(); g.moveTo(I.X[j] - ux, I.Y[j] - uy); g.lineTo(I.X[j] + ux * 0.5, I.Y[j] + uy * 0.5); g.stroke(); g.lineCap = 'butt';
-      } else if (!layer(I.EK[j])){ g.fillStyle = '#9e896b'; g.beginPath(); g.arc(I.X[j], I.Y[j], PR[kind].sizes[I.ES[j]].r, 0, TAU); g.fill(); }
+      } else if (!layer(I.EK[j])){ g.fillStyle = PROP_CLASSIC[kind] || '#9e896b'; g.beginPath(); g.arc(I.X[j], I.Y[j], PR[kind].sizes[I.ES[j]].r, 0, TAU); g.fill(); }
     }
     g.fillStyle = 'rgba(0,0,0,.3)';
     for (let k = 0; k < count; k++){ const j = I.ids[k]; if (!layer(I.EK[j])) continue; const r = SP[KINDS[I.EK[j]]].crown[I.ES[j]] / 2; g.beginPath(); g.arc(I.X[j] + 3 + I.ES[j], I.Y[j] + 3 + I.ES[j], r, 0, TAU); g.fill(); }

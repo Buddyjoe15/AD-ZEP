@@ -44,6 +44,8 @@
     if (cur.state[k] === CUT || cur.state[k] === SNAPPED) return H.stump[z >= 2 ? 1 : 0];
     if (kind === 'log') return H.log[z];
     if (kind === 'stump_cut' || kind === 'stump_broken') return H.stump[z];
+    const pd = G.TREES.props[kind];
+    if (pd) return pd.hp[z];   // landscaping
     return H.tree[z] * (G.TREES.species[kind].tough || 1);
   }
   // Still standing where it was generated: not destroyed, and (while alive) its tile not
@@ -97,6 +99,8 @@
       if (cur.state[k] === CUT || cur.state[k] === SNAPPED) return W.stump[z >= 2 ? 1 : 0];
       if (kind === 'log') return W.log[z];
       if (kind === 'stump_cut' || kind === 'stump_broken') return W.stump[z];
+      const pd = G.TREES.props[kind];
+      if (pd) return pd.wood[z];   // landscaping
       return Math.round(W.tree[z] * (G.TREES.species[kind].wood || 1));
     },
     pos(k){ return ensure() ? { x: cur.tr.x[k], y: cur.tr.y[k] } : null; },
@@ -128,7 +132,7 @@
       let best = -1, bd = Infinity;
       this.within(x, y, 30, k => {
         const tr = cur.tr, kind = kindNow(k), p = this.nearestPoint(k, x, y), d = Math.hypot(p.x - x, p.y - y);
-        const r = kind === 'log' ? G.TREES.props.log.sizes[tr.size[k]].width + 6 : kind.startsWith('stump') ? 12 : Math.max(10, G.TREES.species[kind].crown[tr.size[k]] * 0.4);
+        const pd = G.TREES.props[kind], r = kind === 'log' ? pd.sizes[tr.size[k]].width + 6 : kind.startsWith('stump') ? 12 : pd ? pd.sizes[tr.size[k]].r + 4 : Math.max(10, G.TREES.species[kind].crown[tr.size[k]] * 0.4);
         if (d <= r && d < bd){ bd = d; best = k; }
       });
       return best;

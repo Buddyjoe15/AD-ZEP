@@ -133,6 +133,7 @@
   // small features stand on grass rather than a flat square of colour.
   const CONTOUR = new Set([K.WATER, K.DEEP, K.FALLS, K.CLIFF, K.CAVE, K.PATH, K.SLOPE, K.STAIRS, K.STONES]);
   const ON_GRASS = new Set([K.REEDS, K.ROCKS, K.MOSSROCK, K.MUSHROOM, K.FLOWERS, K.BURROW, K.SHRUB, K.STUMP, K.LOGS, K.MOUND, K.VENT, K.ORE, K.CRYSTAL]);
+  const PROPPED = new Set([K.SHRUB, K.FLOWERS, K.MUSHROOM, K.ROCKS, K.MOSSROCK, K.REEDS]);
   const genesis = () => !!(art && art.generator === 'genesis');
   function grassBase(ctx, gx, gy, px, py, S){
     if (pix) blit(ctx, variant(pix.grass, gx, gy, 11), px, py, S);
@@ -147,7 +148,7 @@
     const jit = Math.round((h[0] - .5) * 10), lw = Math.max(1, S * .08);
     if (t === K.CLIFF || t === K.CAVE){ cliffTile(ctx, i, px, py, S, h, t === K.CAVE); return; }
     const base = groundFor(t);
-    if (gen && ON_GRASS.has(t)) grassBase(ctx, gx, gy, px, py, S);
+    if (gen && ON_GRASS.has(t)){ grassBase(ctx, gx, gy, px, py, S); if (PROPPED.has(t)) return; }   // bushes, flowers and so on are drawn as props (G.TreeArt)
     else { ctx.fillStyle = rgb(base, jit); ctx.fillRect(px, py, S + .5, S + .5); }
     switch (t){
       case K.GRASS:
@@ -605,7 +606,8 @@
           const gx = x0 + lx, gy = y0 + ly;
           if (gx >= cols || gy >= rows) continue;
           const i = gy * cols + gx, d = art.detail[i];
-          if (d) drawDecal(ctx, d, gx, gy, lx * S, ly * S, S, art.angle[i] / 256 * TAU, seed);
+          // Shifted up to a third of a tile and turned a little, so marks don't line up on the grid.
+          if (d) drawDecal(ctx, d, gx, gy, lx * S + (hash(gx, gy, 931) - .5) * S * .66, ly * S + (hash(gx, gy, 933) - .5) * S * .66, S, art.angle[i] / 256 * TAU + (hash(gx, gy, 937) - .5) * .8, seed);
         }
       }
       for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){

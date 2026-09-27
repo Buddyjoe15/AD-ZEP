@@ -121,6 +121,7 @@
     // Sends every unit in `us` that can saw to tree k. Returns the units that took the order.
     chop(us, k){
       if (!G.Trees.present(k)) return [];
+      if (!isFinite(G.Trees.maxHp(k))){ G.notify('Rock can\'t be sawn'); return []; }
       const done = us.filter(u => u.hp > 0 && this.canChop(u));
       for (const u of done){
         G.Units.clearOrders(u);

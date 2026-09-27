@@ -21,11 +21,16 @@ const VARIANTS = 2, RUSTLES = 3, MARGIN = 3;   // world px around the crown for 
 // Dead wood: sizes as in GW.TREES.props (a test checks they match); shadows sit low.
 export const GENESIS_PROPS = {
   stump_cut: [{ r: 4 }, { r: 6 }], stump_broken: [{ r: 4 }, { r: 6 }],
-  log: [{ length: 72, width: 6 }, { length: 108, width: 9 }]
+  log: [{ length: 72, width: 6 }, { length: 108, width: 9 }],
+  // Landscaping: bushes, flower patches, boulders, reeds, mushrooms and ferns.
+  bush: [{ r: 7 }, { r: 10 }, { r: 13 }], flowers: [{ r: 8 }], boulder: [{ r: 7 }, { r: 11 }, { r: 15 }],
+  reeds: [{ r: 9 }], mushrooms: [{ r: 6 }], fern: [{ r: 9 }, { r: 13 }]
 };
 export const LOG_ANGLES = 16;
-export const PROP_SHADOW = { stump_cut: [3, 3], stump_broken: [3, 3], log: [4, 4] };
+export const PROP_SHADOW = { stump_cut: [3, 3], stump_broken: [3, 3], log: [4, 4], bush: [5, 5], flowers: [2, 2], boulder: [6, 6], reeds: [3, 3], mushrooms: [2, 2], fern: [3, 3] };
 const STUMP_VARIANTS = 3, LOG_VARIANTS = 2;
+// Variants per landscaping prop: flower patches come in six colours; boulders 2 and 3 are mossy.
+export const PROP_VARIANTS = { bush: 3, flowers: 6, boulder: 4, reeds: 3, mushrooms: 3, fern: 3 };
 
 // Run-length text: a palette character, then its repeat count when it repeats (the alphabet
 // has no digits, so the two never mix). src/render/trees.js expands it.
@@ -251,10 +256,75 @@ const PROP_DRAW = {
   }
 };
 // Half a frame, in world px: a fallen tree's branches reach up to 2.6 trunk widths past its tip.
+// Flowers: petal colour by variant (existing palette colours only).
+const PETALS = ['amber2', 'white', 'red1', 'cyan2', 'gold1', 'plate2'];
+Object.assign(PROP_DRAW, {
+  // A leafy bush: overlapping leaf clumps, lit on top, some with red berries.
+  bush(b, r, { r: R }, a, v){
+    const n = 5 + Math.floor(R / 3);
+    b.disc(0, 0, R * 0.7, 'leaf1');
+    for (let i = 0; i < n; i++){ const [x, y] = polar((i / n) * TAU + r() * 0.5, R * (0.45 + r() * 0.2)); b.disc(x, y, R * (0.3 + r() * 0.12), 'leaf1'); }
+    for (let i = 0; i < n + 3; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.6); b.disc(x - R * 0.1, y - R * 0.1, R * (0.14 + r() * 0.08), 'leaf2'); }
+    for (let i = 0; i < n; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.7); b.disc(x, y, 0.6, r() < 0.5 ? 'leaf0' : 'grass3'); }
+    if (v === 2) for (let i = 0; i < 6; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.7); b.disc(x, y, 0.8, 'red1'); }
+  },
+  // A patch of wildflowers: blossoms of four petals round a golden eye, among a few leaves.
+  flowers(b, r, { r: R }, a, v){
+    for (let i = 0; i < 8; i++){ const [x, y] = polar(r() * TAU, r() * R); b.line(x, y, x + (r() - 0.5) * 3, y + (r() - 0.5) * 3, 0.8, r() < 0.5 ? 'grass2' : 'grass3'); }
+    const c = PETALS[v % PETALS.length];
+    for (let i = 0, n = 5 + Math.floor(r() * 4); i < n; i++){
+      const [x, y] = polar(r() * TAU, r() * R * 0.85);
+      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) b.disc(x + dx * 0.9, y + dy * 0.9, 0.7, c);
+      b.disc(x, y, 0.5, c === 'amber2' || c === 'gold1' ? 'amber0' : 'amber2');
+    }
+  },
+  // A boulder: a lumpy stone, lit top left, with a crack; mossy ones carry moss on top.
+  boulder(b, r, { r: R }, a, v){
+    const lumps = 3 + Math.floor(r() * 2);
+    b.disc(0, 0, R * 0.8, 'plate0');
+    for (let i = 0; i < lumps; i++){ const [x, y] = polar(r() * TAU, R * 0.3); b.disc(x, y, R * (0.55 + r() * 0.15), 'plate0'); }
+    // The shaded side: a crescent to the lower right, beyond a circle nudged up and left.
+    b.paint(-R, -R, R, R, (x, y) => Math.hypot(x, y) < R * 0.95 && Math.hypot(x + R * 0.2, y + R * 0.2) > R * 0.85 && x + y > 0 ? 'steel2' : null);
+    for (let i = 0; i < 4; i++){ const [x, y] = polar(Math.PI * 1.25 + (r() - 0.5) * 1.2, R * (0.2 + r() * 0.3)); b.disc(x, y, R * (0.1 + r() * 0.08), 'plate1'); }
+    const [cx, cy] = polar(r() * TAU, R * 0.5); b.line(cx * 0.2, cy * 0.2, cx, cy, 0.5, 'steel1');
+    if (v >= 2) for (let i = 0; i < 5; i++){ const [x, y] = polar(Math.PI * 1.25 + (r() - 0.5) * 1.6, r() * R * 0.5); b.disc(x, y, R * (0.12 + r() * 0.1), r() < 0.6 ? 'leaf1' : 'grass1'); }
+  },
+  // Reeds: a dense clump of upright blades seen from above (short strokes, lighter tips),
+  // leaning out a little, with brown cattail heads among them.
+  reeds(b, r, { r: R }){
+    b.disc(0, 0, R * 0.55, 'grass1');
+    for (let i = 0, n = 26; i < n; i++){
+      const [x, y] = polar(r() * TAU, Math.sqrt(r()) * R * 0.8), [lx, ly] = polar(Math.atan2(y, x) + (r() - 0.5) * 0.6, 1.5 + r() * 2);
+      b.line(x, y, x + lx, y + ly, 0.6, r() < 0.4 ? 'grass3' : 'grass2');
+    }
+    for (let i = 0, n = 4 + Math.floor(r() * 3); i < n; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.7); b.disc(x, y, 1.1, 'rust1'); b.disc(x - 0.4, y - 0.4, 0.4, 'rust2'); }
+  },
+  // Mushrooms: a cluster of caps, some red with white spots.
+  mushrooms(b, r, { r: R }, a, v){
+    for (let i = 0, n = 3 + Math.floor(r() * 4); i < n; i++){
+      const [x, y] = polar(r() * TAU, r() * R * 0.7), cr = 1.2 + r() * 1.3, c = v === 0 ? 'red1' : v === 1 ? 'rust2' : 'plate2';
+      b.disc(x, y, cr, c);
+      if (v === 0) b.disc(x - 0.4, y - 0.4, 0.45, 'white');
+      else b.disc(x - cr * 0.3, y - cr * 0.3, 0.5, v === 1 ? 'amber1' : 'white');
+    }
+  },
+  // A fern: fronds radiating from the middle, leaflets along each.
+  fern(b, r, { r: R }){
+    const n = 5 + Math.floor(r() * 3);
+    for (let i = 0; i < n; i++){
+      const ang = (i / n) * TAU + r() * 0.4, len = R * (0.75 + r() * 0.25), [ex, ey] = polar(ang, len);
+      b.line(0, 0, ex, ey, 0.6, 'leaf1');
+      for (let s = 0.2; s < 1; s += 0.14) for (const sd of [-1, 1]){
+        const [bx, by] = polar(ang, len * s), [lx, ly] = polar(ang + sd * 1.1, 2.4 * (1.05 - s));
+        b.line(bx, by, bx + lx, by + ly, 0.6, s < 0.6 ? 'leaf2' : 'grass3');
+      }
+    }
+  }
+});
 const propSize = spec => spec.length ? 4 * Math.ceil(spec.length / 2 + spec.width * 2.2 + 3) : 4 * Math.ceil(spec.r * 1.6 + 3);
-function propFrame(kind, spec, seed, angle){
+function propFrame(kind, spec, seed, angle, v = 0){
   const N = propSize(spec), g = new Grid(N, N);
-  PROP_DRAW[kind](brush(g), rng(seed), spec, angle);
+  PROP_DRAW[kind](brush(g), rng(seed), spec, angle, v);
   const clear = f => { for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (x === 0 || y === 0 || x === N - 1 || y === N - 1) f.set(x, y, 0); return f; };
   return { n: N, g: clear(finish(clear(g))) };
 }
@@ -282,10 +352,10 @@ export function genesisTrees(){
   // Stumps: per kind and size, STUMP_VARIANTS frames. Fallen trees: per size, every angle
   // (angle × LOG_VARIANTS + variant), crown end pointing along the angle, clockwise from east.
   for (const [kind, specs] of Object.entries(GENESIS_PROPS)){
-    const log = kind === 'log', count = log ? LOG_ANGLES * LOG_VARIANTS : STUMP_VARIANTS;
+    const log = kind === 'log', count = log ? LOG_ANGLES * LOG_VARIANTS : PROP_VARIANTS[kind] || STUMP_VARIANTS;
     const sets = specs.map((spec, z) => Array.from({ length: count }, (_, k) => {
       const angle = log ? Math.floor(k / LOG_VARIANTS) / LOG_ANGLES * TAU : 0, v = log ? k % LOG_VARIANTS : k;
-      return propFrame(kind, spec, 1901 + Object.keys(GENESIS_PROPS).indexOf(kind) * 97 + z * 13 + v * 7 + (log ? Math.floor(k / LOG_VARIANTS) * 3 : 0), angle);
+      return propFrame(kind, spec, 1901 + Object.keys(GENESIS_PROPS).indexOf(kind) * 97 + z * 13 + v * 7 + (log ? Math.floor(k / LOG_VARIANTS) * 3 : 0), angle, v);
     }));
     art[kind] = sets.map(fs => fs.map(({ n, g }) => ({ n, frames: [rle(g.encode())] })));
     const cell = Math.max(...sets.flat().map(f => f.n));
@@ -294,7 +364,7 @@ export function genesisTrees(){
       meta: {
         name: 'genesis_' + kind, frameWidth: cell, frameHeight: cell, origin: [(cell - 1) / 2, (cell - 1) / 2], worldPxPerArtPx: 1 / K,
         rows: specs.map(sp => JSON.stringify(sp)), frameSizes: sets.map(fs => fs[0].n),
-        columns: log ? `${LOG_ANGLES} angles clockwise from east (crown end) × ${LOG_VARIANTS} variants, each frame centred in its cell` : `${STUMP_VARIANTS} variants`,
+        columns: log ? `${LOG_ANGLES} angles clockwise from east (crown end) × ${LOG_VARIANTS} variants, each frame centred in its cell` : `${count} variants`,
         shadow: { drawnBy: 'engine', offset: PROP_SHADOW[kind], elevation: 'ground prop' }
       },
       rows: sets.map(fs => fs.map(pad))

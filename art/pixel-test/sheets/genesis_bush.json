@@ -1,0 +1,32 @@
+{
+  "name": "genesis_bush",
+  "frameWidth": 96,
+  "frameHeight": 96,
+  "origin": [
+    47.5,
+    47.5
+  ],
+  "worldPxPerArtPx": 0.5,
+  "rows": [
+    "{\"r\":7}",
+    "{\"r\":10}",
+    "{\"r\":13}"
+  ],
+  "frameSizes": [
+    60,
+    76,
+    96
+  ],
+  "columns": "3 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      5,
+      5
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_bush.png",
+  "sheetWidth": 288,
+  "sheetHeight": 288
+}

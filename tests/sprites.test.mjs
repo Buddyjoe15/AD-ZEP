@@ -107,7 +107,7 @@ test('woodlands pilot: full terrain tiles, edge-matched variants, shoreline and 
 
 test('genesis trees: five species in three sizes drawn to the crowns the generator plants, outlined, with rustle frames', async () => {
   const { loadSim } = await import('./harness.mjs');
-  const { unrle, rle } = await import('../tools/genesis-trees.mjs');
+  const GTM = await import('../tools/genesis-trees.mjs'), { unrle, rle } = GTM;
   const G = loadSim(), GT = data.genesis.trees;
   assert.equal(GT.encoding, 'rle');
   assert.equal(unrle(rle('...AAAB.C')), '...AAAB.C');
@@ -141,8 +141,10 @@ test('genesis trees: five species in three sizes drawn to the crowns the generat
   assert.equal(GT.logAngles, G.TREES.LOG_ANGLES);
   for (const [kind, specs] of Object.entries(GT.props)){
     assert.equal(JSON.stringify(specs), JSON.stringify(G.TREES.props[kind].sizes), kind + ' sizes match the generator');
+    assert.ok(GT.propShadow[kind], kind + ' has a shadow');
     GT.art[kind].forEach((frames, z) => {
-      assert.equal(frames.length, kind === 'log' ? GT.logAngles * 2 : 3, kind + ' frames');
+      const { PROP_VARIANTS } = GTM;
+      assert.equal(frames.length, kind === 'log' ? GT.logAngles * 2 : PROP_VARIANTS[kind] || 3, kind + ' frames');
       for (const { n, frames: [str] } of frames){
         const g = decode(unrle(str), n);
         for (let i = 0; i < n; i++) for (const [x, y] of [[i, 0], [0, i], [i, n - 1], [n - 1, i]]) assert.equal(g.get(x, y), 0, `${kind} margin`);

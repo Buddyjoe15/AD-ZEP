@@ -45,7 +45,16 @@ GW.TREES.species.maple.tough = 1.2;
 GW.TREES.props = {
   stump_cut:    { name: 'Tree stump',    sizes: [{ r: 4 }, { r: 6 }] },
   stump_broken: { name: 'Snapped stump', sizes: [{ r: 4 }, { r: 6 }] },
-  log:          { name: 'Fallen tree',   sizes: [{ length: 72, width: 6 }, { length: 108, width: 9 }] }
+  log:          { name: 'Fallen tree',   sizes: [{ length: 72, width: 6 }, { length: 108, width: 9 }] },
+  // Landscaping on Genesis maps, where the terrain has brush, wildflowers, mushrooms, boulders,
+  // reeds or forest floor (the tile keeps its terrain; these are drawn on it at their own
+  // places). `hp` and `wood` by size, as for the dead wood; boulders can't be destroyed.
+  bush:      { name: 'Bush',           sizes: [{ r: 7 }, { r: 10 }, { r: 13 }], hp: [30, 50, 80], wood: [1, 2, 3] },
+  flowers:   { name: 'Wildflowers',    sizes: [{ r: 8 }], hp: [10], wood: [0] },
+  boulder:   { name: 'Boulder',        sizes: [{ r: 7 }, { r: 11 }, { r: 15 }], hp: [Infinity, Infinity, Infinity], wood: [0, 0, 0] },
+  reeds:     { name: 'Reeds',          sizes: [{ r: 9 }], hp: [15], wood: [0] },
+  mushrooms: { name: 'Mushrooms',      sizes: [{ r: 6 }], hp: [10], wood: [0] },
+  fern:      { name: 'Fern',           sizes: [{ r: 9 }, { r: 13 }], hp: [15, 20], wood: [0, 0] }
 };
 GW.TREES.LOG_ANGLES = 16;
 // Every kind a Genesis map plants, in the order `grid.art.trees.kind` indexes: species first.

@@ -215,7 +215,31 @@
     for (let q = 0; q < n; q++) if (K[q] < TR.KINDS.length && Z[q] >= TR.BLOCKS_FROM){ const i = tileOf(q); tiles[i] = TREE; art.detail[i] = 0; }
     grid.touch();
 
-    // 6. Drawing order: dead wood under every tree, small trees under big ones, then north to
+    // 6. Landscaping, at its own places on the tiles that call for it (the tiles keep their
+    // terrain): bushes on brush, flower patches on wildflowers (their colour changes from one
+    // meadow to the next), mushrooms, boulders on rock (often with a small one beside), reeds,
+    // and ferns on the forest floor.
+    {
+      const ids = k => G.Defs.terrain.get(k).id;
+      const SHRUB = ids('bush'), FLOWERS = ids('wildflowers'), MUSH = ids('mushrooms'), ROCK = ids('rock'), MOSS = ids('mossy_rock'), REEDS = ids('reeds');
+      const at = (x, y, j, spread) => [Math.floor(x * TILE + TILE / 2 + (hash(x, y, s + 901 + j) - 0.5) * spread), Math.floor(y * TILE + TILE / 2 + (hash(x, y, s + 903 + j) - 0.5) * spread)];
+      const v8 = (x, y, j) => Math.floor(hash(x, y, s + 907 + j) * 256);
+      for (let i = 0; i < N; i++){
+        const tl = tiles[i], x = i % W, y = (i / W) | 0, h1 = hash(x, y, s + 911);
+        if (tl === SHRUB){ for (let j = 0; j < (h1 < 0.4 ? 2 : 1); j++){ const z = hash(x, y, s + 913 + j), [px, py] = at(x, y, j, 34); add(px, py, 0, 'bush', z < 0.3 ? 0 : z < 0.75 ? 1 : 2, v8(x, y, j)); } }
+        else if (tl === FLOWERS){ const colour = Math.floor(vnoise(x / 6, y / 6, s + 917) * 6) % 6; for (let j = 0; j < 2; j++){ const [px, py] = at(x, y, j, 36); add(px, py, 0, 'flowers', 0, colour); } }
+        else if (tl === MUSH){ const [px, py] = at(x, y, 0, 30); add(px, py, 0, 'mushrooms', 0, v8(x, y, 0)); }
+        else if (tl === ROCK || tl === MOSS){
+          const mossy = tl === MOSS ? 2 : 0, [px, py] = at(x, y, 0, 12);
+          add(px, py, 0, 'boulder', h1 < 0.55 ? 1 : 2, mossy + (v8(x, y, 1) & 1));
+          if (hash(x, y, s + 919) < 0.35){ const [qx, qy] = at(x, y, 2, 30); add(qx, qy, 0, 'boulder', 0, mossy + (v8(x, y, 3) & 1)); }
+        }
+        else if (tl === REEDS){ for (let j = 0; j < 2; j++){ const [px, py] = at(x, y, j, 32); add(px, py, 0, 'reeds', 0, v8(x, y, j)); } }
+        else if (tl === FLOOR && h1 < 0.1){ const [px, py] = at(x, y, 0, 36); add(px, py, 0, 'fern', hash(x, y, s + 921) < 0.6 ? 0 : 1, v8(x, y, 0)); }
+      }
+    }
+
+    // 7. Drawing order: dead wood under every tree, small trees under big ones, then north to
     // south, then west to east.
     const layer = q => K[q] >= TR.KINDS.length ? 0 : 1;
     const order = Array.from({ length: n }, (_, q) => q).sort((a, b) => layer(a) - layer(b) || Z[a] - Z[b] || Y[a] - Y[b] || X[a] - X[b]);

@@ -745,7 +745,7 @@ test('genesis plants free-standing trees in thick and thin clusters, off the til
   // Pinned: saves of this map type rebuild their terrain and trees from the seed.
   assert.equal(art.generator, 'genesis');
   assert.equal(fnv(grid.tiles), 21958580, 'genesis terrain unchanged');
-  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 1354685051, 'genesis trees unchanged');
+  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 3799862884, 'genesis trees unchanged');
   const again = G.MapGen.genesis(72491);
   assert.equal(fnv(again.tiles), fnv(grid.tiles), 'same seed, same map');
   assert.equal(fnv(G.MapGen.woodlands(72491).tiles), 1031677493, 'woodlands itself is untouched');
@@ -782,7 +782,7 @@ test('genesis plants free-standing trees in thick and thin clusters, off the til
   for (let k = 0; k < tr.count; k++){
     const i = Math.floor(tr.y[k] / T) * cols + Math.floor(tr.x[k] / T);
     assert.equal(tr.tile[k], i);
-    assert.ok(SOIL.has(grid.tiles[i]), `${ALL[tr.kind[k]]} ${k} on soil`);
+    if (!G.TREES.props[ALL[tr.kind[k]]]?.hp) assert.ok(SOIL.has(grid.tiles[i]), `${ALL[tr.kind[k]]} ${k} on soil`);   // landscaping stands on its own tiles
     if (is(k, 'log')) G.TREES.logTiles(tr.x[k], tr.y[k], tr.size[k], tr.variant[k] >> 1, T, (x, y) => { logged[y * cols + x] = 1; assert.ok([id('fallen_tree'), id('tree')].includes(grid.tiles[y * cols + x]), 'fallen tree blocks its tiles'); });
     else if (layer(k) && tr.size[k] >= G.TREES.BLOCKS_FROM){ assert.equal(grid.tiles[i], id('tree')); blocking[i] = 1; }
   }
