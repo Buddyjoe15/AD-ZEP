@@ -109,6 +109,14 @@ const scene = (() => {
     taken.push([x, y]); n++;
     units.push({ sprite: 'drone', team: 'red', x, y, facing: facingTo(vance.x - x + (r() - 0.5) * 300, vance.y - y), anim: 'fly', phase: r(), air: true });
   }
+  // Salvage Crawlers with their hoppers at each fill level (their own seed, so nothing above moves).
+  const rc = mulberry(4321);
+  for (let n = 0; n < 4;){
+    const x = (11.5 + rc() * 8) * TILE, y = (19.4 + rc() * 0.9) * TILE;
+    if (!free(x, y, 46)) continue;
+    taken.push([x, y]);
+    units.push({ sprite: 'salvage_crawler', team: 'blue', x, y, facing: Math.floor(rc() * 8), anim: n % 2 ? 'walk' : 'work', variant: n, phase: rc() }); n++;
+  }
   units.push(vance);
   return { stations, units, cx: 15 * TILE, cy: 26 * TILE };
 })();
@@ -137,8 +145,8 @@ function drawScene(time){
     return [c, x, y, Math.round(w * a), Math.round(h * a)];
   };
   const unitFrame = u => {
-    const sp = D.sprites[u.sprite], a = sp.animations[u.anim], t = time + u.phase * 3;
-    return spriteFrame(u.sprite, u.facing, a.start + Math.floor(t * a.fps) % a.frames);
+    const sp = D.sprites[u.sprite], a = sp.animations[u.anim], t = time + u.phase * 3, block = sp.variants ? (u.variant || 0) * sp.variants.framesEach : 0;
+    return spriteFrame(u.sprite, u.facing, block + a.start + Math.floor(t * a.fps) % a.frames);
   };
   const stationFrame = s => {
     const st = D.sprites.repair_station, col = s.state === 'working' ? st.states.working.start + Math.floor(time * st.states.working.fps) % st.states.working.frames : s.col;
@@ -187,9 +195,10 @@ function section(title, note){ const d = document.createElement('section'); d.in
 function buildSheets(){
   const root = document.getElementById('sheets'); root.innerHTML = '';
   const want = n => !S.only || S.only === n;
-  for (const name of ['spider', 'drone', 'vance']) if (want(name)){
+  for (const name of ['spider', 'salvage_crawler', 'drone', 'vance']) if (want(name)){
     const sp = D.sprites[name], anims = Object.entries(sp.animations).map(([a, v]) => `${a} ${v.frames}f @ ${v.fps} fps`).join(' · ');
-    const [d, row] = section(`${name} — ${sp.frameWidth}×${sp.frameHeight}`, `Rows: ${sp.facings.join(', ')} (only up and up-right authored). Columns: ${anims}. Shadow: engine, offset ${sp.shadow.offset.join(',')} art px.`);
+    const how = sp.authoredFacings ? 'only up and up-right authored' : 'each rendered from the model', blocks = sp.variants ? `, repeated for ${sp.variants.by}: ${sp.variants.values.join(', ')}` : '';
+    const [d, row] = section(`${name} — ${sp.frameWidth}×${sp.frameHeight}`, `Rows: ${sp.facings.join(', ')} (${how}). Columns: ${anims}${blocks}. Shadow: engine, offset ${sp.shadow.offset.join(',')} art px.`);
     const k = name === 'drone' ? 2 : 1;   // frames are 2 art px per world px
     row.append(fig(sheetCanvas(sp.frames, sp.frameWidth, sp.frameHeight, null, k, '#3a3129'), 'raw sheet (magenta team ramp)'));
     row.append(fig(sheetCanvas(sp.frames, sp.frameWidth, sp.frameHeight, 'blue', k, '#3a3129'), 'blue team'));

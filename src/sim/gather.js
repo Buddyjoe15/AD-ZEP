@@ -58,6 +58,8 @@
     command(u, target){
       if (!G.Units.can(u, 'gather')){ G.notify('Select a Utility Spider'); return false; }
       if (!target) return false;
+      const ud = G.Defs.units.get(u.type), kind = this.isMine(target) ? 'deposit' : this.def(target)?.kind;
+      if (ud.gathers && !ud.gathers.includes(kind)){ G.notify(`${ud.name} can't work ${this.isMine(target) ? G.Defs.buildables.get(target.type).name : target.name}`); return false; }
       let mine = null;
       if (this.isMine(target)) mine = target;
       else if (this.isDeposit(target)){
@@ -137,7 +139,7 @@
       u.path = []; u.pathIndex = 0; u.haulState = 'collecting';
       const room = Math.max(0, cap - G.Units.cargoTotal(u));
       if (room <= 0){ u.haulState = 'return'; u.commandNextPath = 0; return; }
-      const amount = Math.min(node.remaining, def.rate * dt, room);
+      const amount = Math.min(node.remaining, def.rate * (G.Defs.units.get(u.type).gatherRate || 1) * dt, room);
       node.remaining = G.round6(node.remaining - amount);
       u.cargo[def.resource] = G.round6((u.cargo[def.resource] || 0) + amount);
       if (node.remaining <= 0){ node.remaining = 0; u.haulState = 'return'; u.commandNextPath = 0; }

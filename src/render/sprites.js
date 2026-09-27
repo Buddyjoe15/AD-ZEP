@@ -101,7 +101,8 @@
     frame(e, u, t){
       if (e.pixel){
         const a = G.PixelArt.anim(e.anims, u), step = a.frames > 1 ? Math.floor((t + u.id * 0.37) * a.fps) % a.frames : 0;
-        return e.facings[G.PixelArt.facing(u.heading)][a.start + step];
+        const block = e.variants ? G.PixelArt.variant(e.variants, u) * e.variants.framesEach : 0;
+        return e.facings[G.PixelArt.facing(u.heading)][block + a.start + step];
       }
       const frames = u.path.length && e.move.length ? e.move : e.idle;
       return frames.length > 1 ? frames[Math.floor(((t + u.id * 0.37) / e.period) * frames.length) % frames.length] : frames[0];
@@ -158,7 +159,7 @@
       const P = G.PixelArt, sp = P.sprite(sprite), k = P.worldPerArt(sp), w = sp.frameWidth, h = sp.frameHeight;
       const res = PIXEL_DENSITY * k;   // atlas px per art px
       const pad = [Math.floor((SLOT - w * res) / 2), Math.floor((SLOT - h * res) / 2)];
-      e = { pixel: true, upright: true, anims: sp.animations, facings: [], at: [], scale: PIXEL_DENSITY,
+      e = { pixel: true, upright: true, anims: sp.animations, variants: sp.variants || null, facings: [], at: [], scale: PIXEL_DENSITY,
         shadow: sp.shadow.offset.map(v => v * k),
         rect: { x: -(sp.origin[0] + 0.5) * k, y: -(sp.origin[1] + 0.5) * k, w: w * k, h: h * k } };
       for (const row of sp.frames){

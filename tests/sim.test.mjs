@@ -170,6 +170,25 @@ test('utility spider mines a node and delivers to the ship', () => {
   assert.equal(spider.command, 'gather');
 });
 
+test('salvage crawler: fabricated, cuts salvage 1.5× faster than a Spider into a bigger hopper, never works mines', () => {
+  const G = newGame(), S = G.State;
+  assert.ok(G.Defs.recipes.get('salvage_crawler').unit === 'salvage_crawler');
+  assert.ok(G.Defs.buildables.get('fabricator').fabricator.recipes.includes('salvage_crawler'));
+  const scrap = S.resourceNodes.find(n => n.type === 'scrap_mine');
+  const crawler = G.Units.spawn('salvage_crawler', scrap.x - 20, scrap.y), spider = G.Units.spawn('utility_spider', scrap.x + 20, scrap.y);
+  assert.equal(crawler.cargoCapacity, 400);
+  assert.ok(G.Gather.command(crawler, scrap) && G.Gather.command(spider, scrap));
+  G.Sim.run(4);
+  const c = G.Units.cargoTotal(crawler), s = G.Units.cargoTotal(spider);
+  assert.ok(s > 40 && Math.abs(c / s - 1.5) < 0.05, `crawler ${c}, spider ${s}`);
+  // Saws cut wrecks: no hauling from a Mine Building or a bare deposit.
+  const mine = S.buildings.find(b => G.Gather.isMine(b)), deposit = S.resourceNodes.find(n => G.Gather.isDeposit(n));
+  assert.ok(mine && deposit);
+  assert.equal(G.Gather.command(crawler, mine), false);
+  assert.equal(G.Gather.command(crawler, deposit), false);
+  assert.equal(crawler.nodeId, scrap.id, 'a refused order keeps the current one');
+});
+
 test('construction completes, blocks the tile and refunds when cancelled', () => {
   const G = newGame();
   const S = G.State, spider = find(G, 'utility_spider'), p = openTileNear(G, 5, 4);

@@ -91,7 +91,7 @@ GW.Defs.buildables.defineAll({
   },
   fabricator: {
     name: 'Fabricator', w: 2, h: 2, hp: 800, buildTime: 10, cost: { metal: 200 }, symbol: 'FAB', color: '#c9a0e8',
-    fabricator: { queueMax: 5, recipes: ['survey_drone', 'security_drone', 'utility_spider', 'missiles'] }, level: 1, power: { demand: 10, when: 'producing' },
+    fabricator: { queueMax: 5, recipes: ['survey_drone', 'security_drone', 'utility_spider', 'salvage_crawler', 'missiles'] }, level: 1, power: { demand: 10, when: 'producing' },
     description: 'Level 1 fabricator. Builds everything the ship can fabricate, plus Missiles for Missile Batteries. Draws 10 power only while producing.'
   },
   solar_array: {

@@ -1,0 +1,69 @@
+{
+  "name": "salvage_crawler",
+  "frameWidth": 98,
+  "frameHeight": 98,
+  "origin": [
+    48.5,
+    48.5
+  ],
+  "worldPxPerArtPx": 0.5,
+  "rows": "facing",
+  "facings": [
+    "up",
+    "up-right",
+    "right",
+    "down-right",
+    "down",
+    "down-left",
+    "left",
+    "up-left"
+  ],
+  "renderedFacings": "all 8, each from the model",
+  "model": "art/sprite-lab/specs/salvage_crawler.mjs",
+  "animations": {
+    "idle": {
+      "start": 0,
+      "frames": 2,
+      "fps": 2
+    },
+    "walk": {
+      "start": 2,
+      "frames": 4,
+      "fps": 8
+    },
+    "work": {
+      "start": 6,
+      "frames": 6,
+      "fps": 8
+    }
+  },
+  "variants": {
+    "by": "cargo",
+    "values": [
+      "empty",
+      "quarter",
+      "half",
+      "full"
+    ],
+    "at": [
+      0,
+      0.25,
+      0.5,
+      1
+    ],
+    "framesEach": 12,
+    "column": "variant index × framesEach + start + frame"
+  },
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      4,
+      8
+    ],
+    "elevation": "ground"
+  },
+  "team": "team0..team2 (magenta ramp)",
+  "image": "salvage_crawler.png",
+  "sheetWidth": 4704,
+  "sheetHeight": 784
+}

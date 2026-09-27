@@ -27,7 +27,7 @@
     data: D,
     enabled: !!D && param !== 'classic',
     // Unit `visual` → sprite; buildable key → structure sprite.
-    UNITS: { utility: 'spider', rifle: 'drone', scout: 'drone', hero: 'vance' },
+    UNITS: { utility: 'spider', salvage: 'salvage_crawler', rifle: 'drone', scout: 'drone', hero: 'vance' },
     BUILDINGS: { repair: 'repair_station' },
     // Terrain drawn with the dust plain tiles (the test map is all grass).
     DUST: new Set(['grass', 'clearing']),
@@ -75,6 +75,17 @@
       if (anims.work && G.Visuals.laserTarget(u)) return anims.work;
       if (anims.walk && u.path.length) return anims.walk;
       return anims.idle || anims.fly || anims[Object.keys(anims)[0]];
+    },
+
+    // Variant block for unit `u` in a sprite with variants (0 without). By cargo: empty only
+    // when nothing is aboard, otherwise the nearest of the other levels.
+    variant(V, u){
+      if (!V || V.by !== 'cargo') return 0;
+      const fill = u.cargoCapacity > 0 ? G.Units.cargoTotal(u) / u.cargoCapacity : 0;
+      if (!(fill > 0)) return 0;
+      let best = 1;
+      for (let i = 2; i < V.at.length; i++) if (Math.abs(V.at[i] - fill) < Math.abs(V.at[best] - fill)) best = i;
+      return best;
     },
 
     // ---- Structures (main canvas, world space) ----
