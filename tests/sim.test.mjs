@@ -1174,6 +1174,17 @@ test('Laser Turret: charges 2.5 s with a target in range before each shot, and l
   G.Sim.run(1.5);
   foe.hp = 0; G.Sim.run(0.5);
   assert.equal(s.charged, 0, 'charge lost with no target');
+  // It traverses at half a turn a second and holds a charged shot until the rifle is on
+  // target: charged and facing east, a target appears due west.
+  const west = G.Units.spawn('hostile_machine', b.x - 5 * T, b.y);
+  west.speed = 0; west.damage = 0; west.maxHp = west.hp = 1000;
+  s.aim = 0; s.charged = cfg.charge; s.cool = 0; G.rebuildSpatial();
+  G.Sim.run(0.5);
+  assert.equal(west.hp, 1000, 'no shot while turning round');
+  assert.ok(Math.abs(Math.abs(s.aim) - Math.PI / 2) < 0.1, 'a quarter turn in half a second: ' + s.aim);
+  G.Sim.run(0.7);
+  assert.ok(west.hp < 1000, 'fires once on target');
+  assert.ok(Math.abs(Math.abs(s.aim) - Math.PI) < 0.01, 'facing west when it fired');
 });
 
 test('gates: 1×3 and 1×4, horizontal and vertical twins; a vertical gate lets friendly units through a north-south wall', () => {

@@ -199,7 +199,7 @@ function meta(spec, R, img){
 export function headMeta(spec, R){
   const H = spec.head, states = {};
   R.head.seq.forEach((s, i) => { (states[s.anim] ||= { start: i, frames: 0, fps: H.states[s.anim].fps || 0 }).frames++; });
-  return { facings: H.facings, rows: `sheet rows ${R.rows.length} to ${R.rows.length + H.facings - 1}, clockwise from up`, pivot: 'footprint centre', states, on: H.on, turnRate: H.turnRate || null, firing: H.firing || null, chargeTime: H.chargeTime || null, flashTime: H.flashTime || null };
+  return { facings: H.facings, rows: `sheet rows ${R.rows.length} to ${R.rows.length + H.facings - 1}, clockwise from up`, pivot: 'footprint centre', states, on: H.on, turnRate: H.turnRate || null, firing: H.firing || null, chargeTime: H.chargeTime || null, flashTime: H.flashTime || null, muzzle: H.muzzle || null };
 }
 const dataURI = buf => 'data:image/png;base64,' + Buffer.from(buf).toString('base64');
 // Grass and dust plain tiles from the game's art, as PNG data URIs.

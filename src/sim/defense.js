@@ -10,7 +10,9 @@
    Turrets (`turret` behaviour) pick the nearest enemy unit they can hit (ground, air or
    any) between `minRange` and `range`, and fire every `reload` seconds. A turret with
    `charge` (the Laser Turret) first charges that many seconds with a target in range, and
-   loses the charge when no target is left. `splash` also
+   loses the charge when no target is left. A turret with `turn` (radians per second)
+   traverses toward its target at that rate and fires only once it is on target, so a
+   heavy gun can't snap round and fire at a new target. `splash` also
    hits other enemies that close to the target; `ammo` spends one of that resource per shot
    from the stockpile and holds fire without it. Testing-zone copies never fire. Each shot
    hits with the turret's `accuracy`, raised by a Defensive Sensor within its boostTiles;
@@ -105,7 +107,7 @@
       if (G.hashRandom(Math.round(S.time * 60), s.seed ?? (s.seed = G.hashString(b.id)), t.id, s.shots) >= this.accuracy(b, cfg)){
         // A miss: the round lands beside the target.
         const a = s.shots * 2.39996, off = 18 + (t.radius || 10);
-        S.shots.push({ x1: b.x, y1: b.y, x2: t.x + Math.cos(a) * off, y2: t.y + Math.sin(a) * off, life: cfg.shot ? 0.18 : 0.09, team: b.team, kind: cfg.shot || null, miss: true });
+        S.shots.push({ x1: b.x, y1: b.y, x2: t.x + Math.cos(a) * off, y2: t.y + Math.sin(a) * off, life: cfg.shot ? 0.18 : 0.09, team: b.team, kind: cfg.shot || null, from: b.id, miss: true });
         return false;
       }
       const hit = u => { u.hp -= cfg.damage; G.Events.emit('combat:hit', { attacker: b, target: u, damage: cfg.damage }); };
@@ -114,7 +116,7 @@
         const hash = S.teamSpatial[t.team];
         for (const u of hash ? hash.query(t.x, t.y, cfg.splash) : []) if (u !== t && u.hp > 0 && this.canHit(cfg, u) && G.dist2(u, t) <= cfg.splash * cfg.splash) hit(u);
       }
-      S.shots.push({ x1: b.x, y1: b.y, x2: t.x, y2: t.y, life: cfg.shot ? 0.18 : 0.09, team: b.team, kind: cfg.shot || null });
+      S.shots.push({ x1: b.x, y1: b.y, x2: t.x, y2: t.y, life: cfg.shot ? 0.18 : 0.09, team: b.team, kind: cfg.shot || null, from: b.id });
       return true;
     },
     update(b, cfg, dt){
@@ -124,13 +126,20 @@
       if (s.cool > 0) return;
       const t = this.target(b, cfg);
       if (!t){ s.cool = 0.2; s.targetId = null; s.charged = 0; return; }   // rescan a few times a second
-      s.aim = Math.atan2(t.y - b.y, t.x - b.x); s.targetId = t.id;
+      const want = Math.atan2(t.y - b.y, t.x - b.x);
+      s.targetId = t.id;
+      let onTarget = true;
+      if (cfg.turn){
+        const diff = ((want - s.aim + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI, step = cfg.turn * dt;
+        s.aim = Math.abs(diff) <= step ? want : s.aim + Math.sign(diff) * step;
+        onTarget = Math.abs(diff) <= step;
+      } else s.aim = want;
       if (cfg.charge){
         // Charging: rescans every tick, so the aim follows the target while it builds up.
         s.charged = Math.min(cfg.charge, s.charged + dt);
-        if (s.charged < cfg.charge) return;
+        if (s.charged < cfg.charge || !onTarget) return;   // charged, but still traversing: hold the shot
         s.charged = 0;
-      }
+      } else if (!onTarget) return;
       if (cfg.ammo){
         s.noAmmo = !G.Economy.spend({ [cfg.ammo]: 1 }, 'ammunition');
         if (s.noAmmo){ s.cool = 0.5; return; }

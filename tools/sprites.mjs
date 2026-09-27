@@ -221,7 +221,7 @@ function structureFrames(spec){
       for (let frame = 0; frame < a.frames; frame++) seq.push({ state, anim: state, frame, frames: a.frames });
     }
     const rows = Array.from({ length: H.facings }, (_, i) => seq.map(s => render(H.build(s), i * 2 * Math.PI / H.facings)));
-    head = { facings: H.facings, states: hs, on: H.on, turnRate: H.turnRate, firing: H.firing, chargeTime: H.chargeTime, flashTime: H.flashTime, rows };
+    head = { facings: H.facings, states: hs, on: H.on, turnRate: H.turnRate, firing: H.firing, chargeTime: H.chargeTime, flashTime: H.flashTime, muzzle: H.muzzle, rows };
   }
   return { cols, states, head };
 }
@@ -774,7 +774,7 @@ export function build(){
       worldPxPerArtPx: 1 / SPRITE_RES, rows: head ? 'row 0 states; the head sheet has one row per facing' : 'single row', model: 'art/sprite-lab/specs/' + spec.key + '.mjs',
       states, shadow, team: 'team0..team2 (magenta ramp)'
     };
-    const headMeta = head && { facings: head.facings, rows: 'facing, clockwise from up', pivot: 'footprint centre', states: head.states, on: head.on, turnRate: head.turnRate, firing: head.firing, chargeTime: head.chargeTime, flashTime: head.flashTime };
+    const headMeta = head && { facings: head.facings, rows: 'facing, clockwise from up', pivot: 'footprint centre', states: head.states, on: head.on, turnRate: head.turnRate, firing: head.firing, chargeTime: head.chargeTime, flashTime: head.flashTime, muzzle: head.muzzle };
     sprites[name] = { ...meta, frames: [cols.map(g => g.encode())], ...(head ? { head: { ...headMeta, frames: head.rows.map(r => r.map(g => g.encode())) } } : {}) };
     sheets[name] = { meta: { ...meta, ...(head ? { head: { ...headMeta, image: name + '_head.png' } } : {}) }, rows: [cols] };
     if (head) sheets[name + '_head'] = { meta: { name: name + '_head', frameWidth: spec.frame.w, frameHeight: spec.frame.h, origin: [spec.frame.ox, spec.frame.oy], worldPxPerArtPx: 1 / SPRITE_RES, ...headMeta, shadow }, rows: head.rows };

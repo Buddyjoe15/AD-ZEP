@@ -100,6 +100,7 @@
     },
     "chargeTime": 2.5,
     "flashTime": 0.25,
+    "muzzle": 21,
     "image": "laser_turret_head.png"
   },
   "image": "laser_turret.png",

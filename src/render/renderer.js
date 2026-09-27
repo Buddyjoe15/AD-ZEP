@@ -316,8 +316,14 @@
         for (const s of S.shots){
           if (!s.kind || !inView(s.x2, s.y2, 700)) continue;
           if (s.kind === 'laser'){
-            // Laser: a cyan beam with a white core, fading with its life, and a spark at the target.
-            const a = G.clamp(s.life / 0.18, 0, 1);
+            // Laser: a cyan beam with a white core from the rifle's emitter, fading with its
+            // life, and a spark at the target.
+            const a = G.clamp(s.life / 0.18, 0, 1), from = s.from && G.Buildings.get(s.from);
+            if (from){
+              const m = G.PixelArt.muzzle(from), aim = G.Turrets.get(from).aim;
+              const o = m || { x: from.x + Math.cos(aim) * 22, y: from.y + Math.sin(aim) * 22 };   // classic art: the barrel's end
+              s.x1 = o.x; s.y1 = o.y;
+            }
             g.strokeStyle = `rgba(54,184,239,${0.55 * a})`; g.lineWidth = 7 / z; g.beginPath(); g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); g.stroke();
             g.strokeStyle = `rgba(230,252,255,${a})`; g.lineWidth = 2.5 / z; g.beginPath(); g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); g.stroke();
             g.fillStyle = `rgba(174,244,255,${0.5 * a})`; g.beginPath(); g.arc(s.x2, s.y2, 14, 0, TAU); g.fill();

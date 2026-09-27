@@ -58,6 +58,7 @@
   },
   "chargeTime": 2.5,
   "flashTime": 0.25,
+  "muzzle": 21,
   "shadow": {
     "drawnBy": "engine",
     "offset": [

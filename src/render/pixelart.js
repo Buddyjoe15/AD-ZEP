@@ -196,6 +196,15 @@
       d.a = Math.abs(diff) <= step ? want : d.a + Math.sign(diff) * step; d.t = t;
       return d.a;
     },
+    // Where a turret's shot leaves its barrel: the muzzle of the head as it is drawn (the
+    // facing nearest its drawn aim), so a beam comes straight out of the rifle. Null for
+    // turrets without pixel art or a muzzle.
+    muzzle(b){
+      const name = this.enabled && this.BUILDINGS[b.type], H = name && D.sprites[name].head, d = H && H.muzzle && this.aims.get(b.id);
+      if (!d) return null;
+      const step = Math.PI * 2 / H.facings, a = Math.round((d.a + Math.PI / 2) / step) * step - Math.PI / 2;
+      return { x: b.x + Math.cos(a) * H.muzzle, y: b.y + Math.sin(a) * H.muzzle };
+    },
     drawHead(g, b, sp, hs, t){
       const H = sp.head, s = G.Turrets.get(b), [fireName, flashName] = (H.firing && H.firing[hs]) || [], fire = H.states[fireName], flash = H.states[flashName];
       let f = this.frameOf(H.states[hs], t);

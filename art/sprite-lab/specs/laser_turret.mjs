@@ -144,6 +144,7 @@ export default {
     flashTime: 0.25,             // seconds the flash frames show after each shot
     on: { finished: 'idle', damaged: 'damaged' },
     turnRate: Math.PI,           // radians per second: a heavy rifle turns at half a turn a second
+    muzzle: 21,                  // world px from the pivot to the emitter: where the game starts the beam
     build({ state, frame }){
       const m = new Model(), damaged = state.startsWith('damaged');
       if (state.endsWith('charging')) head(m, { lit: frame + 1, damaged, lampOn: frame % 2 === 0 });

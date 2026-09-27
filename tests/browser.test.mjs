@@ -739,12 +739,17 @@ test('pixel-art Laser Turret: its coils show the real charge, then the shot', { 
       s.charged = 0; s.cool = cfg.reload - 0.01;
       const shot = col();
       P.stampFrame = orig;
-      return { idle, charging, full, shot, H: { idle: H.states.idle.start, ch: H.states.charging.start, n: H.states.charging.frames, flash: H.states.flash.start } };
+      // The beam starts at the emitter of the rifle as drawn: aim 10° is drawn in the east
+      // facing, so the muzzle is due east of the pivot.
+      P.aims.set(b.id, { a: 10 * Math.PI / 180, t: S.time });
+      const m = P.muzzle(b), muzzle = [Math.round(m.x - b.x), Math.round(m.y - b.y)];
+      return { idle, charging, full, shot, muzzle, H: { idle: H.states.idle.start, ch: H.states.charging.start, n: H.states.charging.frames, flash: H.states.flash.start } };
     });
     assert.equal(r.idle, r.H.idle, 'no target: idle, coils dark');
     assert.equal(r.charging, r.H.ch + Math.floor(1.3 / 2.5 * r.H.n), 'half charged: half the coils');
     assert.equal(r.full, r.H.ch + r.H.n - 1, 'nearly charged: every coil');
     assert.equal(r.shot, r.H.flash, 'just fired: the shot frame');
+    assert.deepEqual(r.muzzle, [21, 0], 'the beam leaves the emitter of the rifle as drawn');
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });
