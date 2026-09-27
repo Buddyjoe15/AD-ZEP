@@ -129,14 +129,26 @@
     ctx.imageSmoothingEnabled = smooth;
   }
 
+  // Genesis: water and cliffs are drawn along contours over plain ground (G.Landscape), and
+  // small features stand on grass rather than a flat square of colour.
+  const CONTOUR = new Set([K.WATER, K.DEEP, K.FALLS, K.CLIFF, K.CAVE]);
+  const ON_GRASS = new Set([K.REEDS, K.ROCKS, K.MOSSROCK, K.MUSHROOM, K.FLOWERS, K.BURROW, K.SHRUB, K.STUMP, K.LOGS, K.MOUND, K.VENT, K.ORE, K.CRYSTAL]);
+  const genesis = () => !!(art && art.generator === 'genesis');
+  function grassBase(ctx, gx, gy, px, py, S){
+    if (pix) blit(ctx, variant(pix.grass, gx, gy, 11), px, py, S);
+    else { ctx.fillStyle = rgb(RGB[K.GRASS]); ctx.fillRect(px, py, S + .5, S + .5); }
+  }
   function drawTile(ctx, i, t, gx, gy, px, py, S){
     if (t === K.LOG && art && art.trees && G.TreeArt.logOn(grid, i)) t = K.FOREST;   // a Genesis fallen tree lies here (G.TreeArt)
+    const gen = genesis();
+    if (gen && CONTOUR.has(t)){ grassBase(ctx, gx, gy, px, py, S); return; }
     if (pix){ const str = pixelTile(i, t, gx, gy); if (str){ blit(ctx, str, px, py, S); return; } }
     const s = seed, h = [hash(gx, gy, s + 7), hash(gx, gy, s + 9), hash(gx, gy, s + 13)];
     const jit = Math.round((h[0] - .5) * 10), lw = Math.max(1, S * .08);
     if (t === K.CLIFF || t === K.CAVE){ cliffTile(ctx, i, px, py, S, h, t === K.CAVE); return; }
     const base = groundFor(t);
-    ctx.fillStyle = rgb(base, jit); ctx.fillRect(px, py, S + .5, S + .5);
+    if (gen && ON_GRASS.has(t)) grassBase(ctx, gx, gy, px, py, S);
+    else { ctx.fillStyle = rgb(base, jit); ctx.fillRect(px, py, S + .5, S + .5); }
     switch (t){
       case K.GRASS:
         ctx.fillStyle = rgb(base, -14); ctx.fillRect(px + h[1] * S * .8, py + h[2] * S * .8, S * .14, S * .14);
@@ -541,6 +553,12 @@
   function heightShade(ctx, gx, gy, px, py, S){
     const l = lvlAt(gx, gy);
     if (l < 0) return;
+    // Genesis shades rims per pixel (G.Landscape); elsewhere only the level's tint.
+    if (genesis()){
+      const tint = [-.18, -.09, 0, .06, .12][l];
+      if (tint && !G.Landscape.shaded(grid, gy * grid.cols + gx)){ ctx.fillStyle = tint < 0 ? `rgba(0,0,0,${-tint})` : `rgba(255,255,240,${tint})`; ctx.fillRect(px, py, S, S); }   // exact: overlapping tints would seam
+      return;
+    }
     const tint = [-.18, -.09, 0, .06, .12][l];
     if (tint){ ctx.fillStyle = tint < 0 ? `rgba(0,0,0,${-tint})` : `rgba(255,255,240,${tint})`; ctx.fillRect(px, py, S + .5, S + .5); }
     const nl = lvlAt(gx, gy - 1), wl = lvlAt(gx - 1, gy), here = tileAt(gx, gy);
@@ -583,6 +601,7 @@
         const gx = x0 + lx, gy = y0 + ly;
         if (gx < cols && gy < rows) heightShade(ctx, gx, gy, lx * S, ly * S, S);
       }
+      if (genesis()) G.Landscape.paintChunk(ctx, grd, x0, y0, ct);   // water, shores, cliffs and waterfalls along contours
       if (G.TreeFX) G.TreeFX.paintScorch(ctx, x0 * S, y0 * S, ct * S);   // blast marks, under everything tall
       bakeTrees = !!(opts && opts.trees);
       this.paintTops(ctx, grd, x0, y0, ct, S, true);

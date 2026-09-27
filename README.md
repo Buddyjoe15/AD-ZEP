@@ -54,6 +54,12 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
 
 ## What changed in v0.7
 
+- **Water, shores, cliffs and waterfalls along contours (Genesis maps).** Water and ground height are now drawn along smooth lines between tile centres instead of tile by tile, so an edge that steps one tile becomes a 45° diagonal, corners are cut at an angle, and shorelines and cliff rims wobble a little like real ones.
+  - **Water** shades by depth: pale shallows along the edge, open water, and dark where a channel runs deep (no more deep-water squares), with drifting ripples, a broken foam line at the edge and a wet mud bank and damp grass on the shore. Glints of sunlight wink on open water up close.
+  - **Cliffs** hang their rock face one tile down from the rim, over the cliff tiles that block, and diagonal rims give slanted faces. Faces toward the viewer (south) show stone courses, cracks, moss and a dark foot with a shadow on the ground; north, east and west drops show a lit lip and a shadow line. Caves open in the face, and grassy slopes and carved steps stay faceless.
+  - **Waterfalls** are a curtain of falling water where a river crosses a rim, animated up close: streaks sliding down, foam boiling at the foot and rings of foam spreading across the plunge pool; falls running sideways stream along the flow.
+  - Reeds, boulders, mushrooms and the other small features stand on grass art instead of a flat square of colour.
+  - Presentation only: movement still follows the tiles, and saves are unchanged. Woodlands maps look as before.
 - **Wood, falling trees, dust and scorch marks (Genesis maps).**
   - **Wood (new resource):** whatever a Salvage Crawler saws down goes into its hold as wood: 8, 20 or 40 from a small, medium or large tree (maples 20% more, dead snags half), 4–8 from a stump and 25–40 from a fallen tree. It then hauls the wood to the nearest drop-off (the ship, unless another is closer) and stops. With a full hold it unloads first, then comes back to saw. Blasts give no wood. Wood shows in the top bar once you have some, and up to 200 crosses to the next Earth.
   - **Falling trees:** a felled tree falls away from the saw or blast, faster as it goes, with a short trunk coming into view, and bursts into dust and is gone the moment it hits the ground (1.3 s). A Crawler gets a felled tree's wood at that moment. A Crawler throws up sawdust while it cuts, and cleared stumps and fallen trees burst into splinters.

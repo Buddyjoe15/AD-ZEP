@@ -89,6 +89,7 @@
         }
         g.imageSmoothingEnabled = true;
         // Pixel-art trees moving in the wind (Woodlands); lower-resolution chunks have them drawn in.
+        if (near) G.Landscape.drawLive(g, S.grid, v, t, z);   // waterfalls and glinting water (Genesis)
         if (near) G.WoodlandsArt.drawTrees(g, S.grid, v, T, t, z);
         if (live && live.size) TA.drawLive(g, S.grid, v, t, (cx, cy) => live.has(cy * 4096 + cx));
       }
