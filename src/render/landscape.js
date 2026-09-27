@@ -89,8 +89,18 @@
     if (a.land) return a.land;
     const n = grd.size;
     a.land = { E: new Float32Array(n), W: new Float32Array(n), D: new Float32Array(n), noFace: new Uint8Array(n), near: new Uint8Array(n), P: new Float32Array(n), B: new Uint8Array(n), PK: new Uint8Array(n), S: new Float32Array(n), stones: new Map() };
-    // Stepping stones (grid.art.fords) listed by every tile they or their wake reach.
+    // Stepping stones (grid.art.fords) listed by every tile they or their wake reach, and each
+    // one's shape: stretched and turned, with a lumpy outline, in one of three kinds of stone.
     const f = a.fords, t = T();
+    if (f){
+      const n2 = f.count, h = G.hashRandom3, R = a.land.rock = { ca: new Float32Array(n2), sa: new Float32Array(n2), st: new Float32Array(n2), c2: new Float32Array(n2), s2: new Float32Array(n2), c3: new Float32Array(n2), s3: new Float32Array(n2), kind: new Uint8Array(n2), tone: new Float32Array(n2) };
+      for (let q = 0; q < n2; q++){
+        const ang = h(q, 1, 761) * Math.PI, a2 = 0.08 + h(q, 2, 761) * 0.14, p2 = h(q, 3, 761) * 6.28, a3 = h(q, 4, 761) * 0.12, p3 = h(q, 5, 761) * 6.28;
+        R.ca[q] = Math.cos(ang); R.sa[q] = Math.sin(ang); R.st[q] = 0.55 + h(q, 6, 761) * 0.45;
+        R.c2[q] = a2 * Math.cos(p2); R.s2[q] = a2 * Math.sin(p2); R.c3[q] = a3 * Math.cos(p3); R.s3[q] = a3 * Math.sin(p3);
+        const k2 = h(q, 7, 761); R.kind[q] = k2 < 0.6 ? 0 : k2 < 0.85 ? 1 : 2; R.tone[q] = (h(q, 8, 761) - 0.5) * 0.3;
+      }
+    }
     if (f) for (let s = 0; s < f.count; s++){
       const reach = f.land[s] ? f.r[s] + 2 : f.r[s] * 4;
       for (let y = Math.floor((f.y[s] - reach) / t); y <= Math.floor((f.y[s] + reach) / t); y++) for (let x = Math.floor((f.x[s] - reach) / t); x <= Math.floor((f.x[s] + reach) / t); x++){
@@ -303,8 +313,13 @@
             if (stones && !face){
               const wy = oy + (cy + 0.5) * step;
               let best = 1e9, bq = -1, wake = 0;
+              const RK = L.rock;
               for (const q of stones){
-                const dx = wx - fd.x[q], dy = wy - fd.y[q], rr = fd.r[q], dd = Math.sqrt(dx * dx + dy * dy) - rr;
+                const dx = wx - fd.x[q], dy = wy - fd.y[q], rr = fd.r[q];
+                // Distance to the rock's lumpy, stretched outline (in its own turned frame).
+                const lx = dx * RK.ca[q] + dy * RK.sa[q], ly = (-dx * RK.sa[q] + dy * RK.ca[q]) / RK.st[q], d0 = Math.sqrt(lx * lx + ly * ly) || 1e-6;
+                const c = lx / d0, sn = ly / d0, cos2 = c * c - sn * sn, sin2 = 2 * c * sn, cos3 = c * (4 * c * c - 3), sin3 = sn * (3 - 4 * sn * sn);
+                const dd = (d0 - rr * (1 + RK.c2[q] * cos2 - RK.s2[q] * sin2 + RK.c3[q] * cos3 - RK.s3[q] * sin3)) * (0.6 + RK.st[q] * 0.4);
                 if (dd < best){ best = dd; bq = q; }
                 if (fd.land[q]) continue;
                 const along = dx * fd.fx[q] + dy * fd.fy[q], perp = Math.abs(dx * fd.fy[q] - dy * fd.fx[q]);
@@ -317,9 +332,12 @@
                   const tone = 0.5 + lit * 0.35 + (n - 0.5) * 0.35 + dith * 0.12;
                   col = best > -0.9 ? P.char1 : n > 0.82 ? P.grass1 : tone > 0.72 ? P.dust5 : tone > 0.48 ? P.dust4 : tone > 0.25 ? P.plate0 : P.dust3;
                 } else {
-                  const tone = 0.5 + lit * 0.45 + (n - 0.5) * 0.3 + dith * 0.12;
-                  if (best > -Math.min(1.2, rr * 0.3)) col = P.steel1;             // its dark wet edge
-                  else if (lit > 0.1 && n > 0.8) col = P.leaf1;                    // moss on top
+                  // Grey granite, brown sandstone or dark basalt, each lit from the top left.
+                  const tone = 0.5 + lit * 0.45 + (n - 0.5) * 0.3 + dith * 0.12 + RK.tone[bq], kd = RK.kind[bq];
+                  if (best > -Math.min(1.2, rr * 0.3)) col = kd === 1 ? P.dust0 : P.steel1;          // its dark wet edge
+                  else if (lit > 0.1 && n > 0.8) col = P.leaf1;                                       // moss on top
+                  else if (kd === 1) col = tone > 0.78 ? P.dust4 : tone > 0.52 ? P.dust3 : tone > 0.3 ? P.dust2 : P.dust1;
+                  else if (kd === 2) col = tone > 0.8 ? P.steel2 : tone > 0.45 ? P.steel1 : P.steel0;
                   else col = tone > 0.78 ? P.plate1 : tone > 0.52 ? P.plate0 : tone > 0.3 ? P.steel2 : P.steel1;
                 }
               } else if (w >= 0.5 && !fd.land[bq] && best < Math.min(1.8, fd.r[bq] * 0.3 + 0.6)){
