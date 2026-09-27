@@ -167,6 +167,31 @@
     return true;
   }
 
+  // Mist and spray, drawn from time alone (no particles to keep): puff `seed` of a source at
+  // (x, y) rolls up and drifts, growing and fading; droplets arc out and fall back.
+  function mist(g, x, y, ts, seed, n, spread, rise, size){
+    const h = G.hashRandom3;
+    for (let s = 0; s < n; s++){
+      const f = (ts * (0.22 + h(seed, s, 1) * 0.12) + h(seed, s, 2)) % 1, a = Math.sin(Math.PI * f) * 0.32;
+      if (a < 0.02) continue;
+      const px = x + (h(seed, s, 3) - 0.5) * spread + Math.sin(ts * 0.7 + s) * 4 + f * 10, py = y - f * rise, r = Math.round(size * (0.5 + f));
+      g.globalAlpha = a; g.fillStyle = C.white;
+      g.fillRect(Math.round(px - r), Math.round(py - r * 0.7), r * 2, Math.round(r * 1.4));
+      g.globalAlpha = a * 0.6; g.fillRect(Math.round(px - r * 0.6), Math.round(py - r * 1.1), Math.round(r * 1.2), Math.round(r * 2.2));
+    }
+    g.globalAlpha = 1;
+  }
+  function spray(g, x, y, ts, seed, n, spread, up){
+    const h = G.hashRandom3;
+    for (let s = 0; s < n; s++){
+      const f = (ts * (0.9 + h(seed, s, 4) * 0.8) + h(seed, s, 5)) % 1, dir = (h(seed, s, 6) - 0.5) * 2;
+      const px = x + (h(seed, s, 7) - 0.5) * spread + dir * f * 14, py = y - (4 * f * (1 - f)) * up + f * 4;
+      g.globalAlpha = 0.9 * (1 - f); g.fillStyle = f < 0.4 ? C.white : C.water3;
+      g.fillRect(Math.round(px), Math.round(py), 1.5, 1.5);
+    }
+    g.globalAlpha = 1;
+  }
+
   G.Landscape = {
     // True for grids drawn with contours (Genesis).
     on: grd => !!(grd && grd.art && grd.art.generator === 'genesis'),
@@ -397,10 +422,13 @@
                 g.globalAlpha = 0.85 * (1 - f * 0.5); g.fillStyle = f > 0.7 ? C.white : C.water3;
                 g.fillRect(Math.round(sx), Math.round(y), 1.5, 3 + f * 6);
               }
-              // Foam boiling at the foot.
+              // Foam boiling at the foot, spray thrown up and mist rolling off it.
               const foam = rim + FACE + Math.sin(ts * 6 + s) * 2;
               g.globalAlpha = 0.55 + 0.35 * Math.sin(ts * 5 + s * 1.7); g.fillStyle = C.white;
               g.fillRect(Math.round(sx - 2), Math.round(foam - 2), 4, 3);
+              g.globalAlpha = 1;
+              if (s % 3 === 0) spray(g, sx, rim + FACE, ts, i * 16 + s, 5, 10, 14);
+              if (s % 4 === 1) mist(g, sx, rim + FACE + 4, ts, i * 16 + s, 3, 16, 30, 5);
             }
             g.globalAlpha = 1;
           } else if (d === 2 || d === 3){
@@ -412,6 +440,13 @@
               g.globalAlpha = 0.7; g.fillStyle = f > 0.6 ? C.white : C.water3; g.fillRect(Math.round(x), Math.round(sy), 5, 1.5);
             }
             g.globalAlpha = 1;
+            const ex = sgn > 0 ? px + t : px;   // the foot, downstream
+            spray(g, ex, py + t / 2, ts, i, 6, t * 0.8, 10);
+            mist(g, ex, py + t / 2, ts, i, 3, t * 0.7, 24, 5);
+          } else if (d === 4){
+            // Falling away north: only the foot shows, in spray and mist.
+            spray(g, px + t / 2, py, ts, i, 6, t * 0.8, 10);
+            mist(g, px + t / 2, py, ts, i, 3, t * 0.7, 24, 5);
           }
         } else if ((tl === k.WATER || tl === k.DEEP) && dir[i] === 5){
           // The plunge pool: rings of foam spreading and fading.
@@ -421,6 +456,7 @@
             g.beginPath(); g.ellipse(gx * t + t / 2 + (h(gx, gy, s) - 0.5) * 16, gy * t + t * 0.4, 4 + f * 18, 2 + f * 8, 0, 0, Math.PI * 2); g.stroke();
           }
           g.globalAlpha = 1;
+          mist(g, gx * t + t / 2, gy * t + t * 0.3, ts, i + 7, 2, t, 18, 6);   // a low haze over the pool
         } else if (z >= 0.7 && tl === k.WATER && L.near[i] === 1){
           // Sunlight glinting on open water.
           for (let s = 0; s < 2; s++){
