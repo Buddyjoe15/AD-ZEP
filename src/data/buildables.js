@@ -19,7 +19,11 @@
    vision in world px (default 240).
    `shield` { radiusTiles, capacity, recharge } makes it a Shield Projector: switched on from
    its window, its charge absorbs damage to friendly structures in range.
-   `sensor` { detectTiles, boostTiles, accuracyBonus } makes it a Defensive Sensor. */
+   `sensor` { detectTiles, boostTiles, accuracyBonus } makes it a Defensive Sensor.
+   `wall` marks a wall: with pixel art, walls join their neighbours on each side (other walls
+   and the ends of gates) into one continuous wall; never diagonally.
+   `rotateTo` names the same structure turned 90° (gates); the build menu lists one of the
+   pair and rotates between them. `listed: false` keeps a structure out of the build menu. */
 GW.Defs.buildables.defineAll({
   chest: {
     name: 'Chest', w: 1, h: 1, buildTime: 2, cost: {}, container: { capacity: 24 },
@@ -38,20 +42,52 @@ GW.Defs.buildables.defineAll({
     sensor: { detectTiles: 12, boostTiles: 6, accuracyBonus: 0.25 }, power: { demand: 3 },
     description: 'Short-range detection. Turrets within six tiles hit every shot (up from 75%). Sees 12 tiles through fog, and warns when enemies come within that range. Draws 3 power.'
   },
+  // ---- Walls (join their neighbours into one wall) and gates ----
+  wood_wall: {
+    name: 'Wood Wall', w: 1, h: 1, hp: 350, buildTime: 3, cost: { metal: 25 }, wall: true,
+    behaviors: [{ type: 'defenseAura', radiusTiles: 1, reduction: 0.15 }],
+    description: 'Quick, cheap palisade of sharpened logs with stakes angled out from its foot, one 1×1 section at a time. Weakest wall: 350 HP. Friendly units within one tile take 15% less damage.'
+  },
   defensive_wall: {
-    name: 'Defensive Wall', w: 1, h: 1, hp: 600, buildTime: 5, cost: { metal: 60 },
+    name: 'Metal Wall', w: 1, h: 1, hp: 600, buildTime: 5, cost: { metal: 60 }, wall: true,
     behaviors: [{ type: 'defenseAura', radiusTiles: 1, reduction: 0.20 }],
-    description: 'Basic physical fortification, one 1×1 section at a time. Blocks enemies and channels them into controlled approaches. Friendly units within one tile take 20% less damage.'
+    description: 'Standard bolted steel wall, one 1×1 section at a time. Blocks enemies and channels them into controlled approaches. Friendly units within one tile take 20% less damage.'
   },
   reinforced_wall: {
-    name: 'Reinforced Wall', w: 1, h: 1, hp: 1600, armor: 0.35, buildTime: 8, cost: { metal: 40, steel: 12 },
+    name: 'Reinforced Metal Wall', w: 1, h: 1, hp: 1600, armor: 0.35, buildTime: 8, cost: { metal: 40, steel: 12 }, wall: true,
     behaviors: [{ type: 'defenseAura', radiusTiles: 1, reduction: 0.25 }],
-    description: 'Advanced defensive wall: 1,600 HP and takes 35% less damage. Friendly units within one tile take 25% less damage.'
+    description: 'Heavy armoured wall: 1,600 HP and takes 35% less damage. Friendly units within one tile take 25% less damage.'
   },
+  // Gates: 2, 3 or 4 tiles long, each horizontal or vertical (rotateTo). Walls join their ends.
   gate: {
-    name: 'Gate', w: 2, h: 1, symbol: 'GATE', color: '#8f9c8a', hp: 900, armor: 0.2, buildTime: 6, cost: { metal: 80 }, blocksMovement: false,
+    name: 'Gate (1×2)', w: 2, h: 1, symbol: 'GATE', color: '#8f9c8a', hp: 900, armor: 0.2, buildTime: 6, cost: { metal: 80 }, blocksMovement: false, rotateTo: 'gate_v',
     gate: { openTiles: 2, hostileTiles: 6 },
-    description: 'Lets Vance, Utility Spiders and other friendly units through defensive walls. Always closed; opens when a friendly unit is within two tiles, and shuts automatically while hostiles are within six. Enemies can never pass.'
+    description: 'Lets Vance, Utility Spiders and other friendly units through defensive walls. Always closed; opens when a friendly unit is within two tiles, and shuts automatically while hostiles are within six. Enemies can never pass. Rotate it to build it across a north-south wall.'
+  },
+  gate_v: {
+    name: 'Gate (1×2, vertical)', w: 1, h: 2, symbol: 'GATE', color: '#8f9c8a', hp: 900, armor: 0.2, buildTime: 6, cost: { metal: 80 }, blocksMovement: false, rotateTo: 'gate', listed: false,
+    gate: { openTiles: 2, hostileTiles: 6 },
+    description: 'The 1×2 Gate turned for a north-south wall.'
+  },
+  gate_3: {
+    name: 'Gate (1×3)', w: 3, h: 1, symbol: 'GATE', color: '#8f9c8a', hp: 1300, armor: 0.2, buildTime: 8, cost: { metal: 120 }, blocksMovement: false, rotateTo: 'gate_3_v',
+    gate: { openTiles: 2, hostileTiles: 6 },
+    description: 'A wider gate, three tiles across, for groups of units. Opens for friendly units within two tiles and stays shut while hostiles are within six. Rotate it for a north-south wall.'
+  },
+  gate_3_v: {
+    name: 'Gate (1×3, vertical)', w: 1, h: 3, symbol: 'GATE', color: '#8f9c8a', hp: 1300, armor: 0.2, buildTime: 8, cost: { metal: 120 }, blocksMovement: false, rotateTo: 'gate_3', listed: false,
+    gate: { openTiles: 2, hostileTiles: 6 },
+    description: 'The 1×3 Gate turned for a north-south wall.'
+  },
+  gate_4: {
+    name: 'Gate (1×4)', w: 4, h: 1, symbol: 'GATE', color: '#8f9c8a', hp: 1700, armor: 0.2, buildTime: 10, cost: { metal: 160 }, blocksMovement: false, rotateTo: 'gate_4_v',
+    gate: { openTiles: 2, hostileTiles: 6 },
+    description: 'The widest gate, four tiles across, for convoys. Opens for friendly units within two tiles and stays shut while hostiles are within six. Rotate it for a north-south wall.'
+  },
+  gate_4_v: {
+    name: 'Gate (1×4, vertical)', w: 1, h: 4, symbol: 'GATE', color: '#8f9c8a', hp: 1700, armor: 0.2, buildTime: 10, cost: { metal: 160 }, blocksMovement: false, rotateTo: 'gate_4', listed: false,
+    gate: { openTiles: 2, hostileTiles: 6 },
+    description: 'The 1×4 Gate turned for a north-south wall.'
   },
   // ---- Turrets (fire automatically at enemy units; testing-zone copies stay idle).
   //      Each hits 75% of the time; a Defensive Sensor nearby makes that 100%. ----

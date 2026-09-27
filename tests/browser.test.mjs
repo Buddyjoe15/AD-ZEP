@@ -617,6 +617,58 @@ test('pixel-art Sentry Turret: its head layer turns toward the aim at its turn r
   } finally { await browser.close(); }
 });
 
+test('pixel-art walls join their neighbours and gate ends (never diagonally); gates show open; the build menu rotates gates', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    const r = await page.evaluate(() => {
+      const G = GW, S = G.State, h = G.Units.hero(), T = G.CONFIG.TILE, P = G.PixelArt;
+      S.paused = true;
+      const x0 = Math.floor(h.x / T) - 6, y0 = Math.floor(h.y / T) + 6;
+      const add = (k, x, y) => G.Buildings.add(k, x0 + x, y0 + y, { team: 'blue' });
+      // A run: wood, metal, a 1×3 gate, reinforced; a wall beside the gate's long side; a corner;
+      // a lone wall; a pair touching only at a corner.
+      const a = add('wood_wall', 0, 0), b = add('defensive_wall', 1, 0), gate = add('gate_3', 2, 0), c = add('reinforced_wall', 5, 0);
+      const side = add('defensive_wall', 3, 1), down = add('wood_wall', 0, 1);
+      const lone = add('defensive_wall', 8, 4), d1 = add('wood_wall', 10, 4), d2 = add('wood_wall', 11, 5);
+      const vg = add('gate_v', 0, 2), below = add('wood_wall', 0, 4);
+      const mask = w => P.joins(w);
+      G.centerCamera((x0 + 3) * T, (y0 + 2) * T, 1); G.Renderer.draw();
+      const sp = P.data.sprites.defensive_wall;
+      const col = P.buildingCol(b, sp, 0);
+      // Open the gate by bringing Vance to it.
+      h.x = gate.x; h.y = gate.y - 1.5 * T; h.path = []; G.rebuildSpatial(); G.Gates.update();
+      const open = P.buildingState(gate, P.data.sprites.gate_3);
+      return { a: mask(a), b: mask(b), c: mask(c), side: mask(side), down: mask(down), lone: mask(lone), d1: mask(d1), d2: mask(d2), below: mask(below), col, finished: sp.states.finished.start, open };
+    });
+    assert.equal(r.a, 2 | 4, 'wood wall joins the metal wall east and the wood wall south');
+    assert.equal(r.b, 2 | 8, 'metal wall joins the wood wall west and the gate end east');
+    assert.equal(r.c, 8, 'reinforced wall joins the gate end west');
+    assert.equal(r.side, 0, 'a wall beside a gate\'s long side doesn\'t join it');
+    assert.equal(r.down, 1 | 4, 'joins the wall north and the vertical gate end south');
+    assert.equal(r.below, 1, 'and the vertical gate end north');
+    assert.equal(r.lone, 0);
+    assert.equal(r.d1, 0, 'no diagonal joins'); assert.equal(r.d2, 0);
+    assert.equal(r.col, r.finished + (2 | 8), 'the sheet column is the finished piece for its mask');
+    assert.equal(r.open, 'open', 'an open gate shows its open state');
+    await page.screenshot({ path: path.join(OUT, 'pixel-art-walls.png') });
+    // Build menu: the Wood Wall and gates are listed, vertical twins are not; Rotate switches.
+    await page.evaluate(() => { GW.State.paused = true; GW.BuildUI.enter(GW.Units.crew().find(u => u.type === 'utility_spider')); });
+    const listed = await page.$$eval('[data-build-pick]', els => els.map(e => e.dataset.buildPick));
+    assert.ok(['wood_wall', 'defensive_wall', 'reinforced_wall', 'gate', 'gate_3', 'gate_4'].every(k => listed.includes(k)), listed.join());
+    assert.ok(!listed.some(k => k.endsWith('_v')), 'vertical twins are reached by rotating');
+    await page.click('[data-build-pick="gate_4"]');
+    await page.click('#rotateBuildBtn');
+    assert.equal(await page.evaluate(() => GW.State.buildMode.key), 'gate_4_v');
+    await page.keyboard.press('r');
+    assert.equal(await page.evaluate(() => GW.State.buildMode.key), 'gate_4');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
 test('Ore Processor window lists its three products and queues them; the top bar shows resources as they arrive', { skip, timeout: 60000 }, async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const browser = await launch();

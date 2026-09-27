@@ -5,9 +5,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { PALETTE, TEAMS, ALPHABET, C, Grid, rng, painter, rotate, finish, png, sheetRGBA } from './pixelart.mjs';
-import { renderSprite, LIFT, OUTLINE } from './sprite-kit.mjs';
+import { renderSprite, renderStructure, LIFT, OUTLINE } from './sprite-kit.mjs';
 import salvageCrawler from '../art/sprite-lab/specs/salvage_crawler.mjs';
 import sentryTurret from '../art/sprite-lab/specs/sentry_turret.mjs';
+import woodWall from '../art/sprite-lab/specs/wood_wall.mjs';
+import metalWall from '../art/sprite-lab/specs/metal_wall.mjs';
+import reinforcedWall from '../art/sprite-lab/specs/reinforced_wall.mjs';
+import gate2 from '../art/sprite-lab/specs/gate.mjs';
+import gate3 from '../art/sprite-lab/specs/gate_3.mjs';
+import gate4 from '../art/sprite-lab/specs/gate_4.mjs';
+import gate2v from '../art/sprite-lab/specs/gate_v.mjs';
+import gate3v from '../art/sprite-lab/specs/gate_3_v.mjs';
+import gate4v from '../art/sprite-lab/specs/gate_4_v.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const OUT = path.join(ROOT, 'art/pixel-test');
@@ -181,17 +190,25 @@ function modelFrames(def){
 // Structures modelled in the sprite lab: one row of states (footprint × 96 art px, origin at
 // the top-left of the footprint in the game), and, for a turret, a head layer that turns: one
 // row per facing, clockwise from up, each rendered from the model about the footprint centre.
+// Walls have connecting states (16 frames, one per neighbour mask); vertical gates are the
+// horizontal model turned (spec.heading). Keyed by the game's buildable key.
+const STRUCTURE = { shadow: [4, 4], elevation: 'structure' };
 export const MODELLED_STRUCTURES = {
-  sentry_turret: { spec: sentryTurret, shadow: [4, 4], elevation: 'structure' }
+  sentry_turret: { spec: sentryTurret, ...STRUCTURE },
+  wood_wall: { spec: woodWall, ...STRUCTURE },
+  defensive_wall: { spec: metalWall, ...STRUCTURE },
+  reinforced_wall: { spec: reinforcedWall, ...STRUCTURE },
+  gate: { spec: gate2, ...STRUCTURE }, gate_3: { spec: gate3, ...STRUCTURE }, gate_4: { spec: gate4, ...STRUCTURE },
+  gate_v: { spec: gate2v, ...STRUCTURE }, gate_3_v: { spec: gate3v, ...STRUCTURE }, gate_4_v: { spec: gate4v, ...STRUCTURE }
 };
 function structureFrames(spec){
-  const F = spec.frame, render = (model, heading = 0) => {
-    const { px } = renderSprite(model, { w: F.w, h: F.h, ox: F.ox, oy: F.oy, res: SPRITE_RES, heading, lift: LIFT, outline: OUTLINE });
+  const F = spec.frame, render = (model, heading = spec.heading || 0) => {
+    const { px } = renderStructure(model, F, { heading, bleed: spec.bleed || 0 });
     const g = new Grid(F.w, F.h); g.p.set(px); return g;
   };
   const cols = [], states = {};
   for (const [state, a] of Object.entries(spec.states)){
-    states[state] = { start: cols.length, frames: a.frames, ...(a.fps ? { fps: a.fps } : {}) };
+    states[state] = { start: cols.length, frames: a.frames, ...(a.fps ? { fps: a.fps } : {}), ...(a.connect ? { connect: true } : {}) };
     for (let frame = 0; frame < a.frames; frame++) cols.push(render(spec.build({ state, anim: state, frame, frames: a.frames })));
   }
   let head = null;
@@ -850,7 +867,7 @@ async function capture(){
   for (const [z, tag] of [['0.333', '033'], ['0.667', '067'], ['1', '100']]) await shot(`zoom=${z}&t=0.4&hud=0`, `scene-zoom-${tag}.png`, phone);
   await shot('zoom=0.333&t=0.4&hud=0&tiles=v1', 'scene-zoom-033-tiles-v1.png', phone);
   const desk = { viewport: { width: 1200, height: 800 }, deviceScaleFactor: 1, fullPage: true };
-  for (const s of ['spider', 'salvage_crawler', 'drone', 'vance', 'repair_station', 'sentry_turret', 'terrain', 'woodlands']) await shot(`view=sheets&only=${s}&hud=0`, `sheet-${s}.png`, desk);
+  for (const s of ['spider', 'salvage_crawler', 'drone', 'vance', 'repair_station', 'sentry_turret', 'walls', 'terrain', 'woodlands']) await shot(`view=sheets&only=${s}&hud=0`, `sheet-${s}.png`, desk);
   await browser.close();
 }
 

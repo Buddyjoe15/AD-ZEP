@@ -118,6 +118,12 @@ code{font-family:var(--mono);font-size:12px;background:var(--raised);padding:1px
     <div id="anims" style="display:flex;flex-direction:column;gap:14px"></div>
   </section>
 
+  <section id="joinSec" hidden>
+    <div><span class="kicker">Connections</span><h2>Built next to each other</h2>
+    <p class="note">Each tile picks its piece by which of its four sides touch another: runs, corners, T and cross joins, lone tiles, and two tiles touching only at a corner, which don't join. Left finished, right damaged, with engine shadows.</p></div>
+    <div class="scroll"><canvas class="px" id="joins"></canvas></div>
+  </section>
+
   <section id="variantSec" hidden>
     <div><span class="kicker">Variants</span><h2 id="variantTitle"></h2>
     <p class="note" id="variantNote"></p></div>
@@ -399,6 +405,26 @@ Promise.all([load(D.sheet), load(D.ref.sheet), ...D.ground.grass.tiles.map(load)
     }
   }
 
+  // ---- Connections: a sample layout, each tile's piece picked from its neighbours ----
+  const JOIN = ['##########.', '#....#...#.', '#....#...##', '######.....', '.....#..#..', '.#...#...#.', '...###.....'];
+  const joinStates = Object.entries(M.states).filter(([, s]) => s.connect).map(([n]) => n);
+  if (joinStates.length) $('joinSec').hidden = false;
+  function drawJoins(){
+    if (!joinStates.length) return;
+    const cols = JOIN[0].length, rows = JOIN.length, gap = 96, W = (cols * 2 + 1) * 96 + gap - 96, H = rows * 96 + 96;
+    const g = sized($('joins'), W, H, W * [0.35, 0.5, 0.75][S.zoom - 1]);
+    ground(g, W, H, 0, 0, 17);
+    const wall = (x, y) => y >= 0 && y < rows && x >= 0 && x < cols && JOIN[y][x] === '#';
+    joinStates.slice(0, 2).forEach((state, k) => {
+      const st = M.states[state], left = 48 + k * (cols * 96 + gap);
+      for (const part of ['shadow', 'body']) for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++){
+        if (!wall(x, y)) continue;
+        const mask = (wall(x, y - 1) ? 1 : 0) | (wall(x + 1, y) ? 2 : 0) | (wall(x, y + 1) ? 4 : 0) | (wall(x - 1, y) ? 8 : 0);
+        draw(g, 'new', part, 0, st.start + mask, left + x * 96 + M.origin[0], 48 + y * 96 + M.origin[1]);
+      }
+    });
+  }
+
   // ---- Scale scene ----
   const fpW = unit ? 1 : D.spec.footprint[0], fpH = unit ? 1 : D.spec.footprint[1];
   const SW = (fpW + 4) * 96, SH = Math.max(3, fpH + 2) * 96 + (unit ? 0 : M.footprintOrigin[1]);
@@ -443,7 +469,7 @@ Promise.all([load(D.sheet), load(D.ref.sheet), ...D.ground.grass.tiles.map(load)
 
   // ---- Controls and loop ----
   const t0 = performance.now(), now = () => (performance.now() - t0) / 1000;
-  function drawAll(){ const t = now(); drawFrame(t); drawFacings(t); drawHead(t); drawAnims(t); drawVariants(t); drawScene(t); drawCrowd(t); }
+  function drawAll(){ const t = now(); drawFrame(t); drawFacings(t); drawHead(t); drawJoins(); drawAnims(t); drawVariants(t); drawScene(t); drawCrowd(t); }
   function seg(id, key, parse){
     const el = $(id), sync = () => el.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(parse(b.dataset.v) === S[key])));
     el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S[key] = parse(b.dataset.v); sync(); drawAll(); });

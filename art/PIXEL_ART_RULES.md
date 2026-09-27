@@ -164,11 +164,14 @@ Save change: none | <what and why>
   | `near-complete` | construction ⅔ to done |
   | `finished` | built, idle |
   | `working` (animated, e.g. 4 frames @ 6 fps) | its behaviour is active; the Repair Station counts as working while a damaged friendly unit is in reach |
+  | `open` | a gate while it is open |
   | `damaged` | below 50% health; working stops showing |
   | `rubble` | destroyed; shown for 90 s, then gone (not saved) |
 
 - Construction states build up visually: slab and anchors, then girders, then mostly plated with one section open.
 - Put team colour on the finished hull (stripes or edges). Construction states may show it too.
+- **Connecting structures (walls).** A wall's `finished` and `damaged` states are 16 frames each, one per neighbour mask (bits 1 north, 2 east, 4 south, 8 west): the sides on which the next tile holds a wall of the same team, or the end of a gate. Never diagonally. Each piece runs from the tile centre to the middle of each joined side and stops short of the others; a lone tile is a short east–west section. Render the arms on past the tile edge and crop them (`bleed` in the spec), and repeat patterns every 6, 12 or 24 world px, so neighbouring tiles meet without a seam. Construction states and rubble are single, unjoined tiles.
+- **Turned structures (gates).** A structure that comes both ways, like a gate, is modelled once, horizontal; the vertical one is the same model turned 90° (`heading` in the spec) and rendered again, so the light stays top left. The two are separate buildables that name each other with `rotateTo`.
 - **Turning head (turrets).** A structure whose head turns to aim, like the Sentry Turret, draws the head as its own layer over the base. Model it in the sprite lab as `head` in the spec (section 5.2): the base states hold the pad and ring only for the states the head goes over (`on`, such as finished → idle and damaged → damaged), and the head is rendered in 16 facings (every 22.5°), clockwise from up, about the footprint centre, in the same frame as the base. Head states: `idle`, `firing` (plays once after each round) and optionally `damaged`. The engine draws the facing nearest the aim the simulation set, easing round at the head's `turnRate`, with the head's shadow falling on the base. Presentation only: the drawn aim is never saved.
 - Structures without pixel art keep their old Canvas art, so pixel art can be added one structure at a time.
 

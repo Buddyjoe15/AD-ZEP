@@ -26,6 +26,16 @@
       this.render();
       return true;
     },
+    // Turns the structure being placed (a gate) to its turned twin, keeping the preview cell.
+    rotate(){
+      const d = this.placing() && G.Defs.buildables.get(this.mode.key);
+      if (!d || !d.rotateTo) return false;
+      this.mode.key = d.rotateTo;
+      const pr = G.State.buildPreview;
+      if (pr) G.State.buildPreview = { key: this.mode.key, gx: pr.gx, gy: pr.gy, ok: G.Buildings.canPlaceKey(this.mode.key, pr.gx, pr.gy) };
+      this.render();
+      return true;
+    },
     cancel(){
       G.State.buildMode = { active: false, builderId: null, key: null };
       G.State.buildPreview = null;
@@ -52,7 +62,7 @@
     icon(key){
       const d = G.Defs.buildables.get(key);
       if (d.symbol) return `<div class="catalog-art" style="background:${esc(d.color)};color:#0b1820;font-weight:800">${esc(d.symbol)}</div>`;
-      if (key === 'defensive_wall' || key === 'reinforced_wall') return `<div class="catalog-art catalog-wall${key === 'reinforced_wall' ? ' reinforced' : ''}">WALL</div>`;
+      if (d.wall) return `<div class="catalog-art catalog-wall${key === 'reinforced_wall' ? ' reinforced' : key === 'wood_wall' ? ' wood' : ''}">WALL</div>`;
       if (d.container) return '<div class="catalog-art catalog-chest">CHEST</div>';
       return `<div class="catalog-art">${esc(G.initials(d.name))}</div>`;
     },
@@ -60,10 +70,11 @@
       const p = $('catalogPanel'), m = this.mode;
       if (!this.active()){ this.cancel(); return; }
       p.innerHTML = `<div class="catalog-header"><b>Utility Spider — Build</b><button id="cancelBuildBtn">×</button></div>
-        <div class="catalog-help">${m.key ? 'Tap a grid cell to place. Hold and drag across the map to refine the cell.' : 'Choose a structure.'}</div>
-        <div class="catalog-grid">${G.Defs.buildables.all().filter(d => !d.debugOnly).map(d => `<button class="catalog-entry build-pick ${m.key === d.key ? 'active' : ''}" data-build-pick="${d.key}">
+        <div class="catalog-help">${m.key ? 'Tap a grid cell to place. Hold and drag across the map to refine the cell.' : 'Choose a structure.'}${m.key && G.Defs.buildables.get(m.key).rotateTo ? ` <button id="rotateBuildBtn" class="catalog-rotate">Rotate (R): ${G.Defs.buildables.get(m.key).w > 1 ? 'east–west' : 'north–south'}</button>` : ''}</div>
+        <div class="catalog-grid">${G.Defs.buildables.all().filter(d => !d.debugOnly && d.listed !== false).map(d => `<button class="catalog-entry build-pick ${m.key === d.key || (m.key && G.Defs.buildables.get(m.key).rotateTo === d.key) ? 'active' : ''}" data-build-pick="${d.key}">
           ${this.icon(d.key)}<div class="catalog-name">${esc(d.name)}</div><div class="catalog-desc">${esc(d.description)}<br><b>${esc(G.Economy.describe(d.cost))}</b></div></button>`).join('')}</div>`;
       $('cancelBuildBtn').addEventListener('click', () => this.cancel());
+      if ($('rotateBuildBtn')) $('rotateBuildBtn').addEventListener('click', e => { e.stopPropagation(); this.rotate(); });
       p.querySelectorAll('[data-build-pick]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); this.choose(b.dataset.buildPick); }));
     }
   };

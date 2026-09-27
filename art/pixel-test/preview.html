@@ -121,7 +121,22 @@ const scene = (() => {
   // Sentry Turrets in the gaps between the stations, their heads turned toward the drones (fixed places,
   // so nothing above moves). One is damaged and one has just fired.
   const turrets = [[13, 23, 'finished'], [16, 23, 'firing'], [16, 26, 'damaged']].map(([gx, gy, state]) => ({ x: gx * TILE, y: gy * TILE, state, aim: Math.atan2(15 * TILE - (gy + 0.5) * TILE, 15 * TILE - (gx + 0.5) * TILE) }));
-  return { stations, turrets, units, cx: 15 * TILE, cy: 26 * TILE };
+  // A walled yard left of the stations: all three walls, a 1×2 gate across the top (open) and a
+  // vertical one on the east side, each wall tile joined to its neighbours and the gate ends.
+  const walls = [];
+  const wall = (key, gx, gy) => walls.push({ key, gx, gy });
+  for (const x of [5, 6, 7]) wall('defensive_wall', x, 21);
+  for (let y = 22; y <= 26; y++) wall('wood_wall', 5, y);
+  for (let x = 5; x <= 9; x++) wall('reinforced_wall', x, 27);
+  for (const y of [25, 26]) wall('reinforced_wall', 9, y);
+  const gates = [{ key: 'gate', gx: 8, gy: 21, w: 2, h: 1, state: 'open' }, { key: 'gate_v', gx: 9, gy: 23, w: 1, h: 2, state: 'finished' }];
+  const at = new Map(walls.map(w => [w.gx + ',' + w.gy, 'wall']));
+  for (const g of gates) for (let y = g.gy; y < g.gy + g.h; y++) for (let x = g.gx; x < g.gx + g.w; x++) at.set(x + ',' + y, g.w > g.h ? 'gate-h' : 'gate-v');
+  for (const w of walls){
+    const j = (dx, dy) => { const k = at.get((w.gx + dx) + ',' + (w.gy + dy)); return k === 'wall' || (k === 'gate-h' && dx) || (k === 'gate-v' && dy); };
+    w.mask = (j(0, -1) ? 1 : 0) | (j(1, 0) ? 2 : 0) | (j(0, 1) ? 4 : 0) | (j(-1, 0) ? 8 : 0);
+  }
+  return { stations, turrets, walls, gates, units, cx: 15 * TILE, cy: 26 * TILE };
 })();
 
 const cv = document.getElementById('scene'), g = cv.getContext('2d');
@@ -166,6 +181,11 @@ function drawScene(time){
   const st = D.sprites.repair_station;
   shadowPass(scene.stations.map(s => place(stationFrame(s), st.frameWidth, st.frameHeight, s.x, s.y, st.origin, null, 'silhouette', st.shadow.offset, st)));
   for (const s of scene.stations){ const [c, x, y, w, h] = place(stationFrame(s), st.frameWidth, st.frameHeight, s.x, s.y, st.origin, 'blue', undefined, undefined, st); g.drawImage(c, x, y, w, h); }
+  // Walls and gates: every shadow first (so none falls on a neighbour), then the pieces.
+  const fort = [...scene.walls.map(w => { const sp = D.sprites[w.key]; return { sp, str: sp.frames[0][sp.states.finished.start + w.mask], x: w.gx * TILE, y: w.gy * TILE }; }),
+    ...scene.gates.map(q => { const sp = D.sprites[q.key]; return { sp, str: sp.frames[0][sp.states[q.state].start], x: q.gx * TILE, y: q.gy * TILE }; })];
+  shadowPass(fort.map(f => place(f.str, f.sp.frameWidth, f.sp.frameHeight, f.x, f.y, f.sp.origin, null, 'silhouette', f.sp.shadow.offset, f.sp)));
+  for (const f of fort){ const [c, x, y, w, h] = place(f.str, f.sp.frameWidth, f.sp.frameHeight, f.x, f.y, f.sp.origin, 'blue', undefined, undefined, f.sp); g.drawImage(c, x, y, w, h); }
   // Turrets: the base, then the head in the facing nearest its aim, its shadow on the base.
   const tu = D.sprites.sentry_turret, TH = tu.head;
   const turretBase = s => tu.frames[0][tu.states[s.state === 'damaged' ? 'damaged' : 'finished'].start];
@@ -225,6 +245,14 @@ function buildSheets(){
     const [d, row] = section(`repair station — ${st.frameWidth}×${st.frameHeight} (2×2 tiles)`, 'Stand-in design. States left to right: ' + names.join(', ') + '.');
     for (const team of [null, 'blue', 'red']) row.append(fig(sheetCanvas(st.frames, st.frameWidth, st.frameHeight, team, 1, '#3a3129'), team ? team + ' team' : 'raw sheet (magenta)'));
     root.append(d);
+  }
+  if (want('walls')){
+    for (const name of ['wood_wall', 'defensive_wall', 'reinforced_wall', 'gate', 'gate_3', 'gate_4', 'gate_v', 'gate_3_v', 'gate_4_v']){
+      const sp = D.sprites[name], names = Object.entries(sp.states).map(([s, v]) => v.connect ? `${s} (16 pieces by neighbour mask)` : s).join(', ');
+      const [d, row] = section(`${name} — ${sp.frameWidth}×${sp.frameHeight}`, `States left to right: ${names}. Mask bits: 1 north, 2 east, 4 south, 8 west.`);
+      for (const team of [null, 'blue']) row.append(fig(sheetCanvas(sp.frames, sp.frameWidth, sp.frameHeight, team, 1, '#3a3129'), team ? team + ' team' : 'raw sheet (magenta)'));
+      root.append(d);
+    }
   }
   if (want('sentry_turret')){
     const tu = D.sprites.sentry_turret, H = tu.head, names = [];

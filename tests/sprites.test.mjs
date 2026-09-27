@@ -153,3 +153,29 @@ test('Sentry Turret: modelled base states and a head layer in 16 facings, turned
   for (let i = 0; i < up.p.length; i++){ if (!!down.p[i] !== !!turned.p[i]) differ++; if (up.p[i]) solid++; }
   assert.ok(differ < solid * 0.04, `down facing silhouette is the up facing turned (${differ} of ${solid} px differ)`);
 });
+
+test('walls: 16 joined pieces per state that reach the tile edge exactly on the sides they join; gates in three lengths, both ways, with an open state', () => {
+  for (const name of ['wood_wall', 'defensive_wall', 'reinforced_wall']){
+    const sp = data.sprites[name], N = sp.frameWidth;
+    for (const state of ['finished', 'damaged']){
+      const st = sp.states[state];
+      assert.equal(st.frames, 16, `${name} ${state}`); assert.ok(st.connect);
+      for (let mask = 0; mask < 16; mask++){
+        const g = decode(sp.frames[0][st.start + mask], N), mid = N / 2;
+        const edges = { 1: g.get(mid, 0), 2: g.get(N - 1, mid), 4: g.get(mid, N - 1), 8: g.get(0, mid) };
+        for (const [bit, v] of Object.entries(edges)) assert.equal(!!v, !!(mask & bit), `${name} ${state} mask ${mask} side ${bit}`);
+      }
+    }
+    for (const state of ['foundation', 'frame', 'near-complete', 'rubble']) assert.ok(sp.states[state] && !sp.states[state].connect, `${name} ${state}`);
+  }
+  for (const [name, w, h] of [['gate', 2, 1], ['gate_3', 3, 1], ['gate_4', 4, 1], ['gate_v', 1, 2], ['gate_3_v', 1, 3], ['gate_4_v', 1, 4]]){
+    const sp = data.sprites[name];
+    assert.deepEqual([sp.frameWidth, sp.frameHeight], [w * 96, h * 96], name);
+    assert.ok(sp.states.open && sp.states.finished && sp.states.damaged, name);
+    assert.notEqual(sp.frames[0][sp.states.open.start], sp.frames[0][sp.states.finished.start], name + ' looks different open');
+  }
+  // A vertical gate is the horizontal one turned, not squashed: same silhouette area, near enough.
+  const area = s => [...s].filter(ch => ch !== ALPHABET[0]).length;
+  const hz = data.sprites.gate_3, vt = data.sprites.gate_3_v, a = area(hz.frames[0][hz.states.finished.start]), b = area(vt.frames[0][vt.states.finished.start]);
+  assert.ok(Math.abs(a - b) < a * 0.05, `turned gate keeps its size (${a} vs ${b} px)`);
+});

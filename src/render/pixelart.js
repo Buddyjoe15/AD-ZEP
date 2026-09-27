@@ -28,7 +28,11 @@
     enabled: !!D && param !== 'classic',
     // Unit `visual` → sprite; buildable key → structure sprite.
     UNITS: { utility: 'spider', salvage: 'salvage_crawler', rifle: 'drone', scout: 'drone', hero: 'vance' },
-    BUILDINGS: { repair: 'repair_station', sentry_turret: 'sentry_turret' },
+    BUILDINGS: {
+      repair: 'repair_station', sentry_turret: 'sentry_turret',
+      wood_wall: 'wood_wall', defensive_wall: 'defensive_wall', reinforced_wall: 'reinforced_wall',
+      gate: 'gate', gate_3: 'gate_3', gate_4: 'gate_4', gate_v: 'gate_v', gate_3_v: 'gate_3_v', gate_4_v: 'gate_4_v'
+    },
     // Terrain drawn with the dust plain tiles (the test map is all grass).
     DUST: new Set(['grass', 'clearing']),
     SHADOW_ALPHA,
@@ -89,16 +93,52 @@
     },
 
     // ---- Structures (main canvas, world space) ----
-    // State of a built structure: damaged below half health, working while its behaviour is
-    // active (a Repair Station with a damaged friendly unit in reach), else finished.
+    // State of a built structure: open while a gate is open, damaged below half health,
+    // working while its behaviour is active (a Repair Station with a damaged friendly unit in
+    // reach), else finished.
     buildingState(b, sp){
       const st = sp.states;
+      if (st.open && G.Gates.isOpen(b)) return 'open';
       if (st.damaged && b.hp < b.maxHp * 0.5) return 'damaged';
       if (st.working && this.repairing(b)) return 'working';
       return 'finished';
     },
     stationState(b, t){ const sp = D.sprites.repair_station; return this.frameOf(sp.states[this.buildingState(b, sp)], t); },
     frameOf(a, t){ return a.start + (a.fps ? Math.floor(t * a.fps) % a.frames : 0); },
+    // Sheet column for built structure b: a connecting state (walls) picks its piece by which
+    // sides join, others play their frames.
+    buildingCol(b, sp, t){
+      const a = sp.states[this.buildingState(b, sp)];
+      return a.connect ? a.start + this.joins(b) : this.frameOf(a, t);
+    },
+    // Wall joins: a wall joins, on each side, a wall of its team on the next tile, or the end
+    // of a gate of its team (a horizontal gate's east or west end, a vertical gate's north or
+    // south end), never diagonally. Bits: 1 north, 2 east, 4 south, 8 west. Rebuilt whenever
+    // structures change; presentation only.
+    joinMasks: new Map(), joinVersion: -1,
+    joins(b){
+      if (this.joinVersion !== G.Buildings.version){ this.joinVersion = G.Buildings.version; this.rebuildJoins(); }
+      return this.joinMasks.get(b.id) || 0;
+    },
+    rebuildJoins(){
+      const tiles = new Map(), key = (x, y) => y * 65536 + x, masks = this.joinMasks;
+      masks.clear();
+      for (const b of G.State.buildings){
+        const d = G.Defs.buildables.get(b.type);
+        if (d && (d.wall || d.gate)) for (let y = b.gy; y < b.gy + b.h; y++) for (let x = b.gx; x < b.gx + b.w; x++) tiles.set(key(x, y), b);
+      }
+      for (const b of G.State.buildings){
+        if (!G.Defs.buildables.get(b.type)?.wall) continue;
+        let mask = 0;
+        for (const [bit, dx, dy] of [[1, 0, -1], [2, 1, 0], [4, 0, 1], [8, -1, 0]]){
+          const n = tiles.get(key(b.gx + dx, b.gy + dy));
+          if (!n || n.team !== b.team) continue;
+          const nd = G.Defs.buildables.get(n.type);
+          if (nd.wall || (nd.gate && (dx ? n.w > n.h : n.h > n.w))) mask |= bit;
+        }
+        masks.set(b.id, mask);
+      }
+    },
     // True while a Repair Station has a damaged friendly unit in reach (read-only).
     repairing(b){
       const d = G.Defs.buildables.get(b.type), aura = d && d.behaviors.find(x => x.type === 'repairAura');
@@ -113,20 +153,29 @@
       const sp = D.sprites[name];
       this.stampFrame(g, sp, sp.frames[0][col], gx, gy, team);
     },
-    // Stamps frame string `str` of sprite `sp` over the footprint at (gx, gy), shadow first.
-    stampFrame(g, sp, str, gx, gy, team){
+    // Stamps frame string `str` of sprite `sp` over the footprint at (gx, gy): its engine
+    // shadow, then the sprite; `part` 'shadow' or 'body' stamps just one.
+    stampFrame(g, sp, str, gx, gy, team, part){
       const T = G.CONFIG.TILE, k = this.worldPerArt(sp);
       const w = sp.frameWidth * k, h = sp.frameHeight * k, x = gx * T, y = gy * T, smooth = g.imageSmoothingEnabled;
       g.imageSmoothingEnabled = false;
-      g.globalAlpha = SHADOW_ALPHA;
-      g.drawImage(this.canvas(str, sp.frameWidth, sp.frameHeight, null, true), x + sp.shadow.offset[0] * k, y + sp.shadow.offset[1] * k, w, h);
-      g.globalAlpha = 1;
-      g.drawImage(this.canvas(str, sp.frameWidth, sp.frameHeight, team || 'blue'), x, y, w, h);
+      if (part !== 'body'){
+        g.globalAlpha = SHADOW_ALPHA;
+        g.drawImage(this.canvas(str, sp.frameWidth, sp.frameHeight, null, true), x + sp.shadow.offset[0] * k, y + sp.shadow.offset[1] * k, w, h);
+        g.globalAlpha = 1;
+      }
+      if (part !== 'shadow') g.drawImage(this.canvas(str, sp.frameWidth, sp.frameHeight, team || 'blue'), x, y, w, h);
       g.imageSmoothingEnabled = smooth;
     },
-    drawBuilding(g, b, z, t){
+    // Built structures draw in two passes, all shadows first, so a structure's shadow never
+    // falls on its neighbour (the joins of a wall stay clean).
+    drawBuildingShadow(g, b, t){
+      const sp = D.sprites[this.BUILDINGS[b.type]];
+      this.stampFrame(g, sp, sp.frames[0][this.buildingCol(b, sp, t)], b.gx, b.gy, b.team, 'shadow');
+    },
+    drawBuilding(g, b, z, t, noShadow){
       const name = this.BUILDINGS[b.type], sp = D.sprites[name], state = this.buildingState(b, sp);
-      this.stamp(g, name, this.frameOf(sp.states[state], t), b.gx, b.gy, b.team);
+      this.stampFrame(g, sp, sp.frames[0][this.buildingCol(b, sp, t)], b.gx, b.gy, b.team, noShadow ? 'body' : undefined);
       if (sp.head && sp.head.on[state]) this.drawHead(g, b, sp, sp.head.on[state], t);
       if (b.hp < b.maxHp) G.Visuals.bar(g, b.x, b.gy * G.CONFIG.TILE - 7, b.w * G.CONFIG.TILE * 0.8, b.hp / b.maxHp);
     },

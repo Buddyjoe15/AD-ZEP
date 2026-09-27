@@ -136,7 +136,10 @@
       }
       // Structures (and, with pixel art, the rubble of recently destroyed ones).
       if (G.PixelArt.enabled) G.PixelArt.drawRubble(g, inView);
-      for (const b of S.buildings) if (inView(b.x, b.y, b.w * T)) G.Visuals.drawBuilding(g, b, z, t);
+      // Pixel-art structures draw every shadow first, so no shadow falls on a neighbour.
+      const P = G.PixelArt;
+      if (P.enabled) for (const b of S.buildings) if (inView(b.x, b.y, b.w * T) && P.buildingSprite(b.type)) P.drawBuildingShadow(g, b, t);
+      for (const b of S.buildings) if (inView(b.x, b.y, b.w * T)) G.Visuals.drawBuilding(g, b, z, t, P.enabled);
       G.Visuals.shields(g, z, t, inView);
       // Expedition signals.
       const E = S.expedition;

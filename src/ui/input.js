@@ -43,6 +43,7 @@
       if (k === 'h'){ const sh = G.Units.ship(); if (sh) G.centerCamera(sh.x, sh.y); }
       else if (k === 'f3'){ e.preventDefault(); G.UI.toggleDev(); }
       else if (k === 'i'){ e.preventDefault(); G.UI.toggleInventory(); }
+      else if (k === 'r' && G.BuildUI.placing()){ e.preventDefault(); G.BuildUI.rotate(); }
       else if (k === ' '){ e.preventDefault(); G.UI.togglePause(); }
       else if (k === 'escape'){
         if (G.BuildUI.active()) G.BuildUI.cancel();

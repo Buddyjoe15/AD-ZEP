@@ -879,7 +879,7 @@ test('map editor: paint terrain around structures, erase objects, and keep it al
   assert.equal(S.terrainEdits.length, edits, 'the covered stroke was dropped');
   // Erase: a structure, a resource node, a signal.
   const wall = G.Buildings.add('defensive_wall', ux + 8, uy);
-  assert.equal(G.MapEdit.removeAt(wall.x, wall.y), 'Defensive Wall');
+  assert.equal(G.MapEdit.removeAt(wall.x, wall.y), 'Metal Wall');
   assert.ok(!S.buildings.includes(wall));
   assert.equal(grid.passable(ux + 8, uy), true);
   const node = S.resourceNodes.find(n => n.type === 'scrap_mine');
@@ -1112,6 +1112,31 @@ test('walls: Reinforced Walls take less damage; both block movement like the old
   const dPlain = hit(plain), dStrong = hit(strong);
   assert.ok(dPlain > 0, 'wall damaged: ' + dPlain);
   assert.ok(Math.abs(dStrong - dPlain * 0.65) < 1e-6, `reinforced takes 35% less (${dStrong} vs ${dPlain})`);
+});
+
+test('gates: 1×3 and 1×4, horizontal and vertical twins; a vertical gate lets friendly units through a north-south wall', () => {
+  const G = newGame();
+  const S = G.State, T = 48, D = G.Defs.buildables;
+  for (const [key, w, h] of [['gate', 2, 1], ['gate_v', 1, 2], ['gate_3', 3, 1], ['gate_3_v', 1, 3], ['gate_4', 4, 1], ['gate_4_v', 1, 4]]){
+    const d = D.get(key);
+    assert.equal(d.w + 'x' + d.h, w + 'x' + h, key);
+    assert.ok(d.gate && !d.blocksMovement, key + ' is a gate');
+    assert.equal(D.get(d.rotateTo).rotateTo, key, key + ' rotates to its twin and back');
+  }
+  assert.equal(D.all().filter(d => d.wall).map(d => d.key).join(), 'wood_wall,defensive_wall,reinforced_wall');
+  // A north-south wall with a vertical 1×3 gate in it.
+  const p = field(G, 20, 20);
+  for (let y = p.y - 7; y <= p.y + 9; y++) if (y < p.y || y > p.y + 2) G.Buildings.add('reinforced_wall', p.x, y);
+  const gate = G.Buildings.add('gate_3_v', p.x, p.y);
+  for (let y = p.y; y < p.y + 3; y++) assert.equal(S.grid.passable(p.x, y), true);
+  const sp = find(G, 'utility_spider');
+  G.Units.clearOrders(sp); sp.x = gate.x - 4 * T; sp.y = gate.y;
+  G.rebuildSpatial();
+  G.Orders.move([sp], gate.x + 4 * T, gate.y);
+  G.Sim.run(6);
+  assert.ok(sp.x > gate.x + T, 'spider passed east through the vertical gate: x ' + sp.x + ' gate ' + gate.x);
+  const raider = G.Units.spawn('hostile_machine', gate.x + 20 * T, gate.y);
+  assert.equal(G.Gates.blocksWorld(raider, gate.x, gate.y), true, 'enemies never pass');
 });
 
 test('gate: friendly units pass when it opens; enemies never do, and it shuts while they are near', () => {
