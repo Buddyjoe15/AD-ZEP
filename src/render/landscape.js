@@ -105,7 +105,7 @@
   function ids(){
     if (K) return K;
     const id = k => G.Defs.terrain.get(k).id;
-    K = { WATER: id('water'), DEEP: id('deep_water'), FALLS: id('waterfall'), CLIFF: id('cliff'), CAVE: id('cave'), SLOPE: id('slope'), STAIRS: id('steps'), BRIDGE: id('bridge'), PATH: id('path'), STONES: id('stepping_stones'), BOG: id('bog'), VENT: id('steam_vent'), BARREN: id('barren'), ORE: id('outcrop'), SWAMP: id('swamp') };
+    K = { WATER: id('water'), DEEP: id('deep_water'), FALLS: id('waterfall'), CLIFF: id('cliff'), CAVE: id('cave'), SLOPE: id('slope'), STAIRS: id('steps'), BRIDGE: id('bridge'), PATH: id('path'), STONES: id('stepping_stones'), BOG: id('bog'), VENT: id('steam_vent'), BARREN: id('barren'), ORE: id('outcrop'), SWAMP: id('swamp'), CAVEF: id('cave_floor') };
     return K;
   }
   function fields(grd){
@@ -157,8 +157,11 @@
       let e = l;
       if (t === k.CLIFF || t === k.CAVE){
         const low = Math.min(...[[0, 1], [-1, 1], [1, 1]].map(([dx, dy]) => { const v = lv(x + dx, y + dy); return v < 0 ? l : v; }));
-        if (low < l) e = low;
+        // A cavern's walls are drawn round it by G.Structures, not as faces.
+        const cavern = [[0, 1], [-1, 1], [1, 1]].some(([dx, dy]) => inb(x + dx, y + dy) && tiles[(y + dy) * cols + x + dx] === k.CAVEF);
+        if (low < l && !cavern) e = low;
       }
+      if (t === k.CAVEF) e = l + 1;   // level with the rock round it here (no rims)
       L.E[i] = e;
     }
     // Tiles to shade (bits of `near`): 1 water or a shore, 2 a change of height within reach (two

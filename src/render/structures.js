@@ -87,7 +87,7 @@
     }
     return (a.houses = { list, of });
   }
-  G.Events.on('terrain:changed', () => { const grd = G.State.grid; if (grd && grd.art){ grd.art.houses = null; grd.art.bridgeWay = null; } });
+  G.Events.on('terrain:changed', () => { const grd = G.State.grid; if (grd && grd.art){ grd.art.houses = null; grd.art.bridgeWay = null; grd.art.cavernArt = null; } });
 
   const PAD = 12;   // world px round a house canvas, for the eaves and shadow
   // An intact house: a roof over the whole building, hipped on stone houses (four slopes, the
@@ -326,7 +326,92 @@
     return cv;
   }
 
+  // The floor of a cavern, one tile (gx, gy) at a time, patterned in world coordinates so the
+  // tiles join: dark stone in slabs with cracks between, grit and pebbles, damp hollows where
+  // water seeps, pale mineral streaks.
+  function caveFloorArt(gx, gy){
+    const b = buffer(96, 96);
+    for (let y = 0; y < 96; y++) for (let x = 0; x < 96; x++){
+      const X = gx * 96 + x, Y = gy * 96 + y, n = vn(X, Y, 900), m = vn(X * 0.35, Y * 0.35, 901), dt = dith(X, Y);
+      const cell = vn(X * 0.18, Y * 0.18, 903), crack = Math.abs(cell - 0.5) < 0.006 || Math.abs(vn(X * 0.13 + 50, Y * 0.13, 905) - 0.5) < 0.005;
+      const grit = h3(X >> 1, Y >> 1, 907);
+      // Slabs a shade apart, lit a little on their upper-left edges.
+      const slab = h3(Math.floor(cell * 9), Math.floor(vn(X * 0.13 + 50, Y * 0.13, 905) * 9), 911);
+      let c = slab > 0.66 ? (n + dt * 0.3 > 0.78 ? PX.char1 : PX.char0) : slab > 0.33 ? (n + dt * 0.3 > 0.85 ? PX.char1 : PX.char0) : (n + dt * 0.25 > 0.8 ? PX.char0 : PX.steel0);
+      if (m > 0.72) c = dt < 0.35 ? PX.steel1 : PX.steel0;                     // a damp hollow
+      if (crack) c = PX.outline;
+      else if (grit > 0.992) c = PX.plate0;                                   // pebbles and grit
+      else if (grit > 0.982) c = PX.char1;
+      b.set(x, y, c);
+    }
+    return b.canvas();
+  }
+
+  // Caverns: the rock walls round each cavern floor, drawn along a smooth contour between tile
+  // centres (so the floor's edge runs in curves and diagonals, not tile steps). The wall is
+  // broken rock lit on its upper-left, with a dark lip where it meets the floor and grass
+  // hanging over its outer edge. One canvas per cavern at 2 art px per world px.
+  function caverns(grd){
+    const a = grd.art;
+    if (a.cavernArt) return a.cavernArt;
+    const F = G.Defs.terrain.get('cave_floor').id, cols = grd.cols, tiles = grd.tiles, seen = new Uint8Array(grd.size), list = [];
+    for (let s0 = 0; s0 < grd.size; s0++){
+      if (tiles[s0] !== F || seen[s0]) continue;
+      const st = [s0], cells = []; seen[s0] = 1;
+      let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+      while (st.length){
+        const i = st.pop(), x = i % cols, y = (i / cols) | 0; cells.push(i);
+        x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){ const j = (y + dy) * cols + x + dx; if (grd.inBounds(x + dx, y + dy) && !seen[j] && tiles[j] === F){ seen[j] = 1; st.push(j); } }
+      }
+      list.push({ x: x0 - 1, y: y0 - 1, w: x1 - x0 + 3, h: y1 - y0 + 3, cells: new Set(cells), cv: null });
+    }
+    return (a.cavernArt = list);
+  }
+  function cavernCanvas(C, grd){
+    const T = G.CONFIG.TILE, cols = grd.cols, S2 = T * 2, W = C.w * S2, H = C.h * S2, b = buffer(W, H), seed = C.x * 31 + C.y;
+    const fl = (tx, ty) => C.cells.has(ty * cols + tx) ? 1 : 0;
+    // The floor field at art px (x, y): floor tiles are 1, bilinear between tile centres.
+    const field = (x, y) => {
+      const u = x / S2 - 0.5, v = y / S2 - 0.5, i = Math.floor(u), j = Math.floor(v), fx = u - i, fy = v - j, tx = C.x + i, ty = C.y + j;
+      const p = fl(tx, ty), q = fl(tx + 1, ty), r = fl(tx, ty + 1), t = fl(tx + 1, ty + 1);
+      return p + (q - p) * fx + (r - p) * fy + (p - q - r + t) * fx * fy;
+    };
+    const F = new Float32Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) F[y * W + x] = field(x, y) + (vn(x, y, seed) - 0.5) * 0.22 + (vn(x * 3, y * 3, seed + 1) - 0.5) * 0.08;
+    const at = (x, y) => x < 0 || y < 0 || x >= W || y >= H ? 0 : F[y * W + x];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++){
+      const f = F[y * W + x], X = C.x * S2 + x, Y = C.y * S2 + y, dt = dith(X, Y), n = vn(X, Y, 950);
+      if (f >= 0.5){
+        // The floor: darker towards the walls, where the light from the mouth doesn't reach.
+        if (f < 0.58) b.set(x, y, SHADOW);
+        else if (f < 0.66 && dt < (0.66 - f) * 10) b.set(x, y, SHADOW);
+        continue;
+      }
+      if (f < 0.14){ if (f > 0.1 && dt < 0.5) b.set(x, y, PX.grass1); continue; }   // grass over the outer edge
+      if (f < 0.17){ b.set(x, y, PX.outline); continue; }
+      // The rock: which way it slopes (towards the floor), lit where it faces the upper left.
+      const gx = at(x + 3, y) - at(x - 3, y), gy = at(x, y + 3) - at(x, y - 3), lit = -(gx + gy) * 4;
+      const slab = h3(Math.floor(vn(X * 0.3, Y * 0.3, 952) * 7), Math.floor(vn(X * 0.3 + 40, Y * 0.3, 954) * 7), 956);
+      const crack = Math.abs(vn(X * 0.3, Y * 0.3, 952) * 7 % 1 - 0.5) > 0.46;
+      let tone = 0.45 + lit * 0.5 + (slab - 0.5) * 0.35 + (n - 0.5) * 0.3 + dt * 0.12 - (f > 0.4 ? (f - 0.4) * 3 : 0);
+      let c = tone > 0.8 ? PX.dust5 : tone > 0.58 ? PX.dust4 : tone > 0.38 ? PX.dust3 : tone > 0.2 ? PX.dust2 : PX.dust1;
+      if (crack && f < 0.44) c = PX.char1;
+      if (f > 0.46) c = PX.outline;                           // the dark lip at the floor
+      else if (f < 0.26 && n > 0.72) c = PX.leaf1;           // moss creeping over the top
+      b.set(x, y, c);
+    }
+    return b.canvas();
+  }
+
   G.Structures = {
+    // Draws cave floor tile (gx, gy) at (px, py), S world px square.
+    caveFloor(ctx, gx, gy, px, py, S){
+      const P = G.PixelArt, smooth = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = P.shrinks(ctx, S, 96);
+      ctx.drawImage(caveFloorArt(gx, gy), px, py, S + 0.5, S + 0.5);
+      ctx.imageSmoothingEnabled = smooth;
+    },
     // True when tile i belongs to a house drawn here (its tile art is left as grass).
     houseAt(grd, i){ return houses(grd).of[i] >= 0; },
     // Draws the structures reaching into the chunk of ct × ct tiles at tile (x0, y0).
@@ -356,6 +441,12 @@
         if (H.x + H.w < x0 - 1 || H.y + H.h < y0 - 1 || H.x > x0 + ct || H.y > y0 + ct) continue;
         if (!H.cv) H.cv = H.intact ? roof(H, grd) : ruin(H, grd, Hs.of);
         ctx.drawImage(H.cv, H.x * T - PAD, H.y * T - PAD, H.cv.width / 2, H.cv.height / 2);
+      }
+      // Cavern walls.
+      for (const C of caverns(grd)){
+        if (C.x + C.w < x0 - 1 || C.y + C.h < y0 - 1 || C.x > x0 + ct || C.y > y0 + ct) continue;
+        if (!C.cv) C.cv = cavernCanvas(C, grd);
+        ctx.drawImage(C.cv, C.x * T, C.y * T, C.w * T, C.h * T);
       }
       // Cave mouths.
       for (let y = Math.max(0, y0 - 1); y < Math.min(grd.rows, y0 + ct); y++) for (let x = Math.max(0, x0); x < Math.min(cols, x0 + ct); x++)

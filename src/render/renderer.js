@@ -123,6 +123,7 @@
           if (!far){ g.fillStyle = '#0b1820'; g.font = 'bold 7px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(G.initials(G.Items.name(ctn.items[0])), ctn.x, ctn.y + 0.5); g.textBaseline = 'alphabetic'; }
           continue;
         }
+        if ((ctn.type === 'cave_cache' || ctn.type === 'black_box') && !far){ G.Visuals.drawCaveFind(g, ctn, z, t); continue; }
         const px = ctn.gx * T, py = ctn.gy * T;
         g.fillStyle = ctn.opened ? '#79552f' : '#d3a92e';
         if (far){ g.fillRect(ctn.x - 12, ctn.y - 12, 24, 24); continue; }
@@ -182,6 +183,7 @@
         o.clearRect(0, 0, this.w, this.h);
         o.save(); o.scale(z, z); o.translate(-c.x, -c.y);
       }
+      G.Lighting.draw(o, c, z, this.w, this.h, t);   // night and the lights in it (Genesis), under the orders and selection
       this.drawOverlay(o, visible, z, t, inView, !gpu);
       o.restore();
 
@@ -308,7 +310,7 @@
       for (const b of S.buildings){
         if (b.hp <= 0) continue;
         const s = b.spawner;
-        if (s && s.rally && s.hold) flag(s.rally, G.SpawnerUI.buildingId === b.id ? G.Spawner.spawnPoint(b) : b, G.SpawnerUI.buildingId === b.id, '#e0685f', 'rgba(255,120,100,.8)');
+        if (s && s.rally && s.hold && b.type !== 'cave_nest') flag(s.rally, G.SpawnerUI.buildingId === b.id ? G.Spawner.spawnPoint(b) : b, G.SpawnerUI.buildingId === b.id, '#e0685f', 'rgba(255,120,100,.8)');
         if (b.fabQueue && b.rally) flag(b.rally, b, G.ExpeditionUI.fabOwnerId === b.id, '#5fb7e0', 'rgba(110,190,240,.85)');
       }
       const ship = G.Units.ship();

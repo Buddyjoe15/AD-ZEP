@@ -207,6 +207,47 @@
     if (b.hp < b.maxHp) bar(g, b.x, py - 6, T * 0.8, b.hp / b.maxHp);
   });
 
+  // A hostile nest in a cave: a mound of fused scrap and rock round a pulsing red core, with
+  // cables running out into the floor. It brightens when awake.
+  V.registerBuilding('cave_nest', (g, b, z, t) => {
+    const T = G.CONFIG.TILE, awake = !!(b.spawner && (b.spawner.running || b.spawner.spawned)), pulse = 0.5 + 0.5 * Math.sin(t * (awake ? 5 : 1.5));
+    g.save(); g.translate(b.x, b.y);
+    g.strokeStyle = '#2a1512'; g.lineWidth = 3;
+    for (let k = 0; k < 7; k++){ const a = k * 0.9 + 0.3; g.beginPath(); g.moveTo(Math.cos(a) * 20, Math.sin(a) * 20); g.quadraticCurveTo(Math.cos(a + 0.4) * 34, Math.sin(a + 0.4) * 34, Math.cos(a + 0.2) * 44, Math.sin(a + 0.2) * 44); g.stroke(); }
+    g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(6, 7, 36, 30, 0, 0, TAU); g.fill();
+    const plates = [[-14, -8, 16, '#4a3a33'], [12, -12, 14, '#5b4a40'], [16, 10, 15, '#3d302a'], [-12, 14, 14, '#4f3f36'], [0, 0, 20, '#3a2c27']];
+    for (const [x, y, r, c] of plates){ g.fillStyle = c; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); g.strokeStyle = '#150c0a'; g.lineWidth = 2 / z; g.stroke(); }
+    for (const [x, y, r] of plates){ g.fillStyle = 'rgba(255,220,200,.12)'; g.beginPath(); g.arc(x - r * 0.3, y - r * 0.3, r * 0.45, 0, TAU); g.fill(); }
+    const core = g.createRadialGradient(0, 0, 1, 0, 0, 13);
+    core.addColorStop(0, `rgba(255,${awake ? 120 : 170},90,1)`); core.addColorStop(0.5, `rgba(220,50,40,${0.6 + pulse * 0.4})`); core.addColorStop(1, 'rgba(120,20,20,0)');
+    g.fillStyle = core; g.beginPath(); g.arc(0, 0, 13, 0, TAU); g.fill();
+    for (let k = 0; k < 4; k++){ const a = k * 1.57 + 0.78; g.fillStyle = `rgba(255,90,70,${0.4 + pulse * 0.6})`; g.beginPath(); g.arc(Math.cos(a) * 24, Math.sin(a) * 24, 2.2, 0, TAU); g.fill(); }
+    g.restore();
+    if (b.hp < b.maxHp) bar(g, b.x, b.gy * T - 6, T * 1.4, b.hp / b.maxHp);
+  });
+  // A cave cache (a battered strongbox, gold-banded when rare) or a black-box recorder (an
+  // orange case with a blinking light), shut or opened.
+  V.drawCaveFind = (g, c, z, t) => {
+    g.save(); g.translate(c.x, c.y);
+    g.fillStyle = 'rgba(0,0,0,.4)'; g.fillRect(-13, -6, 30, 20);
+    if (c.type === 'black_box'){
+      g.fillStyle = c.opened ? '#8a4a1c' : '#e0782a'; g.fillRect(-11, -9, 22, 17);
+      g.strokeStyle = '#1a0e06'; g.lineWidth = 2 / z; g.strokeRect(-11, -9, 22, 17);
+      g.fillStyle = '#2a1a10'; g.fillRect(-7, -5, 14, 3); g.fillRect(-7, 0, 14, 2);
+      g.fillStyle = '#f7c08a'; g.fillRect(-11, -9, 22, 2);
+      if (!c.opened && Math.sin(t * 4) > 0){ g.fillStyle = '#ff4a3a'; g.beginPath(); g.arc(7, 4, 2, 0, TAU); g.fill(); }
+    } else {
+      const rare = c.name.startsWith('Rare');
+      g.fillStyle = '#4b3a2a'; g.fillRect(-15, -10, 30, 20);
+      g.fillStyle = c.opened ? '#2a1e14' : '#6e5638'; g.fillRect(-13, -8, 26, c.opened ? 6 : 16);
+      g.fillStyle = rare ? '#e1bd76' : '#7f8b86'; g.fillRect(-15, -2, 30, 3); g.fillRect(-7, -10, 3, 20); g.fillRect(4, -10, 3, 20);
+      g.strokeStyle = '#140d08'; g.lineWidth = 2 / z; g.strokeRect(-15, -10, 30, 20);
+      if (!c.opened){ g.fillStyle = rare ? '#fff0a0' : '#b3bdb5'; g.fillRect(-2, -3, 4, 5); }
+      if (rare && !c.opened){ g.fillStyle = `rgba(255,230,150,${0.25 + 0.2 * Math.sin(t * 3)})`; g.beginPath(); g.arc(0, 0, 20, 0, TAU); g.fill(); }
+    }
+    g.restore();
+  };
+
   V.registerBuilding('sentry_turret', turret({ ring: '#4e6470', head: '#7fa3b5', barrel: '#1b2226', barrels: [0], width: 4, length: 20 }));
   V.registerBuilding('heavy_turret', turret({ ring: '#46525a', head: '#6f8594', barrel: '#151b1e', barrels: [0], width: 10, length: 20 }));
   V.registerBuilding('aa_turret', turret({ ring: '#4a6a80', head: '#8fb8d8', barrel: '#1b2226', barrels: [-4, 4], width: 3, length: 22 }));

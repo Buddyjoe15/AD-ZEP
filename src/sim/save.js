@@ -174,8 +174,17 @@
     return v;
   }
 
-  // Keyed by the schema each step upgrades from; add { 9: migrate_9_to_10 } and so on.
-  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7, 7: migrate_7_to_8, 8: migrate_8_to_9 };
+  // Schema 9 → schema 10: items in containers may be stacks ({ count } instead of durability:
+  // cave caches hold Cave Crystals and Salvaged Alloy). No schema-9 save holds a stack in a
+  // container, so nothing needs changing.
+  function migrate_9_to_10(d){
+    const v = G.copy(d);
+    v.schema = 10;
+    return v;
+  }
+
+  // Keyed by the schema each step upgrades from; add { 10: migrate_10_to_11 } and so on.
+  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7, 7: migrate_7_to_8, 8: migrate_8_to_9, 9: migrate_9_to_10 };
 
   // Applies the steps in order until the save reaches G.SAVE_SCHEMA. A current save is
   // returned as is; anything newer or unknown is rejected.

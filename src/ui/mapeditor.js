@@ -21,7 +21,8 @@
     ['steam_vent', 'Steam vent'], ['termite_mound', 'Termite mound'], ['burrow', 'Animal burrow'], ['alien_flora', 'Alien vegetation'],
     ['barren', 'Barren ground'], ['rubble', 'Rubble'], ['log_pile', 'Log pile'], ['sawhorse', 'Sawhorse'], ['log_wall', 'Log wall'],
     // Genesis terrain.
-    ['stepping_stones', 'Stepping stones']
+    ['stepping_stones', 'Stepping stones'],
+    ['cave_floor', 'Cave floor']
   ];
   const mapName = key => (G.MapGen.types[key] && G.MapGen.types[key].name) || key;
 

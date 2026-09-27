@@ -116,6 +116,15 @@ GW.Defs.buildables.defineAll({
     behaviors: [{ type: 'extractor', stockCap: 300 }], power: { demand: 5, when: 'extracting' },
     description: 'Primary automated mining structure. Placed over any resource deposit, it switches its mining system to the material underneath (metal, copper, uranium…) and extracts it into a 300-unit stockpile that Utility Spiders haul to the ship. Draws 5 power while extracting.'
   },
+  // A hostile nest deep in a cave (Genesis, G.Caves): it wakes when friendly units come near,
+  // sends out its guards, and keeps making more until it is destroyed.
+  cave_nest: {
+    name: 'Hostile Nest', w: 2, h: 2, hp: 900, buildTime: 10, cost: {}, symbol: 'NE', color: '#b8483f',
+    team: 'red', debugOnly: true, armor: 0.2,
+    spawner: { unit: 'hostile_machine', rate: 0.5, amount: 10, hold: true },
+    behaviors: [{ type: 'spawner' }, { type: 'caveNest', wakeTiles: 9, releaseTiles: 6 }],
+    description: 'A nest of Hostile Autonomous Machines in the dark of a cave. It wakes when friendly units come within nine tiles, and its machines attack once they come within six. Destroy it to stop them.'
+  },
   hostile_fabricator: {
     name: 'Hostile Fabricator', w: 2, h: 2, hp: 1500, buildTime: 10, cost: {}, symbol: 'HF', color: '#e0685f',
     team: 'red', debugOnly: true,

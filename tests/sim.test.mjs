@@ -771,17 +771,64 @@ test('genesis villages and bridges: buildings clear of cliffs and water, paths t
   }
 });
 
+test('genesis caves: caverns behind the mouths, with caches, nests and recordings that work', () => {
+  const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
+  let caves = 0, nests = 0, recs = 0, rare = 0, medium = 0;
+  for (const seed of [72491, 1, 2, 3]){
+    const grid = G.MapGen.genesis(seed), art = grid.art, cols = grid.cols;
+    for (const c of art.caverns){
+      caves++; if (c.nest) nests++; if (c.recording) recs++; if (c.chest.rare) rare++; if (c.size === 'medium') medium++;
+      // The mouth is the way in: walkable, and the whole cavern is reached from outside it.
+      const mouth = c.y * cols + c.x;
+      assert.equal(grid.tiles[mouth], id('cave_floor'), 'the mouth opens');
+      assert.ok(grid.passable(c.x, c.y + 1), 'ground outside the mouth');
+      const seen = new Set([mouth]), q = [mouth];
+      while (q.length){ const i = q.pop(), x = i % cols, y = (i / cols) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){ const j = (y + dy) * cols + x + dx; if (!seen.has(j) && grid.tiles[j] === id('cave_floor')){ seen.add(j); q.push(j); } } }
+      assert.equal(seen.size, c.cells, 'one connected cavern');
+      for (const p of [c.chest, c.recording, c.nest].filter(Boolean)) assert.ok(seen.has(p.y * cols + p.x), 'contents inside the cavern');
+      // Walled in by rock: every floor tile's neighbours are floor or cliff (or the way out).
+      for (const i of seen){ const x = i % cols, y = (i / cols) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1]]){ const t = grid.tiles[(y + dy) * cols + x + dx]; assert.ok(t === id('cave_floor') || t === id('cliff'), 'walled at ' + x + ',' + y); } }
+    }
+  }
+  assert.ok(caves >= 8 && medium >= 2 && caves - medium >= 2, `small and medium caves: ${caves}, ${medium} medium`);
+  assert.ok(nests >= 2 && recs >= 2 && rare >= 2 && rare < caves, `nests ${nests}, recordings ${recs}, rare caches ${rare}`);
+
+  // In a game: a cache in every cave, recorders and nests where the map says; a nest sleeps
+  // until a friendly unit comes near, then makes its guards; a recorder plays when opened.
+  const S = G.Scenario.newGame({ seed: 72491, map: 'genesis' });
+  const art = S.grid.art, caches = S.containers.filter(c => c.type === 'cave_cache'), boxes = S.containers.filter(c => c.type === 'black_box');
+  assert.equal(caches.length, art.caverns.length);
+  assert.ok(caches.every(c => c.items.length >= 2 && !c.opened));
+  assert.ok(caches.filter(c => c.name.startsWith('Rare')).every(c => c.items.some(i => ['prototype_visor', 'expedition_pack'].includes(i.key))), 'rare caches hold rare gear');
+  const nest = S.buildings.find(b => b.type === 'cave_nest');
+  assert.ok(nest, 'a nest');
+  S.paused = false;
+  G.Sim.run(3);
+  assert.ok(!nest.spawner.spawned, 'asleep while nobody is near');
+  const hero = G.Units.hero(); hero.x = nest.x; hero.y = nest.y + G.CONFIG.TILE * 4; G.rebuildSpatial();
+  G.Sim.run(6);
+  assert.ok(nest.spawner.spawned > 0, 'awake and making guards');
+  assert.equal(nest.spawner.hold, false, 'guards released on the intruder');
+  if (boxes.length){
+    const box = boxes[0], before = S.expedition.log.length;
+    box.opened = true; G.Events.emit('container:opened', box);
+    assert.ok(S.expedition.log.length > before && /Black box/.test(S.expedition.log[0]), 'the recording plays in the log');
+  }
+  G.Save.validate(G.Save.serialize());
+});
+
 test('genesis plants free-standing trees in thick and thin clusters, off the tile centres, with stumps and fallen trees among them', () => {
   const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
   const grid = G.MapGen.genesis(72491), art = grid.art, tr = art.trees, cols = grid.cols;
   // Pinned: saves of this map type rebuild their terrain and trees from the seed.
   assert.equal(art.generator, 'genesis');
-  assert.equal(fnv(grid.tiles), 2115186325, 'genesis terrain unchanged');
-  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 2223174621, 'genesis trees unchanged');
+  assert.equal(fnv(grid.tiles), 3607719926, 'genesis terrain unchanged');
+  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 3467667148, 'genesis trees unchanged');
   const again = G.MapGen.genesis(72491);
   assert.equal(fnv(again.tiles), fnv(grid.tiles), 'same seed, same map');
   assert.equal(fnv(G.MapGen.woodlands(72491).tiles), 1031677493, 'woodlands itself is untouched');
-  assert.equal(fnv(art.level), 4273338452, 'the Woodlands landscape underneath');
+  assert.equal(fnv(G.MapGen.woodlands(72491).art.level), 4273338452, 'the Woodlands landscape underneath is untouched');
+  assert.equal(fnv(art.level), 833219561, 'genesis heights unchanged (caverns are cut a level down)');
   assert.ok(tr.count > 20000, 'a forested map: ' + tr.count);
 
   // Trunks stand anywhere in their tile, not on its centre.

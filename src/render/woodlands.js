@@ -11,7 +11,7 @@
     CLIFF: 'cliff', SLOPE: 'slope', STAIRS: 'steps', CAVE: 'cave', ROCKS: 'rock', MOSSROCK: 'mossy_rock',
     CRYSTAL: 'crystal', ORE: 'outcrop', VENT: 'steam_vent', MOUND: 'termite_mound', BURROW: 'burrow', PATH: 'path',
     WALL: 'wall', FLOOR: 'floor', DOOR: 'door', RUBBLE: 'rubble', LOGS: 'log_pile', SAWHORSE: 'sawhorse',
-    PAD: 'clearing', LOGWALL: 'log_wall', FOREST: 'forest', STONES: 'stepping_stones'
+    PAD: 'clearing', LOGWALL: 'log_wall', FOREST: 'forest', STONES: 'stepping_stones', CAVEF: 'cave_floor'
   };
   const K = {}, RGB = [];
   for (const [k, key] of Object.entries(KEYS)) K[k] = G.Defs.terrain.get(key).id;
@@ -154,6 +154,8 @@
   function drawTile(ctx, i, t, gx, gy, px, py, S){
     if (t === K.LOG && art && art.trees && G.TreeArt.logOn(grid, i)) t = K.FOREST;   // a Genesis fallen tree lies here (G.TreeArt)
     const gen = genesis();
+    // A cavern's floor (its walls: G.Structures).
+    if (gen && t === K.CAVEF){ G.Structures.caveFloor(ctx, gx, gy, px, py, S); return; }
     if (gen && (CONTOUR.has(t) || GEN_GRASS.has(t))){ grassBase(ctx, gx, gy, px, py, S); return; }
     if (gen && GEN_DUST.has(t)){ dustBase(ctx, gx, gy, px, py, S); return; }
     if (pix){ const str = pixelTile(i, t, gx, gy); if (str){ blit(ctx, str, px, py, S); return; } }

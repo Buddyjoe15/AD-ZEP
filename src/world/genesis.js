@@ -733,6 +733,109 @@
     return { props, barns };
   }
 
+
+  // Caves: behind every cave mouth a cavern is cut into the high ground, a short passage
+  // opening into a small chamber or a medium one with a side pocket. Its floor ('cave_floor')
+  // lies a level below the rock round it, which becomes cliff, so the walls are drawn as rock
+  // faces; the mouth itself becomes floor, the way in. grid.art.caverns lists each cavern and
+  // where its contents go (placed when a game starts, G.Caves): a chest (some rare), and in
+  // some a hostile nest or a recording. Crystals and glowing fungi grow inside (props).
+  function caverns(grid, s){
+    const W = grid.cols, H = grid.rows, N = W * H, TILE = G.CONFIG.TILE, tiles = grid.tiles, lvl = grid.art.level, id = k => G.Defs.terrain.get(k).id;
+    const CAVE = id('cave'), FLOOR = id('cave_floor'), CLIFF = id('cliff');
+    // What the rock round a cavern may be: any dry, natural ground (not water, paths, bridges,
+    // buildings or another feature's tiles).
+    const NOT = new Set(['water', 'deep_water', 'waterfall', 'bog', 'swamp', 'reeds', 'path', 'bridge', 'steps', 'slope', 'wall', 'floor', 'door', 'log_wall', 'cave', 'cave_floor', 'stepping_stones', 'clearing', 'log_pile', 'sawhorse', 'fallen_tree', 'steam_vent', 'termite_mound'].map(id));
+    const SOLID = { has: t => !NOT.has(t) };
+    const inb = (x, y) => x >= 1 && y >= 1 && x < W - 1 && y < H - 1;
+    const taken = new Uint8Array(N), out = [], props = [];
+    const prop = (px, py, kind, z, v) => props.push({ x: Math.round(px), y: Math.round(py), kind, z, v });
+    for (let m = 0; m < N; m++){
+      if (tiles[m] !== CAVE) continue;
+      const mx = m % W, my = (m / W) | 0, L = lvl[m], below = m + W;
+      if (!inb(mx, my + 1) || NOT.has(tiles[below]) && tiles[below] !== id('path') || lvl[below] >= L) continue;
+      const h = q => hash(mx, my, s + q);
+      // Try the size it was dealt, then smaller, until the rock has room for it.
+      const tries = [];
+      for (let size = h(1) < 0.45 ? 1 : 0; size >= 0; size--) for (const shift of [0, -3, 3, -6, 6]) for (const shorter of [0, 1]) tries.push([size, shift, shorter]);
+      for (const [size, shift, shorter] of tries){
+        const R = (size ? 5 + h(3) * 1.8 : 2.8 + h(3) * 0.9) - shorter * 0.6, tl = Math.max(1, 2 + Math.floor(h(5) * 2) + size - shorter);
+        const cx = mx + Math.round((h(7) - 0.5) * 4) + shift, cy = my - tl - Math.ceil(R);
+        const cells = new Set(), add = (x, y) => { if (inb(x, y)) cells.add(y * W + x); else cells.add(-1); };
+        // The passage in, wider in a medium cave, bending towards the chamber.
+        // (Each row joins the one below side by side, so the way through never goes corner to corner.)
+        for (let k = 1, px = mx; k <= tl + 1; k++){
+          const x = Math.round(mx + (cx - mx) * k / (tl + 1));
+          for (let xx = Math.min(px, x); xx <= Math.max(px, x); xx++) add(xx, my - k);
+          if (size) add(x + (h(9) < 0.5 ? 1 : -1), my - k);
+          px = x;
+        }
+        const blob = (bx, by, r, q) => {
+          for (let y = Math.floor(by - r - 2); y <= by + r + 2; y++) for (let x = Math.floor(bx - r - 2); x <= bx + r + 2; x++){
+            const a = Math.atan2(y - by, x - bx), wob = 0.78 + 0.44 * vnoise(Math.cos(a) * 1.6 + q, Math.sin(a) * 1.6 + q, s + 1101);
+            if (Math.hypot(x - bx, (y - by) * 1.15) < r * wob) add(x, y);
+          }
+        };
+        blob(cx, cy, R, mx * 0.37);
+        if (size){ const a = h(11) * Math.PI * 2, d = R * 0.95; blob(cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.7, R * 0.55, my * 0.41); }
+        if (cells.has(-1)) continue;
+        // The rock must be whole: every cell and the ring round it on the high ground, clear of
+        // water, paths, buildings and other caves (the passage's first step joins the mouth).
+        let ok = true;
+        for (const i of cells){
+          const x = i % W, y = (i / W) | 0;
+          for (let dy = -1; dy <= 1 && ok; dy++) for (let dx = -1; dx <= 1; dx++){
+            const j = (y + dy) * W + x + dx;
+            if (j === m || j === below || cells.has(j)) continue;
+            if (j === m - 1 || j === m + 1) continue;   // the cliff either side of the mouth
+            if (!SOLID.has(tiles[j]) || lvl[j] < L || taken[j]){ ok = false; break; }
+          }
+          if (!ok) break;
+        }
+        if (!ok) continue;
+        cells.add(m);
+        // A worn way in: path outside the mouth, so nothing grows across it.
+        for (const j of [below, below + W]) if (j < N && !NOT.has(tiles[j]) && lvl[j] === lvl[below]){ tiles[j] = id('path'); grid.art.detail[j] = 0; }
+        for (const i of cells){ tiles[i] = FLOOR; lvl[i] = L - 1; taken[i] = 1; grid.art.detail[i] = 0; }
+        for (const i of cells){
+          const x = i % W, y = (i / W) | 0;
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){ const j = (y + dy) * W + x + dx; if (!cells.has(j) && lvl[j] >= L){ tiles[j] = CLIFF; taken[j] = 1; grid.art.detail[j] = 0; } }
+        }
+        // What is in it: the chest in the deepest spot, a nest in the chamber (on a 2 × 2 of
+        // floor), a recording somewhere between. Distances by walking from the mouth.
+        const dist = new Map([[m, 0]]), q = [m];
+        while (q.length){ const i = q.shift(), x = i % W, y = (i / W) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){ const j = (y + dy) * W + x + dx; if (cells.has(j) && !dist.has(j)){ dist.set(j, dist.get(i) + 1); q.push(j); } } }
+        const inner = [...cells].filter(i => [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dy]) => cells.has(i + dy * W + dx)));
+        const deepest = inner.reduce((b, i) => dist.get(i) > dist.get(b) ? i : b, inner[0] ?? m);
+        const at = i => ({ x: i % W, y: (i / W) | 0 });
+        const cave = { x: mx, y: my, size: size ? 'medium' : 'small', cells: cells.size, chest: { ...at(deepest), rare: h(13) < (size ? 0.6 : 0.25) }, nest: null, recording: null };
+        const block = i => [0, 1, W, W + 1].every(o => cells.has(i + o) && i + o !== deepest) && [-1, 2, -W, 2 * W, -W + 1, 2 * W + 1, W - 1, W + 2].every(o => cells.has(i + o));
+        if (h(15) < (size ? 0.7 : 0.3)){
+          const spots = inner.filter(block).sort((a, b) => Math.abs(dist.get(a) - dist.get(deepest) * 0.6) - Math.abs(dist.get(b) - dist.get(deepest) * 0.6));
+          if (spots.length) cave.nest = at(spots[0]);
+        }
+        if (h(17) < 0.5){
+          const spots = inner.filter(i => i !== deepest && (!cave.nest || Math.hypot(i % W - cave.nest.x, ((i / W) | 0) - cave.nest.y) > 3) && dist.get(i) > 3);
+          if (spots.length) cave.recording = at(spots[Math.floor(h(19) * spots.length)]);
+        }
+        out.push(cave);
+        // Crystals and glowing fungi on the floor by the walls, pebbles and bones here and there.
+        for (const i of cells){
+          const x = i % W, y = (i / W) | 0, r = hash(x, y, s + 1121), wall = !inner.includes(i);
+          if (i === deepest || (cave.nest && Math.abs(x - cave.nest.x - 0.5) < 2 && Math.abs(y - cave.nest.y - 0.5) < 2)) continue;
+          const px = x * TILE + TILE * (0.2 + hash(x, y, s + 1123) * 0.6), py = y * TILE + TILE * (0.2 + hash(x, y, s + 1127) * 0.6);
+          if (wall && r < 0.28) prop(px, py, 'crystal', r < 0.08 ? 1 : 0, Math.floor(hash(x, y, s + 1129) * 256));
+          else if (r < 0.4) prop(px, py, 'mushrooms', 0, Math.floor(hash(x, y, s + 1131) * 256));
+          else if (r < 0.52) prop(px, py, 'pebbles', 0, Math.floor(hash(x, y, s + 1133) * 256));
+          else if (r < 0.56) prop(px, py, 'bones', 0, Math.floor(hash(x, y, s + 1137) * 256));
+        }
+        break;
+      }
+    }
+    grid.touch();
+    return { caves: out, props };
+  }
+
   function genesis(seed, opts = {}){
     const grid = G.MapGen.woodlands(seed, opts);
     grid.art.generator = 'genesis';
@@ -741,7 +844,9 @@
     grid.art.bridges = bridges(grid, (seed | 0) ^ 0xb1d);
     const town = towns(grid, (seed | 0) ^ 0x70e);
     grid.art.barns = town.barns;
-    grid.art.trees = plant(grid, (seed | 0) ^ 0x5eed, town.props);
+    const underground = caverns(grid, (seed | 0) ^ 0xca7e);
+    grid.art.caverns = underground.caves;
+    grid.art.trees = plant(grid, (seed | 0) ^ 0x5eed, [...town.props, ...underground.props]);
     grid.art.fords = fords(grid, (seed | 0) ^ 0xf0d);
     return grid;
   }

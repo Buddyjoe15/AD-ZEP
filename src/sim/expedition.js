@@ -69,6 +69,7 @@
         }
       }
       E.waveAt = rules.firstWave;
+      G.Caves.populate();
     },
     // Tile near (wx, wy) where a deposit can take a 3×3 Mine Building: the whole block is
     // open, reachable ground away from other deposits.
@@ -92,8 +93,9 @@
       const S = G.State, sh = G.Units.ship(), T = G.CONFIG.TILE, north = new Set(R().testNorth || []);
       const small = d => d.w <= 2 && d.h <= 2 && !north.has(d.key), large = d => !small(d) && !north.has(d.key);
       const entries = [
-        ...G.Defs.buildables.all().filter(d => !d.placeOnNode && small(d)).map(d => ({ kind: 'building', key: d.key })),
-        ...G.Defs.items.keys().map(key => ({ kind: 'item', key }))
+        // (Not the cave nest, which would wake beside the ship, nor the recordings, found in caves.)
+        ...G.Defs.buildables.all().filter(d => !d.placeOnNode && small(d) && d.key !== 'cave_nest').map(d => ({ kind: 'building', key: d.key })),
+        ...G.Defs.items.keys().filter(key => G.Defs.items.get(key).kind !== 'recording').map(key => ({ kind: 'item', key }))
       ];
       const cols = 4, x0 = sh.gx - 16, y0 = sh.gy + 1, rows = Math.ceil(entries.length / cols);
       if (G.MapGen.types[S.map].clearLanding) this.editTerrain(x0 - 1, y0 - 2, cols * 3 + 1, rows * 3 + 6);
