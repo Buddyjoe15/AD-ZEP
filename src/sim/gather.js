@@ -5,11 +5,17 @@
    Deposit nodes (mines): a 1×1 tile that does nothing until a Mine Building is built
    centred over it. The building's `extractor` behaviour slowly fills its own stockpile
    from the deposit; Spiders assigned to the building load from that stockpile and haul it
-   to the ship. Deposits are effectively endless. */
+   to the ship. Deposits are effectively endless.
+   Trees: a unit whose `gathers` lists 'tree' (the Salvage Crawler) can be sent to saw down a
+   tree, stump or fallen tree on a Genesis map (G.Trees). It keeps the gather order, with
+   `nodeId` 'tree-<index>', until the thing is destroyed; a tree leaves a sawn stump. */
 (function(){
   'use strict';
   const G = GW;
   const REPLAN = 0.8, DROPOFF_RADIUS = 70, LOAD_RATE = 60, MIN_LOAD = 20;
+  // How close a Crawler walks up to what it saws, and how far its telescoping saw arms reach
+  // from its centre when it can't get that close, in world px.
+  const SAW_CLOSE = 52, SAW_REACH = 90;
 
   const stockTotal = b => Object.values(b.stock || {}).reduce((a, v) => a + (Number(v) || 0), 0);
 
@@ -107,6 +113,42 @@
       return total;
     },
     stop(u){ u.command = 'idle'; u.haulState = 'idle'; u.nodeId = null; u.mineId = null; },
+    // ---- Sawing down trees ----
+    canChop(u){ return G.Units.can(u, 'gather') && (G.Defs.units.get(u.type).gathers || []).includes('tree'); },
+    // The tree index a unit is sawing, or -1.
+    chopTarget(u){ return u.command === 'gather' && typeof u.nodeId === 'string' && u.nodeId.startsWith('tree-') ? Number(u.nodeId.slice(5)) : -1; },
+    // Sends every unit in `us` that can saw to tree k. Returns the units that took the order.
+    chop(us, k){
+      if (!G.Trees.present(k)) return [];
+      const done = us.filter(u => u.hp > 0 && this.canChop(u));
+      for (const u of done){
+        G.Units.clearOrders(u);
+        u.command = 'gather'; u.nodeId = 'tree-' + k; u.mineId = null; u.haulState = 'toNode'; u.commandNextPath = 0;
+      }
+      if (done.length) G.notify(`${done.length === 1 ? done[0].name : done.length + ' units'} sawing down a ${G.Trees.kind(k) === 'log' ? 'fallen tree' : G.Trees.kind(k).startsWith('stump') ? 'stump' : 'tree'}`);
+      else if (us.length) G.notify('Only a Salvage Crawler can saw down trees');
+      return done;
+    },
+    updateChop(u, dt){
+      const S = G.State, k = this.chopTarget(u);
+      if (!(k >= 0) || !G.Trees.present(k)){ this.stop(u); return; }
+      const p = G.Trees.nearestPoint(k, u.x, u.y), d = Math.hypot(p.x - u.x, p.y - u.y);
+      // Walk up close; the route ends at the nearest open ground when the tree stands in a
+      // thicket. Saw from there if it is within the arms' reach, else give up.
+      if (u.haulState === 'toNode' && d > SAW_CLOSE){ u.haulState = 'approach'; S.paths.request(u, p.x, p.y); return; }
+      if (u.haulState === 'approach' && d > SAW_CLOSE && !G.Units.navIdle(u)) return;
+      if (d > SAW_REACH){
+        if (u.haulState === 'collecting'){ u.haulState = 'toNode'; return; }   // pushed away: walk back
+        G.notify(u.name + " can't reach that " + (G.Trees.kind(k) === 'log' ? 'fallen tree' : 'tree')); this.stop(u); return;
+      }
+      u.path = []; u.pathIndex = 0; u.haulState = 'collecting';
+      u.heading = Math.atan2(p.y - u.y, p.x - u.x);
+      const def = G.Defs.units.get(u.type);
+      if (G.Trees.damage(k, G.TREES.CHOP_RATE * (def.gatherRate || 1) * dt, 'cut')){
+        G.notify(u.name + (G.Trees.state(k) === G.Trees.GONE ? ' cleared it away' : ' felled a tree'));
+        this.stop(u);
+      }
+    },
     // Shared return leg: walk to the dropoff, unload, then `next` decides what follows.
     returnLeg(u, next){
       const S = G.State, rp = this.dropoffPoint(u);
@@ -122,6 +164,7 @@
     update(u, dt){
       if (u.command !== 'gather') return;
       if (u.mineId) return this.updateMine(u, dt);
+      if (this.chopTarget(u) >= 0) return this.updateChop(u, dt);
       if (!u.nodeId){ this.stop(u); return; }
       const S = G.State, node = this.node(u.nodeId), def = this.def(node);
       if (!node || !def){ this.stop(u); return; }

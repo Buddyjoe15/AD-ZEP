@@ -8,7 +8,8 @@
      fabricate  – owns a production queue (see `fabricator`)
      dropoff    – accepts hauled cargo
      command    – the Commander; losing it ends the expedition
-   Gatherers may set `gathers` (the node kinds they take, default all) and `gatherRate` (a
+   Gatherers may set `gathers` (the node kinds they take, default scavenge and deposit; add
+   'tree' to let them saw down trees, stumps and fallen trees on Genesis maps) and `gatherRate` (a
    multiplier on a scavenge node's rate, default 1). `beam: false` draws no laser while
    gathering, for units that cut with tools instead.
    `flying` units are air targets: only anti-air turrets and Missile Batteries (and other
@@ -39,7 +40,7 @@ GW.Defs.units.defineAll({
   },
   salvage_crawler: {
     name: 'Salvage Crawler', hp: 700, speed: 100, radius: 17, sight: 640, cargoCapacity: 400,
-    capabilities: ['gather', 'carry'], gathers: ['scavenge'], gatherRate: 1.5, beam: false, visual: 'salvage'   // saws wrecks apart: salvage only
+    capabilities: ['gather', 'carry'], gathers: ['scavenge', 'tree'], gatherRate: 1.5, beam: false, visual: 'salvage'   // saws wrecks apart, and trees down: salvage only
   },
   hostile_machine: {
     name: 'Hostile Autonomous Machine', team: 'red', hp: 65, speed: 118, radius: 10, range: 140, damage: 6, reload: 0.72, sight: 480,

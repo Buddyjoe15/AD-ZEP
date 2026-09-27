@@ -165,8 +165,17 @@
     return v;
   }
 
-  // Keyed by the schema each step upgrades from; add { 8: migrate_8_to_9 } and so on.
-  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7, 7: migrate_7_to_8 };
+  // Schema 8 → schema 9: saves record the damage done to trees on maps with free-standing
+  // trees (Genesis): [index, state, damage] per tree touched. Older saves touched none.
+  function migrate_8_to_9(d){
+    const v = G.copy(d);
+    v.schema = 9;
+    v.trees = [];
+    return v;
+  }
+
+  // Keyed by the schema each step upgrades from; add { 9: migrate_9_to_10 } and so on.
+  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7, 7: migrate_7_to_8, 8: migrate_8_to_9 };
 
   // Applies the steps in order until the save reaches G.SAVE_SCHEMA. A current save is
   // returned as is; anything newer or unknown is rejected.
@@ -247,6 +256,9 @@
       return typeof b.shieldOn === 'boolean' && num(b.shield) && b.shield >= 0 && b.shield <= sh.capacity;
     })) fail('building shield');
     if (!d.terrainEdits.every(e => [e.x, e.y, e.w, e.h, e.t].every(int) && e.w >= 0 && e.h >= 0 && e.w * e.h <= 1 << 20)) fail('terrain edit');
+    // Tree damage: [index, state (0 standing, 1 sawn stump, 2 snapped stump, 3 gone), damage], each tree once.
+    if (!list(d.trees, 1 << 20) || !d.trees.every(t => Array.isArray(t) && t.length === 3 && int(t[0]) && t[0] >= 0 && int(t[1]) && t[1] >= 0 && t[1] <= 3 && num(t[2]) && t[2] >= 0)) fail('trees');
+    if (new Set(d.trees.map(t => t[0])).size !== d.trees.length) fail('trees: a tree listed twice');
     const e = d.expedition;
     if (!e) fail('expedition');
     for (const k of ['world', 'readiness', 'repairs', 'elementP', 'elapsed', 'upgrades', 'auto', 'scans', 'built', 'waveAt']) if (!num(e[k]) || e[k] < 0) fail('expedition ' + k);
@@ -264,6 +276,7 @@
     G.setWorldSize(d.worldSize);
     const S = G.Scenario.createWorld(d.seed, { slot, map: d.map, landing: d.landing });
     for (const e of d.terrainEdits){ S.grid.fill(e.x, e.y, e.w, e.h, e.t); S.terrainEdits.push({ ...e }); }
+    G.Trees.apply(d.trees);   // after the edits, which already free the tiles of destroyed trees
     Object.assign(S, {
       time: d.time, nextId: d.nextId, heroId: d.heroId, shipId: d.shipId,
       formation: G.FORMATIONS.includes(d.formation) ? d.formation : 'square', formationAngle: num(d.formationAngle) ? d.formationAngle : 0,
@@ -303,7 +316,7 @@
         camera: { x: S.camera.x, y: S.camera.y, z: S.camera.z }, formation: S.formation, formationAngle: S.formationAngle,
         resources: G.copy(S.resources), inventory: G.copy(S.inventory), units,
         buildings: G.copy(S.buildings), constructionSites: G.copy(S.constructionSites), containers: G.copy(S.containers),
-        resourceNodes: G.copy(S.resourceNodes), terrainEdits: G.copy(S.terrainEdits || []), expedition: G.copy(S.expedition)
+        resourceNodes: G.copy(S.resourceNodes), terrainEdits: G.copy(S.terrainEdits || []), trees: G.Trees.serialize(), expedition: G.copy(S.expedition)
       };
     },
     // Rebuilds the world from save data. Throws, leaving the current game as it was, if

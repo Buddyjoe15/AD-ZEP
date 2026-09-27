@@ -260,6 +260,10 @@
   // Mining / construction beams from Utility Spiders.
   V.laserTarget = function(u){
     if (u.hp <= 0 || !G.Units.can(u, 'build') && !G.Units.can(u, 'gather')) return null;
+    if (u.command === 'gather' && u.haulState === 'collecting' && G.Gather.chopTarget(u) >= 0){
+      const k = G.Gather.chopTarget(u);
+      if (G.Trees.present(k)){ const p = G.Trees.nearestPoint(k, u.x, u.y); return { x: p.x, y: p.y, mode: 'mine' }; }
+    }
     if (u.command === 'gather' && u.haulState === 'collecting'){
       const n = G.Gather.node(u.nodeId), d = n && G.Defs.nodes.get(n.type);
       if (n && n.remaining > 0 && Math.hypot(u.x - n.x, u.y - n.y) <= d.range + 0.1) return { x: n.x, y: n.y, mode: 'mine' };

@@ -109,6 +109,18 @@ export function representativeGame(){
   const wall = G.Buildings.add('defensive_wall', wallAt.x, wallAt.y);
   const chestAt = S.grid.nearestOpen(sh.gx + 10, sh.gy + sh.h + 6, 10);
   G.Buildings.add('chest', chestAt.x, chestAt.y).items.push(G.Items.create('field_cap'));
+  // A Genesis map under the game, with trees blown down by a blast (snapped stumps, their
+  // tiles freed as terrain edits), one tree only damaged, and a Salvage Crawler sawing another.
+  if (!G.MapEdit.loadMap('genesis', S.seed)) throw new Error('representative game: could not load Genesis');
+  const near = (x, y, ok) => { let best = -1, bd = Infinity; for (let k = 0; k < G.Trees.count(); k++){ if (!G.Trees.present(k) || !ok(k)) continue; const p = G.Trees.pos(k), d = (p.x - x) ** 2 + (p.y - y) ** 2; if (d < bd){ bd = d; best = k; } } return best; };
+  const standing = k => G.Trees.state(k) === G.Trees.ALIVE && G.TREES.KINDS.includes(G.Trees.kind(k)) && G.Trees.maxHp(k) > 100;
+  const blastAt = G.Trees.pos(near(sh.x, sh.y + 900, standing));
+  if (!G.Trees.blast(blastAt.x, blastAt.y, 70, 400)) throw new Error('representative game: the blast felled nothing');
+  G.Trees.damage(near(sh.x - 900, sh.y, standing), 40);
+  const sawn = near(sh.x + 900, sh.y, standing), sp = G.Trees.pos(sawn);
+  const cp = G.openPoint(sp.x, sp.y), crawler = G.Units.spawn('salvage_crawler', cp.x, cp.y);
+  if (!G.Gather.chop([crawler], sawn).length) throw new Error('representative game: chop order failed');
+
   // Map Editor strokes: a pond (impassable, painted around nothing) and a path.
   G.MapEdit.paint(sh.gx + 20, sh.gy - 14, 5, G.TT.WATER);
   G.MapEdit.paint(sh.gx + 12, sh.gy - 14, 3, G.TT.PATH);

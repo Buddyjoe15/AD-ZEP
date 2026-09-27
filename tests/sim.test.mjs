@@ -810,10 +810,86 @@ test('a genesis game starts, plays and survives a save', () => {
   const tiles = Array.from(S.grid.tiles), trees = fnv(new Uint8Array(S.grid.art.trees.x.buffer));
   const save = G.Save.serialize();
   assert.equal(save.map, 'genesis');
-  assert.equal(JSON.stringify(save).includes('"trees"'), false, 'trees are rebuilt from the seed, not saved');
+  assert.deepEqual(Array.from(save.trees), [], 'trees are rebuilt from the seed; only damage to them is saved');
   G.Save.restore(save, 1);
   assert.deepEqual(Array.from(G.State.grid.tiles), tiles);
   assert.equal(fnv(new Uint8Array(G.State.grid.art.trees.x.buffer)), trees, 'trees rebuilt from the seed');
+});
+
+test('genesis trees, stumps and fallen trees can be blown up and sawn down; saves keep the damage', () => {
+  const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
+  G.Scenario.newGame({ seed: 72491, map: 'genesis' });
+  const S = G.State, grid = S.grid, tr = grid.art.trees, Tr = G.Trees, sh = G.Units.ship();
+  S.paused = false;
+  // The nearest thing to the ship that matches `ok`.
+  const near = ok => { let best = -1, bd = Infinity; for (let k = 0; k < tr.count; k++){ if (!Tr.present(k) || !ok(k)) continue; const d = (tr.x[k] - sh.x) ** 2 + (tr.y[k] - sh.y) ** 2; if (d < bd){ bd = d; best = k; } } return best; };
+  const kind = k => G.TREES.ALL[tr.kind[k]], standing = k => Tr.state(k) === Tr.ALIVE && G.TREES.KINDS.includes(kind(k));
+
+  // A blast snaps a large tree: it leaves a snapped stump and frees its tile, recorded as a terrain edit.
+  const big = near(k => standing(k) && tr.size[k] === 2 && kind(k) !== 'snag');
+  const tile = tr.tile[big], edits = S.terrainEdits.length;
+  assert.equal(grid.tiles[tile], id('tree'));
+  assert.equal(Tr.blast(tr.x[big], tr.y[big], 20, 50), 0, 'one hit only dents it');
+  assert.ok(Tr.hp(big) < Tr.maxHp(big) && Tr.state(big) === Tr.ALIVE);
+  assert.ok(Tr.blast(tr.x[big], tr.y[big], 20, 1000) >= 1);
+  assert.equal(Tr.state(big), Tr.SNAPPED);
+  assert.equal(Tr.kind(big), 'stump_broken');
+  assert.ok(grid.passableIdx(tile) || grid.occ[tile], 'the tile opens up');
+  assert.ok(S.terrainEdits.length > edits);
+  // A second blast clears the stump away.
+  Tr.blast(tr.x[big], tr.y[big], 10, 1000);
+  assert.equal(Tr.state(big), Tr.GONE);
+  assert.equal(Tr.present(big), false);
+
+  // A fallen tree blown apart frees the tiles along its trunk.
+  const log = near(k => kind(k) === 'log');
+  const logTiles = [];
+  G.TREES.logTiles(tr.x[log], tr.y[log], tr.size[log], tr.variant[log] >> 1, T, (x, y) => logTiles.push(y * grid.cols + x));
+  assert.ok(logTiles.some(i => grid.tiles[i] === id('fallen_tree')));
+  assert.ok(Tr.damage(log, 1e4));
+  assert.equal(Tr.state(log), Tr.GONE);
+  assert.ok(logTiles.every(i => grid.tiles[i] !== id('fallen_tree') || tr.kind.some((kd, q) => q !== log && G.TREES.ALL[kd] === 'log' && Tr.present(q))), 'fallen-tree tiles freed');
+
+  // Turret shells explode among the trees, hit or miss.
+  const target = near(k => standing(k) && tr.size[k] === 1);
+  const foe = G.Units.spawn('hostile_machine', tr.x[target], tr.y[target]);
+  const turret = { id: 'b-test', x: tr.x[target] - 300, y: tr.y[target], team: 'blue' }, cfg = G.Defs.buildables.get('heavy_turret').behaviors[0];
+  for (let i = 0; i < 12 && Tr.state(target) === Tr.ALIVE; i++) G.Turrets.fire(turret, cfg, foe);
+  assert.equal(Tr.state(target), Tr.SNAPPED, 'splash damage felled the tree');
+
+  // A Salvage Crawler saws a tree down to a sawn stump; a Utility Spider can't.
+  const saw = near(k => standing(k) && tr.size[k] === 2 && Math.hypot(tr.x[k] - sh.x, tr.y[k] - sh.y) > 400);
+  const spider = S.units.find(u => u.type === 'utility_spider');
+  assert.equal(G.Gather.chop([spider], saw).length, 0);
+  const at = G.openPoint(tr.x[saw], tr.y[saw]), crawler = G.Units.spawn('salvage_crawler', at.x, at.y);
+  assert.equal(G.Gather.chop([crawler], saw).length, 1);
+  assert.equal(G.Gather.chopTarget(crawler), saw);
+  for (let s = 0; s < 40 && Tr.state(saw) === Tr.ALIVE; s++) G.Sim.run(1);
+  assert.equal(Tr.state(saw), Tr.CUT, 'sawn down');
+  assert.equal(Tr.kind(saw), 'stump_cut');
+  assert.equal(crawler.command, 'idle', 'the Crawler stops once it is down');
+  // Sent back, it clears the stump too.
+  G.Gather.chop([crawler], saw);
+  for (let s = 0; s < 20 && Tr.present(saw); s++) G.Sim.run(1);
+  assert.equal(Tr.state(saw), Tr.GONE);
+
+  // Partly sawn: a save keeps it, and everything destroyed, with the tiles opened.
+  const half = near(k => standing(k) && tr.size[k] === 2 && Math.hypot(tr.x[k] - sh.x, tr.y[k] - sh.y) > 600);
+  Tr.damage(half, 100, 'cut');
+  const save = JSON.parse(JSON.stringify(G.Save.serialize())), tiles = Array.from(grid.tiles);
+  assert.ok(save.trees.length >= 5);
+  G.Save.restore(save, 1);
+  assert.deepEqual(Array.from(G.State.grid.tiles), tiles, 'freed tiles restored from the terrain edits');
+  for (const k of [big, log, target, saw, half]) assert.deepEqual([G.Trees.state(k), G.Trees.hp(k)], [Tr.state(k), Tr.hp(k)]);
+  assert.equal(G.Trees.state(half), G.Trees.ALIVE);
+  assert.equal(G.Trees.hp(half), G.Trees.maxHp(half) - 100);
+  // Bad tree data is rejected before anything changes.
+  for (const trees of [[[1, 7, 0]], [[1, 1, -5]], [[3, 1, 0], [3, 2, 0]], [['x', 0, 0]]])
+    assert.throws(() => G.Save.restore({ ...save, trees }, 1), /trees/);
+  // Saves from before trees could be damaged migrate with every tree standing.
+  const old = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/fixtures/save-schema-8.json'), 'utf8'));
+  assert.equal(old.trees, undefined);
+  assert.deepEqual(Array.from(G.Save.migrate(old).trees), []);
 });
 
 test('landing site: new games land where asked; Woodlands keeps it off water; saves keep it', () => {

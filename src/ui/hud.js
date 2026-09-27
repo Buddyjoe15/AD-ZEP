@@ -242,7 +242,10 @@
       else if (u.command === 'guard') s = 'Guarding a position';
       else if (u.command === 'patrol') s = 'Patrolling';
       else if (u.command === 'build') s = 'Constructing';
-      else if (u.command === 'gather'){
+      else if (u.command === 'gather' && G.Gather.chopTarget(u) >= 0){
+        const k = G.Gather.chopTarget(u), kind = G.Trees.kind(k) || '', what = kind === 'log' ? 'fallen tree' : kind.startsWith('stump') ? 'stump' : 'tree';
+        s = (u.haulState === 'collecting' ? `Sawing down a ${what} (${Math.round(100 * (1 - G.Trees.hp(k) / (G.Trees.maxHp(k) || 1)))}%)` : `Heading to a ${what}`);
+      } else if (u.command === 'gather'){
         const where = u.mineId ? 'Resource Extractor' : (G.Gather.node(u.nodeId)?.name || 'salvage');
         s = ({ toNode: 'Heading to ', collecting: 'Collecting at ', toMine: 'Heading to ', loading: 'Loading at ', waiting: 'Waiting for ore at ', return: 'Hauling to ship from ' }[u.haulState] || 'Working ') + esc(where);
       } else if (u.path.length) s = 'Moving';

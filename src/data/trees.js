@@ -1,6 +1,7 @@
 /* Free-standing tree species and dead wood (stumps, fallen trees), used by maps that plant
-   trees at their own positions instead of one per tile (Genesis, src/world/genesis.js). Nothing here is saved: trees are regenerated
-   from the seed with the rest of the terrain.
+   trees at their own positions instead of one per tile (Genesis, src/world/genesis.js). Trees
+   are regenerated from the seed with the rest of the terrain; only the damage done to them is
+   saved (src/sim/trees.js).
    `crown` is the crown diameter in world px for each size (small, medium, large); the art in
    tools/genesis-trees.mjs is drawn to the same sizes (a test checks they match). In the wind,
    `sway` scales how often and how far a tree leans (stiff conifers less, light birches more)
@@ -21,6 +22,13 @@ GW.TREES = {
   }
 };
 GW.TREES.KINDS = Object.keys(GW.TREES.species);
+// Toughness, in the damage units weapons deal (a Heavy Turret shell does 70, a missile 50):
+// living trees by size, times the species' `tough`; stumps and fallen trees by their size.
+// A Salvage Crawler saws at CHOP_RATE × its gatherRate damage a second.
+GW.TREES.HP = { tree: [60, 160, 320], stump: [90, 150], log: [200, 320] };
+GW.TREES.CHOP_RATE = 25;
+GW.TREES.species.snag.tough = 0.6;
+GW.TREES.species.maple.tough = 1.2;
 // Dead wood among the trees, placed and drawn with them but under every crown. `sizes` are
 // what the art is drawn for (index = the prop's size): a stump's cut face and a fallen tree's
 // length and trunk width, in world px. Fallen trees block the tiles along their trunk;

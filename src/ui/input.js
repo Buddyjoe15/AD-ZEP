@@ -79,11 +79,21 @@
     },
     buildingAt(wx, wy){ const T = G.CONFIG.TILE; return G.Buildings.at(Math.floor(wx / T), Math.floor(wy / T)); },
     nodeAt(wx, wy){ const r = 32 / G.State.camera.z; return G.State.resourceNodes.find(n => n.remaining > 0 && Math.hypot(n.x - wx, n.y - wy) < r) || null; },
-    // Something a gatherer can be sent to: a Mine Building, or a scavenge / deposit node.
+    // Something a gatherer can be sent to: a Mine Building, or a scavenge / deposit node;
+    // or, with a unit that saws selected, a tree, stump or fallen tree ({ tree: index }).
     gatherTarget(wx, wy){
       const b = this.buildingAt(wx, wy);
       if (b && G.Gather.isMine(b)) return b;
-      return this.nodeAt(wx, wy);
+      const n = this.nodeAt(wx, wy);
+      if (n) return n;
+      if (this.selectedUnits().some(u => G.Gather.canChop(u))){ const k = G.Trees.at(wx, wy); if (k >= 0) return { tree: k }; }
+      return null;
+    },
+    // Sends the selection to a gather target: every sawing unit to a tree, else the first gatherer.
+    gatherOrder(target){
+      if (target.tree != null) return G.Gather.chop(this.selectedUnits(), target.tree).length > 0;
+      const gatherer = this.gatherer();
+      return !!gatherer && G.Gather.command(gatherer, target);
     },
     canInteract(){ const S = G.State; return S.camera.z >= G.CONFIG.INTERACT_MIN_ZOOM && S.selected.has(S.heroId); },
     selectedUnits(){ return G.Selection.units(); },
@@ -122,8 +132,8 @@
       // A pointer consumed here must not also act as a tap / click on release.
       const consume = () => { const o = this.ptr.get(e.pointerId); if (o) o.handled = true; };
       if (e.button === 2){
-        const us = this.selectedUnits(), target = this.gatherTarget(q.x, q.y), gatherer = this.gatherer();
-        if (target && gatherer) G.Gather.command(gatherer, target);
+        const us = this.selectedUnits(), target = this.gatherTarget(q.x, q.y);
+        if (target && (target.tree != null || this.gatherer())) this.gatherOrder(target);
         else if (us.length) G.Orders.move(us, q.x, q.y);
         return;
       }
@@ -156,8 +166,8 @@
       this.startInspect(e.pointerId, e.clientX, e.clientY, q);
       const chest = this.canInteract() && this.containerAt(q.x, q.y);
       if (chest){ consume(); G.InventoryUI.openContainer(chest); return; }
-      const target = this.gatherTarget(q.x, q.y), gatherer = this.gatherer();
-      if (target && gatherer){ consume(); G.Gather.command(gatherer, target); return; }
+      const target = this.gatherTarget(q.x, q.y);
+      if (target && (target.tree != null || this.gatherer())){ consume(); this.gatherOrder(target); return; }
       const hit = this.unitAt(q.x, q.y);
       // Clicking a hostile unit shows its details (right-click still orders a move).
       if (!hit && e.pointerType === 'mouse' && e.button === 0){

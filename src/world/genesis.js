@@ -206,7 +206,9 @@
       }
     }
 
-    // 5. Blocking: fallen trees along their trunks, then every medium or large trunk.
+    // 5. Blocking: fallen trees along their trunks, then every medium or large trunk. The
+    // ground as it was before is kept (art.treeBase), for when they are destroyed.
+    art.treeBase = tiles.slice();
     const tileOf = q => Math.floor(Y[q] / TILE) * W + Math.floor(X[q] / TILE);
     const logK = ALL.indexOf('log');
     for (let q = 0; q < n; q++) if (K[q] === logK) TR.logTiles(X[q], Y[q], Z[q], V[q] >> 1, TILE, (tx, ty) => { const i = ty * W + tx; tiles[i] = LOG; art.detail[i] = 0; });

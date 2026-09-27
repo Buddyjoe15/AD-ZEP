@@ -3,7 +3,8 @@
    engine shadow, so overlapping shadows don't stack. Up close (LIVE_ZOOM and in) every tree in
    view is drawn each frame so it can rustle and lean in the wind; further out the trees are
    drawn at rest into the terrain chunks. Leaning shifts the whole crown downwind (east).
-   Dead wood (stumps and fallen trees) comes in the same list, drawn under every crown.
+   Dead wood (stumps and fallen trees) comes in the same list, drawn under every crown. Trees
+   destroyed in play (G.Trees, src/sim/trees.js) are drawn as the stump they left, or not at all.
    Presentation only: nothing here is saved or read by the simulation. */
 (function(){
   'use strict';
@@ -18,53 +19,94 @@
   const layer = kd => kd >= G.TREES.KINDS.length ? 0 : 1;
 
   const pixelArt = () => { const P = G.PixelArt; return P && P.enabled && P.data && P.data.genesis ? P.data.genesis.trees : null; };
-  let treeId = -1;
+  let treeId = -1, stumpCut = -1, stumpBroken = -1;
 
-  // The trees to draw, by terrain chunk. Generated trees are kept while their trunk tile still
-  // has the terrain they were planted on (the Map Editor can paint them away), and every tree
-  // tile painted in without a trunk gets a tree of its own. Each chunk lists every tree that
-  // reaches into it, in drawing order. Rebuilt after the terrain changes.
+  // What to draw, by terrain chunk. Entry j < n0 is generated tree j (grid.art.trees, in
+  // drawing order); it is drawn as itself while alive and its trunk tile still has the terrain
+  // it was planted on (the Map Editor can paint it away), as the stump it left once destroyed
+  // (G.Trees), and not at all once gone. Entries from n0 on are trees for tree tiles painted
+  // in without a trunk; they are kept up to date as the terrain changes. Each chunk lists the
+  // generated entries that reach into it; painted ones are few and checked directly.
   function index(grd){
     const a = grd.art;
     if (a.treeIndex) return a.treeIndex;
-    if (treeId < 0) treeId = G.Defs.terrain.get('tree').id;
-    const tr = a.trees, T = G.CONFIG.TILE, tiles = grd.tiles, cols = grd.cols, KINDS = G.TREES.KINDS, LOG = G.TREES.ALL.indexOf('log');
-    const keep = [], trunk = new Uint8Array(grd.size), logs = new Uint8Array(grd.size);
-    for (let k = 0; k < tr.count; k++){
-      if (tiles[tr.tile[k]] !== tr.on[k]) continue;
-      keep.push(k);
+    if (treeId < 0){ treeId = G.Defs.terrain.get('tree').id; stumpCut = G.TREES.ALL.indexOf('stump_cut'); stumpBroken = G.TREES.ALL.indexOf('stump_broken'); }
+    const tr = a.trees, T = G.CONFIG.TILE, cols = grd.cols, n0 = tr.count, LOG = G.TREES.ALL.indexOf('log');
+    const logs = new Uint8Array(grd.size), head = new Int32Array(grd.size).fill(-1), next = new Int32Array(n0);
+    for (let k = 0; k < n0; k++){
       if (tr.kind[k] === LOG) G.TREES.logTiles(tr.x[k], tr.y[k], tr.size[k], tr.variant[k] >> 1, T, (x, y) => { if (grd.inBounds(x, y)) logs[y * cols + x] = 1; });
-      else if (layer(tr.kind[k])) trunk[tr.tile[k]] = 1;
-    }
-    const extra = [];
-    for (let i = 0; i < grd.size; i++) if (tiles[i] === treeId && !trunk[i]) extra.push(i);
-    const n = keep.length + extra.length;
-    const X = new Int32Array(n), Y = new Int32Array(n), KD = new Uint8Array(n), SZ = new Uint8Array(n), VR = new Uint8Array(n);
-    keep.forEach((k, j) => { X[j] = tr.x[k]; Y[j] = tr.y[k]; KD[j] = tr.kind[k]; SZ[j] = tr.size[k]; VR[j] = tr.variant[k]; });
-    const h = G.hashRandom3, painted = ['spruce', 'pine', 'birch', 'maple'].map(k => KINDS.indexOf(k));
-    extra.forEach((i, e) => {
-      const j = keep.length + e, gx = i % cols, gy = (i / cols) | 0;
-      X[j] = Math.floor(gx * T + T / 2 + (h(gx, gy, 811) - 0.5) * 20); Y[j] = Math.floor(gy * T + T / 2 + (h(gx, gy, 813) - 0.5) * 20);
-      KD[j] = painted[Math.floor(h(gx, gy, 817) * painted.length)]; SZ[j] = 1; VR[j] = Math.floor(h(gx, gy, 819) * 256);
-    });
-    let order = null;
-    if (extra.length){
-      order = Array.from({ length: n }, (_, j) => j).sort((p, q) => layer(KD[p]) - layer(KD[q]) || SZ[p] - SZ[q] || Y[p] - Y[q] || X[p] - X[q]);
-      const re = A => { const B = A.slice(); order.forEach((p, j) => { A[j] = B[p]; }); };
-      [X, Y, KD, SZ, VR].forEach(re);
+      next[k] = head[tr.tile[k]]; head[tr.tile[k]] = k;
     }
     // Chunk buckets (compressed rows): start[c]..start[c + 1] in `list`.
     const CS = G.CONFIG.CHUNK_TILES * T, ncx = Math.ceil(cols * T / CS), ncy = Math.ceil(grd.rows * T / CS);
     const span = (v, max) => [Math.max(0, Math.floor((v - REACH) / CS)), Math.min(max - 1, Math.floor((v + REACH) / CS))];
     const start = new Int32Array(ncx * ncy + 1);
-    const each = fn => { for (let j = 0; j < n; j++){ const [x0, x1] = span(X[j], ncx), [y0, y1] = span(Y[j], ncy); for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) fn(cy * ncx + cx, j); } };
+    const each = fn => { for (let j = 0; j < n0; j++){ const [x0, x1] = span(tr.x[j], ncx), [y0, y1] = span(tr.y[j], ncy); for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) fn(cy * ncx + cx, j); } };
     each(c => { start[c + 1]++; });
     for (let c = 0; c < ncx * ncy; c++) start[c + 1] += start[c];
     const list = new Int32Array(start[ncx * ncy]), fill = start.slice(0, -1);
     each((c, j) => { list[fill[c]++] = j; });
-    return (a.treeIndex = { n, X, Y, KD, SZ, VR, logs, start, list, ncx, ncy, CS, seen: new Uint32Array(n), stamp: 0, ids: new Int32Array(n), dx: new Float32Array(n), step: new Uint8Array(n) });
+    const I = a.treeIndex = { grd, n0, n: n0, tr, head, next, logs, start, list, ncx, ncy, CS, extraAt: new Map(), free: [], stamp: 0 };
+    alloc(I, n0 + 256);
+    for (let j = 0; j < n0; j++){ I.X[j] = tr.x[j]; I.Y[j] = tr.y[j]; I.KD[j] = tr.kind[j]; I.SZ[j] = tr.size[j]; I.VR[j] = tr.variant[j]; I.TL[j] = tr.tile[j]; }
+    painted(I, 0, 0, cols, grd.rows);
+    return I;
   }
-  G.Events.on('terrain:changed', () => { const grd = G.State.grid; if (grd && grd.art) grd.art.treeIndex = null; });
+  // (Re)allocates the per-entry arrays for `cap` entries, keeping what they hold.
+  function alloc(I, cap){
+    const grow = (A, Type) => { const B = new Type(cap); if (A) B.set(A.subarray(0, Math.min(A.length, cap))); return B; };
+    I.X = grow(I.X, Int32Array); I.Y = grow(I.Y, Int32Array); I.KD = grow(I.KD, Uint8Array); I.SZ = grow(I.SZ, Uint8Array); I.VR = grow(I.VR, Uint8Array); I.TL = grow(I.TL, Int32Array);
+    I.live = grow(I.live, Uint8Array); I.seen = grow(I.seen, Uint32Array); I.ids = grow(I.ids, Int32Array); I.dx = grow(I.dx, Float32Array); I.step = grow(I.step, Uint8Array);
+    I.EK = grow(I.EK, Uint8Array); I.ES = grow(I.ES, Uint8Array);
+    I.cap = cap;
+  }
+  // Brings the painted trees in tiles (x, y, w, h) up to date: one for each tree tile without
+  // a generated trunk still standing on it.
+  function painted(I, x0, y0, w, h){
+    const grd = I.grd, tiles = grd.tiles, cols = grd.cols, T = G.CONFIG.TILE, st = states(grd), hr = G.hashRandom3;
+    const kinds = ['spruce', 'pine', 'birch', 'maple'].map(k => G.TREES.KINDS.indexOf(k));
+    for (let y = Math.max(0, y0); y < Math.min(grd.rows, y0 + h); y++) for (let x = Math.max(0, x0); x < Math.min(cols, x0 + w); x++){
+      const i = y * cols + x;
+      let want = tiles[i] === treeId;
+      if (want) for (let k = I.head[i]; k >= 0; k = I.next[k]) if (layer(I.tr.kind[k]) && I.tr.size[k] >= G.TREES.BLOCKS_FROM && (!st || st[k] === 0) && tiles[i] === I.tr.on[k]){ want = false; break; }
+      const j = I.extraAt.get(i);
+      if (want === (j !== undefined)) continue;
+      if (!want){ I.live[j] = 0; I.extraAt.delete(i); I.free.push(j); continue; }
+      let e = I.free.pop();
+      if (e === undefined){ e = I.n++; if (I.n > I.cap) alloc(I, I.cap * 2); }
+      I.X[e] = Math.floor(x * T + T / 2 + (hr(x, y, 811) - 0.5) * 20); I.Y[e] = Math.floor(y * T + T / 2 + (hr(x, y, 813) - 0.5) * 20);
+      I.KD[e] = kinds[Math.floor(hr(x, y, 817) * kinds.length)]; I.SZ[e] = 1; I.VR[e] = Math.floor(hr(x, y, 819) * 256); I.TL[e] = i; I.live[e] = 1;
+      I.extraAt.set(i, e);
+    }
+  }
+  // The game's tree states (G.Trees) when `grd` is the game's grid; null for other grids (the preview).
+  const states = grd => grd === G.State.grid && G.Trees ? G.Trees.states() : null;
+  // Whether entry j is drawn, and as what: fills I.EK (kind) and I.ES (size) for it.
+  function visible(I, j, st, tiles){
+    if (j >= I.n0){ if (!I.live[j] || tiles[I.TL[j]] !== treeId) return false; I.EK[j] = I.KD[j]; I.ES[j] = I.SZ[j]; return true; }
+    const s = st ? st[j] : 0;
+    if (s === 3) return false;
+    if (s === 0){ if (tiles[I.TL[j]] !== I.tr.on[j]) return false; I.EK[j] = I.KD[j]; I.ES[j] = I.SZ[j]; return true; }
+    I.EK[j] = s === 1 ? stumpCut : stumpBroken; I.ES[j] = I.SZ[j] >= 2 ? 1 : 0;
+    return true;
+  }
+  // Painted-in trees (extras) sort in among generated ones by the generator's drawing order.
+  const orderKey = (I, j) => ((layer(I.KD[j]) * 4 + I.SZ[j]) * 65536 + I.Y[j]) * 65536 + I.X[j];
+  function sortIds(I, count, extras){
+    const ids = I.ids.subarray(0, count);
+    if (extras) ids.sort((p, q) => orderKey(I, p) - orderKey(I, q)); else ids.sort();
+  }
+  G.Events.on('terrain:changed', r => {
+    const grd = G.State.grid, I = grd && grd.art && grd.art.treeIndex;
+    if (!I) return;
+    if (!r){ grd.art.treeIndex = null; return; }   // the whole map changed
+    painted(I, r.x - 1, r.y - 1, r.w + 2, r.h + 2);
+  });
+  // A tree destroyed (or a stump or fallen tree cleared): repaint the chunks it reaches into.
+  G.Events.on('tree:changed', e => {
+    const T = G.CONFIG.TILE, r = Math.ceil(REACH / T);
+    if (G.TerrainCache) G.TerrainCache.invalidate({ x: Math.floor(e.x / T) - r, y: Math.floor(e.y / T) - r, w: 2 * r, h: 2 * r });
+  });
 
   // Scratch canvases for the merged shadow, one per canvas size.
   const masks = new Map();
@@ -103,8 +145,8 @@
     const perArt = Math.abs(g.getTransform().a) / 2;   // device px per art px
     const level = perArt >= 1 ? 0 : perArt >= 0.5 ? 1 : 2;
     const shrink = perArt * (1 << level) < 1 - 1e-6;   // still fewer device px than art px: average, don't sample
-    const frame = j => { const set = A.art[ALL[I.KD[j]]][I.SZ[j]], v = set[I.VR[j] % set.length]; return v; };
-    const shadow = j => layer(I.KD[j]) ? A.shadow[I.SZ[j]] : A.propShadow[ALL[I.KD[j]]];
+    const frame = j => { const set = A.art[ALL[I.EK[j]]][I.ES[j]], v = set[I.VR[j] % set.length]; return v; };
+    const shadow = j => layer(I.EK[j]) ? A.shadow[I.ES[j]] : A.propShadow[ALL[I.EK[j]]];
     const m = mask(g);
     m.imageSmoothingEnabled = shrink;
     for (let k = 0; k < count; k++){
@@ -124,18 +166,18 @@
   function drawClassic(g, I, count){
     const KINDS = G.TREES.KINDS, SP = G.TREES.species, PR = G.TREES.props;
     for (let k = 0; k < count; k++){
-      const j = I.ids[k], kind = G.TREES.ALL[I.KD[j]];
+      const j = I.ids[k], kind = G.TREES.ALL[I.EK[j]];
       if (kind === 'log'){
-        const d = PR.log.sizes[I.SZ[j]], a = (I.VR[j] >> 1) / G.TREES.LOG_ANGLES * TAU, ux = Math.cos(a) * d.length / 2, uy = Math.sin(a) * d.length / 2;
+        const d = PR.log.sizes[I.ES[j]], a = (I.VR[j] >> 1) / G.TREES.LOG_ANGLES * TAU, ux = Math.cos(a) * d.length / 2, uy = Math.sin(a) * d.length / 2;
         g.strokeStyle = '#6f5e48'; g.lineWidth = d.width; g.lineCap = 'round'; g.beginPath(); g.moveTo(I.X[j] - ux, I.Y[j] - uy); g.lineTo(I.X[j] + ux * 0.5, I.Y[j] + uy * 0.5); g.stroke(); g.lineCap = 'butt';
-      } else if (!layer(I.KD[j])){ g.fillStyle = '#9e896b'; g.beginPath(); g.arc(I.X[j], I.Y[j], PR[kind].sizes[I.SZ[j]].r, 0, TAU); g.fill(); }
+      } else if (!layer(I.EK[j])){ g.fillStyle = '#9e896b'; g.beginPath(); g.arc(I.X[j], I.Y[j], PR[kind].sizes[I.ES[j]].r, 0, TAU); g.fill(); }
     }
     g.fillStyle = 'rgba(0,0,0,.3)';
-    for (let k = 0; k < count; k++){ const j = I.ids[k]; if (!layer(I.KD[j])) continue; const r = SP[KINDS[I.KD[j]]].crown[I.SZ[j]] / 2; g.beginPath(); g.arc(I.X[j] + 3 + I.SZ[j], I.Y[j] + 3 + I.SZ[j], r, 0, TAU); g.fill(); }
+    for (let k = 0; k < count; k++){ const j = I.ids[k]; if (!layer(I.EK[j])) continue; const r = SP[KINDS[I.EK[j]]].crown[I.ES[j]] / 2; g.beginPath(); g.arc(I.X[j] + 3 + I.ES[j], I.Y[j] + 3 + I.ES[j], r, 0, TAU); g.fill(); }
     for (let k = 0; k < count; k++){
       const j = I.ids[k];
-      if (!layer(I.KD[j])) continue;
-      const kind = KINDS[I.KD[j]], r = SP[kind].crown[I.SZ[j]] / 2, c = CLASSIC[kind], x = I.X[j], y = I.Y[j];
+      if (!layer(I.EK[j])) continue;
+      const kind = KINDS[I.EK[j]], r = SP[kind].crown[I.ES[j]] / 2, c = CLASSIC[kind], x = I.X[j], y = I.Y[j];
       g.fillStyle = `rgb(${c})`; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
       g.fillStyle = `rgb(${c.map(v => Math.min(255, v + 22))})`; g.beginPath(); g.arc(x - r * .25, y - r * .25, r * .5, 0, TAU); g.fill();
     }
@@ -149,11 +191,15 @@
     live(grd, z){ return this.has(grd) && !!pixelArt() && z >= this.LIVE_ZOOM; },
     // Every tree reaching into chunk (cx, cy), at rest, into a chunk canvas (world px).
     paintChunk(ctx, grd, cx, cy){
-      const I = index(grd), A = pixelArt(), c = cy * I.ncx + cx;
+      const I = index(grd), A = pixelArt(), c = cy * I.ncx + cx, st = states(grd), tiles = grd.tiles;
       if (cx < 0 || cy < 0 || cx >= I.ncx || cy >= I.ncy) return;
-      let count = 0;
-      for (let p = I.start[c]; p < I.start[c + 1]; p++){ const j = I.list[p]; I.ids[count++] = j; I.dx[j] = 0; I.step[j] = 0; }
+      let count = 0, extras = false;
+      const take = j => { if (visible(I, j, st, tiles)){ I.ids[count++] = j; I.dx[j] = 0; I.step[j] = 0; } };
+      for (let p = I.start[c]; p < I.start[c + 1]; p++) take(I.list[p]);
+      const x0 = cx * I.CS - REACH, x1 = (cx + 1) * I.CS + REACH, y0 = cy * I.CS - REACH, y1 = (cy + 1) * I.CS + REACH;
+      for (const j of I.extraAt.values()) if (I.X[j] >= x0 && I.X[j] <= x1 && I.Y[j] >= y0 && I.Y[j] <= y1){ extras = true; take(j); }
       if (!count) return;
+      sortIds(I, count, extras);
       ctx.save(); ctx.translate(-cx * I.CS, -cy * I.CS);   // the chunk canvas starts at its own corner
       if (A) drawPixel(ctx, I, count, A); else drawClassic(ctx, I, count);
       ctx.restore();
@@ -166,8 +212,9 @@
       const I = index(grd), W = G.Weather, SP = G.TREES.species, KINDS = G.TREES.KINDS, LEAN = G.TREES.LEAN_PX;
       const x0 = Math.max(0, Math.floor((v.x0 - REACH) / I.CS)), x1 = Math.min(I.ncx - 1, Math.floor((v.x1 + REACH) / I.CS));
       const y0 = Math.max(0, Math.floor((v.y0 - REACH) / I.CS)), y1 = Math.min(I.ncy - 1, Math.floor((v.y1 + REACH) / I.CS));
-      const stamp = ++I.stamp;
-      let count = 0;
+      const stamp = ++I.stamp, st = states(grd), tiles = grd.tiles;
+      const inView = j => !(I.X[j] < v.x0 - REACH || I.X[j] > v.x1 + REACH || I.Y[j] < v.y0 - REACH || I.Y[j] > v.y1 + REACH);
+      let count = 0, extras = false;
       for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++){
         if (live && !live(cx, cy)) continue;
         const c = cy * I.ncx + cx;
@@ -175,32 +222,36 @@
           const j = I.list[p];
           if (I.seen[j] === stamp) continue;
           I.seen[j] = stamp;
-          const x = I.X[j], y = I.Y[j];
-          if (x < v.x0 - REACH || x > v.x1 + REACH || y < v.y0 - REACH || y > v.y1 + REACH) continue;
-          I.ids[count++] = j;
+          if (inView(j) && visible(I, j, st, tiles)) I.ids[count++] = j;
         }
       }
+      for (const j of I.extraAt.values()){
+        const cx = Math.floor(I.X[j] / I.CS), cy = Math.floor(I.Y[j] / I.CS);
+        if (inView(j) && (!live || live(cx, cy)) && visible(I, j, st, tiles)){ I.ids[count++] = j; extras = true; }
+      }
       if (!count) return;
-      I.ids.subarray(0, count).sort();
+      sortIds(I, count, extras);
       for (let k = 0; k < count; k++){
         const j = I.ids[k];
-        if (!layer(I.KD[j])){ I.dx[j] = 0; I.step[j] = 0; continue; }   // dead wood doesn't move
-        const pose = W.treePose(I.X[j], I.Y[j], t, SP[KINDS[I.KD[j]]]);
-        I.dx[j] = pose.lean * LEAN[I.SZ[j]]; I.step[j] = pose.rustle;
+        if (!layer(I.EK[j])){ I.dx[j] = 0; I.step[j] = 0; continue; }   // dead wood doesn't move
+        const pose = W.treePose(I.X[j], I.Y[j], t, SP[KINDS[I.EK[j]]]);
+        I.dx[j] = pose.lean * LEAN[I.ES[j]]; I.step[j] = pose.rustle;
       }
       drawPixel(g, I, count, A);
     },
     // True when a fallen tree drawn here lies across tile i (its tile art is left out).
     logOn(grd, i){ return this.has(grd) && index(grd).logs[i] === 1; },
-    // The tree whose trunk stands on tile (gx, gy), as 'large spruce', or null.
+    // The tree whose trunk stands on tile (gx, gy), as 'large spruce' (or 'sawn stump'), or null.
     at(grd, gx, gy){
       if (!this.has(grd) || !grd.inBounds(gx, gy)) return null;
-      const I = index(grd), T = G.CONFIG.TILE, c = Math.floor(gy * T / I.CS) * I.ncx + Math.floor(gx * T / I.CS);
-      for (let p = I.start[c + 1] - 1; p >= I.start[c]; p--){
-        const j = I.list[p];
-        if (layer(I.KD[j]) && Math.floor(I.X[j] / T) === gx && Math.floor(I.Y[j] / T) === gy) return G.TREES.SIZES[I.SZ[j]] + ' ' + G.TREES.species[G.TREES.KINDS[I.KD[j]]].name.toLowerCase();
+      const I = index(grd), i = gy * grd.cols + gx, st = states(grd);
+      for (let k = I.head[i]; k >= 0; k = I.next[k]){
+        if (!layer(I.KD[k]) || !visible(I, k, st, grd.tiles)) continue;
+        if (!layer(I.EK[k])) return I.EK[k] === stumpCut ? 'sawn stump' : 'snapped stump';
+        return G.TREES.SIZES[I.SZ[k]] + ' ' + G.TREES.species[G.TREES.KINDS[I.KD[k]]].name.toLowerCase();
       }
-      return null;
+      const e = I.extraAt.get(i);
+      return e !== undefined ? 'medium ' + G.TREES.species[G.TREES.KINDS[I.KD[e]]].name.toLowerCase() : null;
     }
   };
 })();

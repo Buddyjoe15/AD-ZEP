@@ -9,7 +9,8 @@
 
    Turrets (`turret` behaviour) pick the nearest enemy unit they can hit (ground, air or
    any) between `minRange` and `range`, and fire every `reload` seconds. `splash` also
-   hits other enemies that close to the target; `ammo` spends one of that resource per shot
+   hits other enemies that close to the target, and trees (G.Trees.blast) wherever the round
+   lands, hit or miss; `ammo` spends one of that resource per shot
    from the stockpile and holds fire without it. Testing-zone copies never fire. Each shot
    hits with the turret's `accuracy`, raised by a Defensive Sensor within its boostTiles;
    the roll is G.hashRandom of the tick, turret and target, so replays are identical.
@@ -102,8 +103,9 @@
       s.shots = (s.shots || 0) + 1;
       if (G.hashRandom(Math.round(S.time * 60), s.seed ?? (s.seed = G.hashString(b.id)), t.id, s.shots) >= this.accuracy(b, cfg)){
         // A miss: the round lands beside the target.
-        const a = s.shots * 2.39996, off = 18 + (t.radius || 10);
-        S.shots.push({ x1: b.x, y1: b.y, x2: t.x + Math.cos(a) * off, y2: t.y + Math.sin(a) * off, life: cfg.shot ? 0.18 : 0.09, team: b.team, kind: cfg.shot || null, miss: true });
+        const a = s.shots * 2.39996, off = 18 + (t.radius || 10), mx = t.x + Math.cos(a) * off, my = t.y + Math.sin(a) * off;
+        S.shots.push({ x1: b.x, y1: b.y, x2: mx, y2: my, life: cfg.shot ? 0.18 : 0.09, team: b.team, kind: cfg.shot || null, miss: true });
+        if (cfg.splash) G.Trees.blast(mx, my, cfg.splash, cfg.damage);   // it still explodes where it lands
         return false;
       }
       const hit = u => { u.hp -= cfg.damage; G.Events.emit('combat:hit', { attacker: b, target: u, damage: cfg.damage }); };
@@ -111,6 +113,7 @@
       if (cfg.splash){
         const hash = S.teamSpatial[t.team];
         for (const u of hash ? hash.query(t.x, t.y, cfg.splash) : []) if (u !== t && u.hp > 0 && this.canHit(cfg, u) && G.dist2(u, t) <= cfg.splash * cfg.splash) hit(u);
+        if (!flying(t)) G.Trees.blast(t.x, t.y, cfg.splash, cfg.damage);   // blasts on the ground also hit trees
       }
       S.shots.push({ x1: b.x, y1: b.y, x2: t.x, y2: t.y, life: cfg.shot ? 0.18 : 0.09, team: b.team, kind: cfg.shot || null });
       return true;
