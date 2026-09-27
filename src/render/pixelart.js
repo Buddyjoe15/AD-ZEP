@@ -29,7 +29,7 @@
     // Unit `visual` → sprite; buildable key → structure sprite.
     UNITS: { utility: 'spider', salvage: 'salvage_crawler', rifle: 'drone', scout: 'drone', hero: 'vance' },
     BUILDINGS: {
-      repair: 'repair_station', sentry_turret: 'sentry_turret',
+      repair: 'repair_station', sentry_turret: 'sentry_turret', laser_turret: 'laser_turret',
       wood_wall: 'wood_wall', defensive_wall: 'defensive_wall', reinforced_wall: 'reinforced_wall',
       gate: 'gate', gate_3: 'gate_3', gate_4: 'gate_4', gate_v: 'gate_v', gate_3_v: 'gate_3_v', gate_4_v: 'gate_4_v'
     },
@@ -183,7 +183,8 @@
     // aim the simulation last set (G.Turrets) at the head's turn rate. While the turret has a
     // target it loops the firing frames for its resting state (`head.firing`: idle → firing,
     // damaged → damaged-firing; barrels spinning, belts feeding), and for `flashTime` after
-    // each round the matching flash frame (muzzle flash and recoil). Its shadow falls on the
+    // each round the matching flash frame (muzzle flash and recoil). A turret that charges
+    // its shots (the Laser Turret) shows the charging frame for its charge so far instead. Its shadow falls on the
     // base under it.
     aims: new Map(),       // building id → { a: drawn aim (radians, 0 = +x), t: last draw time }
     headAim(b, H, t){
@@ -200,8 +201,14 @@
       let f = this.frameOf(H.states[hs], t);
       if (fire && s.targetId != null && !s.noAmmo){
         const cfg = (G.Defs.buildables.get(b.type)?.behaviors || []).find(x => x.type === 'turret'), since = cfg ? cfg.reload - s.cool : Infinity;
-        f = this.frameOf(fire, t);
-        if (flash && since >= 0 && since < (H.flashTime || 0.12)) f += flash.start - fire.start;
+        if (flash && since >= 0 && since < (H.flashTime || 0.12)){
+          // Just fired: a charging head plays its flash frames through; others show the
+          // flash frame matching their firing loop.
+          f = cfg.charge ? flash.start + Math.min(flash.frames - 1, Math.floor(since / (H.flashTime || 0.12) * flash.frames)) : this.frameOf(fire, t) + flash.start - fire.start;
+        } else if (cfg && cfg.charge){
+          // Charging: the frame for the charge so far (idle until it starts).
+          if (s.charged > 0) f = fire.start + Math.min(fire.frames - 1, Math.floor(s.charged / cfg.charge * fire.frames));
+        } else f = this.frameOf(fire, t);
       }
       const facing = ((Math.round((this.headAim(b, H, t) + Math.PI / 2) / (Math.PI * 2 / H.facings)) % H.facings) + H.facings) % H.facings;
       this.stampFrame(g, sp, H.frames[facing][f], b.gx, b.gy, b.team);

@@ -116,6 +116,7 @@ function head(m, { lit = 0, hot: shot = false, fading = false, damaged = false, 
 
 export default {
   key: 'laser_turret',
+  gameKey: 'laser_turret',
   name: 'Laser Turret',
   request: 'a laser rifle turret. It uses the same aesthetic as the Turret. The base is turned to the shape of a diamond. The laser rifle is large and has coils going up the middle that light up as it fires. The laser rifle takes 2-3 seconds to charge before firing, the coils lighting up in sequence as it charges.',
   kind: 'structure',
@@ -162,7 +163,7 @@ export default {
       'Capacitor banks and heat-sink fins take the place of the Sentry\'s ammo belts; a laser has no ammunition.',
       'The head turns at half a turn a second, slower than the Sentry\'s, to feel heavy.',
       'Damaged: rusted armour, the barrel knocked off line, one coil burnt out (it never lights) and one capacitor window dead, with a blinking red fault lamp; it still charges and fires.',
-      'Not in the game yet: there is no laser turret definition, and the engine would need to show the charging frames by the turret\'s charge progress (chargeTime) rather than a clock. The beam itself would be drawn by the game, like other shots.'
+      'In the game as the Laser Turret (laser_turret): 180 metal and 6 electronics, 700 HP, draws 6 power; a 60-damage shot at ground targets within 380 after each 2.5 s charge. The coils show the turret\'s real charge, and the beam is drawn by the game as a cyan line.'
     ]
   },
   build({ state }){

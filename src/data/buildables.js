@@ -3,7 +3,8 @@
      defenseAura  { radiusTiles, reduction }  – nearby friendly units take less damage
      repairAura   { radiusTiles, rate }       – heals nearby friendly units (hp per second)
      turret       { range, damage, reload, accuracy, targets: 'ground' | 'air' | 'any',
-                    minRange?, splash?, ammo?, shot? } – fires at enemy units (src/sim/defense.js);
+                    minRange?, splash?, ammo?, shot?, charge? } – fires at enemy units (src/sim/defense.js);
+                    `charge` seconds of charging with a target in range come before each shot;
                     `accuracy` is the chance to hit (Defensive Sensors add to it); `ammo`
                     names a resource spent per shot from the stockpile
      studySignals { radiusTiles }             – studies expedition signals in range
@@ -95,6 +96,12 @@ GW.Defs.buildables.defineAll({
     name: 'Sentry Turret', w: 1, h: 1, symbol: 'ST', color: '#7fa3b5', hp: 400, buildTime: 6, cost: { metal: 120 }, sight: 300,
     behaviors: [{ type: 'turret', range: 260, damage: 9, reload: 0.5, accuracy: 0.75, targets: 'ground' }],
     description: 'Basic automated defensive turret for early-game perimeter defence. Rapid light fire at ground targets within 260.'
+  },
+  laser_turret: {
+    name: 'Laser Turret', w: 1, h: 1, hp: 700, armor: 0.15, buildTime: 10, cost: { metal: 180, electronics: 6 }, sight: 420,
+    behaviors: [{ type: 'turret', range: 380, damage: 60, reload: 0.5, charge: 2.5, accuracy: 0.9, targets: 'ground', shot: 'laser' }],
+    power: { demand: 6 },
+    description: 'Heavy laser rifle on a diamond pad. Charges for 2.5 s with a target in range, its coils lighting one by one, then fires a 60-damage beam at ground targets within 380. Draws 6 power.'
   },
   heavy_turret: {
     name: 'Heavy Turret', w: 2, h: 2, symbol: 'HT', color: '#6f8594', hp: 1400, armor: 0.2, buildTime: 12, cost: { metal: 200, steel: 20 }, sight: 360,

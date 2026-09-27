@@ -1,0 +1,72 @@
+{
+  "name": "laser_turret_head",
+  "frameWidth": 96,
+  "frameHeight": 96,
+  "origin": [
+    48,
+    48
+  ],
+  "worldPxPerArtPx": 0.5,
+  "facings": 16,
+  "rows": "facing, clockwise from up",
+  "pivot": "footprint centre",
+  "states": {
+    "idle": {
+      "start": 0,
+      "frames": 1
+    },
+    "charging": {
+      "start": 1,
+      "frames": 6,
+      "fps": 2.4
+    },
+    "flash": {
+      "start": 7,
+      "frames": 2,
+      "fps": 8
+    },
+    "damaged": {
+      "start": 9,
+      "frames": 2,
+      "fps": 3
+    },
+    "damaged-charging": {
+      "start": 11,
+      "frames": 6,
+      "fps": 2.4
+    },
+    "damaged-flash": {
+      "start": 17,
+      "frames": 2,
+      "fps": 8
+    }
+  },
+  "on": {
+    "finished": "idle",
+    "damaged": "damaged"
+  },
+  "turnRate": 3.141592653589793,
+  "firing": {
+    "idle": [
+      "charging",
+      "flash"
+    ],
+    "damaged": [
+      "damaged-charging",
+      "damaged-flash"
+    ]
+  },
+  "chargeTime": 2.5,
+  "flashTime": 0.25,
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      8,
+      8
+    ],
+    "elevation": "structure"
+  },
+  "image": "laser_turret_head.png",
+  "sheetWidth": 1824,
+  "sheetHeight": 1536
+}

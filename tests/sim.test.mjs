@@ -1058,8 +1058,8 @@ test('power: the Warp Drive gives 25, Solar Arrays scale with the Earth, and a s
   assert.ok(wind && wind.gy + wind.h <= ship.gy, 'wind turbine north of the ship');
   assert.equal(P.output(wind), 6, 'steady breeze on the first Earth');
   assert.equal(P.grid.supply, 39);
-  const sensors = S.buildings.filter(b => b.type === 'defensive_sensor');
-  assert.equal(P.grid.demand, 5 * mines.filter(b => G.Gather.extracting(b)).length + 3 * sensors.length, 'extractors and the always-on sensor');
+  const sensors = S.buildings.filter(b => b.type === 'defensive_sensor'), lasers = S.buildings.filter(b => b.type === 'laser_turret');
+  assert.equal(P.grid.demand, 5 * mines.filter(b => G.Gather.extracting(b)).length + 3 * sensors.length + 6 * lasers.length, 'extractors and the always-on sensor and laser turret');
   // Producing draws power.
   S.resources.metal = 10000;
   assert.ok(G.Fabrication.enqueue(fab, 'security_drone'));
@@ -1150,6 +1150,30 @@ test('walls: Reinforced Walls take less damage; both block movement like the old
   const dPlain = hit(plain), dStrong = hit(strong);
   assert.ok(dPlain > 0, 'wall damaged: ' + dPlain);
   assert.ok(Math.abs(dStrong - dPlain * 0.65) < 1e-6, `reinforced takes 35% less (${dStrong} vs ${dPlain})`);
+});
+
+test('Laser Turret: charges 2.5 s with a target in range before each shot, and loses the charge when the target is gone', () => {
+  const G = newGame();
+  const S = G.State, T = 48, p = field(G, 18, 16), D = G.Defs.buildables.get('laser_turret');
+  const cfg = D.behaviors.find(x => x.type === 'turret');
+  assert.equal(cfg.charge, 2.5); assert.equal(D.power.demand, 6);
+  for (const u of G.Units.crew()) u.maxHp = u.hp = 1e9;
+  const b = G.Buildings.add('laser_turret', p.x, p.y, { team: 'blue' });
+  const foe = G.Units.spawn('hostile_machine', b.x + 5 * T, b.y);
+  foe.speed = 0; foe.damage = 0; foe.maxHp = foe.hp = 1000;
+  G.rebuildSpatial();
+  const s = G.Turrets.get(b);
+  G.Sim.run(2);
+  assert.equal(foe.hp, 1000, 'no shot while charging');
+  assert.ok(s.charged > 1.5 && s.charged < 2.5, 'charging: ' + s.charged);
+  assert.ok(Math.abs(s.aim) < 0.05, 'aimed at the target while it charges');
+  G.Sim.run(0.7);
+  assert.ok(foe.hp < 1000, 'fired once charged');
+  assert.ok(S.shots.some(x => x.kind === 'laser') || foe.hp < 1000);
+  // Losing the target drops the charge.
+  G.Sim.run(1.5);
+  foe.hp = 0; G.Sim.run(0.5);
+  assert.equal(s.charged, 0, 'charge lost with no target');
 });
 
 test('gates: 1×3 and 1×4, horizontal and vertical twins; a vertical gate lets friendly units through a north-south wall', () => {

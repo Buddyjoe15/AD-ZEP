@@ -716,6 +716,39 @@ test('building walls: press and drag builds a row in the direction dragged, prev
   } finally { await browser.close(); }
 });
 
+test('pixel-art Laser Turret: its coils show the real charge, then the shot', { skip, timeout: 60000 }, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    const r = await page.evaluate(() => {
+      const G = GW, S = G.State, h = G.Units.hero(), T = G.CONFIG.TILE, P = G.PixelArt;
+      S.paused = true;
+      const b = G.Buildings.add('laser_turret', Math.floor(h.x / T) + 3, Math.floor(h.y / T) + 3, { team: 'blue' });
+      const sp = P.data.sprites.laser_turret, H = sp.head, s = G.Turrets.get(b), cfg = G.Defs.buildables.get('laser_turret').behaviors[0];
+      let stamped = null; const orig = P.stampFrame;
+      P.stampFrame = function(g, spr, str){ if (spr === sp) stamped = str; return orig.apply(this, arguments); };
+      const col = () => { P.drawBuilding(document.createElement('canvas').getContext('2d'), b, 1, S.time); return H.frames[4].indexOf(stamped); };   // aim 0: east, facing 4
+      s.aim = 0; P.aims.set(b.id, { a: 0, t: S.time });
+      const idle = col();
+      s.targetId = 'x'; s.cool = 0; s.charged = 1.3;
+      const charging = col();
+      s.charged = 2.45;
+      const full = col();
+      s.charged = 0; s.cool = cfg.reload - 0.01;
+      const shot = col();
+      P.stampFrame = orig;
+      return { idle, charging, full, shot, H: { idle: H.states.idle.start, ch: H.states.charging.start, n: H.states.charging.frames, flash: H.states.flash.start } };
+    });
+    assert.equal(r.idle, r.H.idle, 'no target: idle, coils dark');
+    assert.equal(r.charging, r.H.ch + Math.floor(1.3 / 2.5 * r.H.n), 'half charged: half the coils');
+    assert.equal(r.full, r.H.ch + r.H.n - 1, 'nearly charged: every coil');
+    assert.equal(r.shot, r.H.flash, 'just fired: the shot frame');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
 test('Ore Processor window lists its three products and queues them; the top bar shows resources as they arrive', { skip, timeout: 60000 }, async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const browser = await launch();

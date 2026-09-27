@@ -8,7 +8,9 @@
    `hostileTiles`; otherwise it stays shut.
 
    Turrets (`turret` behaviour) pick the nearest enemy unit they can hit (ground, air or
-   any) between `minRange` and `range`, and fire every `reload` seconds. `splash` also
+   any) between `minRange` and `range`, and fire every `reload` seconds. A turret with
+   `charge` (the Laser Turret) first charges that many seconds with a target in range, and
+   loses the charge when no target is left. `splash` also
    hits other enemies that close to the target; `ammo` spends one of that resource per shot
    from the stockpile and holds fire without it. Testing-zone copies never fire. Each shot
    hits with the turret's `accuracy`, raised by a Defensive Sensor within its boostTiles;
@@ -74,10 +76,10 @@
   };
 
   G.Turrets = {
-    state: new Map(),   // building id → { cool, aim, targetId, noAmmo }
+    state: new Map(),   // building id → { cool, aim, targetId, noAmmo, charged }
     get(b){
       let s = this.state.get(b.id);
-      if (!s) this.state.set(b.id, s = { cool: 0, aim: -Math.PI / 2, targetId: null, noAmmo: false });
+      if (!s) this.state.set(b.id, s = { cool: 0, aim: -Math.PI / 2, targetId: null, noAmmo: false, charged: 0 });
       return s;
     },
     canHit(cfg, u){ return cfg.targets === 'any' || (cfg.targets === 'air') === flying(u); },
@@ -121,8 +123,14 @@
       s.cool -= dt;
       if (s.cool > 0) return;
       const t = this.target(b, cfg);
-      if (!t){ s.cool = 0.2; s.targetId = null; return; }   // rescan a few times a second
+      if (!t){ s.cool = 0.2; s.targetId = null; s.charged = 0; return; }   // rescan a few times a second
       s.aim = Math.atan2(t.y - b.y, t.x - b.x); s.targetId = t.id;
+      if (cfg.charge){
+        // Charging: rescans every tick, so the aim follows the target while it builds up.
+        s.charged = Math.min(cfg.charge, s.charged + dt);
+        if (s.charged < cfg.charge) return;
+        s.charged = 0;
+      }
       if (cfg.ammo){
         s.noAmmo = !G.Economy.spend({ [cfg.ammo]: 1 }, 'ammunition');
         if (s.noAmmo){ s.cool = 0.5; return; }

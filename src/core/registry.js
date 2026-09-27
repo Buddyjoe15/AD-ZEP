@@ -118,6 +118,7 @@
         if (!(t.range > 0 && t.damage > 0 && t.reload > 0) || !['ground', 'air', 'any'].includes(t.targets)) problems.push(`buildable ${b.key}: turret needs range, damage, reload and targets`);
         if (t.ammo && !D.resources.has(t.ammo)) problems.push(`buildable ${b.key}: unknown ammo ${t.ammo}`);
         if (!(t.accuracy > 0 && t.accuracy <= 1)) problems.push(`buildable ${b.key}: turret accuracy must be 0–1`);
+        if (t.charge !== undefined && !(t.charge > 0)) problems.push(`buildable ${b.key}: turret charge must be positive`);
       }
     }
     for (const b of D.buildables.all()) if (D.units.has(b.key)) problems.push(`buildable ${b.key}: key also used by a unit`);

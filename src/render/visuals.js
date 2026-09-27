@@ -214,6 +214,7 @@
   });
 
   V.registerBuilding('sentry_turret', turret({ ring: '#4e6470', head: '#7fa3b5', barrel: '#1b2226', barrels: [0], width: 4, length: 20 }));
+  V.registerBuilding('laser_turret', turret({ ring: '#3d5560', head: '#b3bdb5', barrel: '#36b8ef', barrels: [0], width: 5, length: 22 }));
   V.registerBuilding('heavy_turret', turret({ ring: '#46525a', head: '#6f8594', barrel: '#151b1e', barrels: [0], width: 10, length: 20 }));
   V.registerBuilding('aa_turret', turret({ ring: '#4a6a80', head: '#8fb8d8', barrel: '#1b2226', barrels: [-4, 4], width: 3, length: 22 }));
   V.registerBuilding('missile_battery', turret({ ring: '#6a4a3a', head: '#d9906a', barrel: '#2a1d16', missiles: true }));

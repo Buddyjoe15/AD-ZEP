@@ -179,3 +179,18 @@ test('walls: 16 joined pieces per state that reach the tile edge exactly on the 
   const hz = data.sprites.gate_3, vt = data.sprites.gate_3_v, a = area(hz.frames[0][hz.states.finished.start]), b = area(vt.frames[0][vt.states.finished.start]);
   assert.ok(Math.abs(a - b) < a * 0.05, `turned gate keeps its size (${a} vs ${b} px)`);
 });
+
+test('Laser Turret: a diamond base and a head in 16 facings whose charging frames light one more coil each', () => {
+  const sp = data.sprites.laser_turret, H = sp.head;
+  assert.equal(sp.frameWidth, 96);
+  assert.equal(H.facings, 16);
+  assert.equal(H.chargeTime, 2.5);
+  assert.deepEqual(H.firing, { idle: ['charging', 'flash'], damaged: ['damaged-charging', 'damaged-flash'] });
+  const ch = H.states.charging, row = H.frames[0];
+  assert.equal(ch.frames, 6);
+  // Each charging frame has more lit (cyan) pixels than the one before.
+  const cyan = new Set(['cyan1', 'cyan2', 'white'].map(n => ALPHABET[PALETTE.findIndex(([k]) => k === n) + 1]));
+  const lit = s => [...s].filter(c => cyan.has(c)).length;
+  for (let i = 1; i < ch.frames; i++) assert.ok(lit(row[ch.start + i]) > lit(row[ch.start + i - 1]), 'coil ' + i);
+  assert.ok(lit(row[H.states.idle.start]) < lit(row[ch.start]), 'idle has no coil lit');
+});
