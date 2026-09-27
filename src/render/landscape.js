@@ -81,18 +81,18 @@
   function ids(){
     if (K) return K;
     const id = k => G.Defs.terrain.get(k).id;
-    K = { WATER: id('water'), DEEP: id('deep_water'), FALLS: id('waterfall'), CLIFF: id('cliff'), CAVE: id('cave'), SLOPE: id('slope'), STAIRS: id('steps'), BRIDGE: id('bridge'), PATH: id('path'), STONES: id('stepping_stones') };
+    K = { WATER: id('water'), DEEP: id('deep_water'), FALLS: id('waterfall'), CLIFF: id('cliff'), CAVE: id('cave'), SLOPE: id('slope'), STAIRS: id('steps'), BRIDGE: id('bridge'), PATH: id('path'), STONES: id('stepping_stones'), BOG: id('bog'), VENT: id('steam_vent'), BARREN: id('barren'), ORE: id('outcrop'), SWAMP: id('swamp') };
     return K;
   }
   function fields(grd){
     const a = grd.art;
     if (a.land) return a.land;
     const n = grd.size;
-    a.land = { E: new Float32Array(n), W: new Float32Array(n), D: new Float32Array(n), noFace: new Uint8Array(n), near: new Uint8Array(n), P: new Float32Array(n), stones: new Map() };
+    a.land = { E: new Float32Array(n), W: new Float32Array(n), D: new Float32Array(n), noFace: new Uint8Array(n), near: new Uint8Array(n), P: new Float32Array(n), B: new Uint8Array(n), PK: new Uint8Array(n), S: new Float32Array(n), stones: new Map() };
     // Stepping stones (grid.art.fords) listed by every tile they or their wake reach.
     const f = a.fords, t = T();
     if (f) for (let s = 0; s < f.count; s++){
-      const reach = f.r[s] * 4;
+      const reach = f.land[s] ? f.r[s] + 2 : f.r[s] * 4;
       for (let y = Math.floor((f.y[s] - reach) / t); y <= Math.floor((f.y[s] + reach) / t); y++) for (let x = Math.floor((f.x[s] - reach) / t); x <= Math.floor((f.x[s] + reach) / t); x++){
         if (!grd.inBounds(x, y)) continue;
         const i = y * grd.cols + x;
@@ -111,9 +111,13 @@
     const lv = (x, y) => inb(x, y) ? lvl[y * cols + x] : -1;
     for (let y = Math.max(0, y0 - 1); y < Math.min(rows, y0 + h + 1); y++) for (let x = Math.max(0, x0 - 1); x < Math.min(cols, x0 + w + 1); x++){
       const i = y * cols + x, t = tiles[i], l = lvl[i];
-      const wet = t === k.WATER || t === k.DEEP || t === k.FALLS || t === k.STONES;
+      const wet = t === k.WATER || t === k.DEEP || t === k.FALLS || t === k.STONES || t === k.BOG;
+      L.B[i] = t === k.BOG ? 1 : 0;
       L.W[i] = wet ? 1 : 0;
-      L.P[i] = t === k.PATH ? 1 : 0;
+      // Bare ground along contours: 1 a trail, 2 barren or sodden ground (drawn by kind, below).
+      L.P[i] = t === k.PATH || t === k.BARREN || t === k.ORE || t === k.VENT ? 1 : 0;
+      L.PK[i] = t === k.BARREN || t === k.ORE || t === k.VENT ? 1 : 0;
+      L.S[i] = t === k.SWAMP ? 1 : 0;   // sodden fen ground, its own field so it blends into grass, not dirt
       L.D[i] = t === k.DEEP ? 1 : 0;
       L.noFace[i] = t === k.SLOPE ? 1 : t === k.STAIRS ? 2 : 0;   // a grassy ramp or carved steps instead of rock
       let e = l;
@@ -127,13 +131,13 @@
     // rows up, for faces hanging from a rim above, one tile elsewhere), 4 a path or its edge.
     for (let y = Math.max(0, y0 - 3); y < Math.min(rows, y0 + h + 3); y++) for (let x = Math.max(0, x0 - 2); x < Math.min(cols, x0 + w + 2); x++){
       const i = y * cols + x;
-      let near = (L.W[i] ? 1 : 0) | (L.P[i] ? 4 : 0);
+      let near = (L.W[i] || L.stones.has(i) ? 1 : 0) | (L.P[i] || L.S[i] ? 4 : 0);
       for (let dy = -2; dy <= 1 && near < 7; dy++) for (let dx = -1; dx <= 1; dx++){
         if (!inb(x + dx, y + dy)) continue;
         const j = (y + dy) * cols + x + dx;
         if (L.E[j] !== L.E[i]) near |= 2;
         if (dy >= -1 && L.W[j] !== L.W[i]) near |= 1;
-        if (dy >= -1 && L.P[j] !== L.P[i]) near |= 4;
+        if (dy >= -1 && (L.P[j] !== L.P[i] || L.PK[j] !== L.PK[i] || L.S[j] !== L.S[i])) near |= 4;
       }
       L.near[i] = near;
     }
@@ -175,7 +179,7 @@
       const x = gx + dx, y = gy + dy;
       if (!grd.inBounds(x, y)) return false;
       const j = y * cols + x;
-      if (L.W[j] !== 1 || L.D[j] !== d0 || L.near[j] & 2 || L.stones.has(j)) return false;
+      if (L.W[j] !== 1 || L.D[j] !== d0 || L.B[j] !== L.B[gy * cols + gx] || L.near[j] & 2 || L.stones.has(j)) return false;
     }
     return true;
   }
@@ -223,7 +227,7 @@
       // Rows of one tile's column: which tile-centre row each canvas row falls between, and
       // how far (so a column's value is one lerp per pixel once interpolated across x).
       const rowJ = new Int32Array(Math.ceil((t + FACE) * res) + 4), rowF = new Float32Array(rowJ.length), rowA = new Int32Array(rowJ.length);
-      const colA = new Float32Array(8), colW = new Float32Array(8), colD = new Float32Array(8), colP = new Float32Array(8);
+      const colA = new Float32Array(8), colW = new Float32Array(8), colD = new Float32Array(8), colP = new Float32Array(8), colS = new Float32Array(8);
       // A field interpolated across x at column u (tile units) for tile rows j0..j0+7.
       const across = (Fd, u, j0, out) => {
         let i0 = Math.floor(u); const fx = u - i0;
@@ -236,6 +240,7 @@
       // image BW px wide whose pixel (0, 0) is canvas px (bx, by).
       // `carry` (optional) holds each column's rim state from the tile above, when that tile
       // was just shaded; then there is no need to look a face's height above this one.
+      const wy0 = cy => oy + (cy + 0.5) * step;
       const shadeTile = (gx, gy, i, near, px0, px1, py0, py1, buf, BW, bx, by, carry) => {
         const d32 = new Uint32Array(buf.buffer, buf.byteOffset, buf.length >> 2);
         const cliffs = near & 2, wet = near & 1, trail = near & 4, tintBase = TINT[lvl[i]] || 0, carried = !!(cliffs && carry && carry.ok);
@@ -257,13 +262,16 @@
           }
         }
         const lvlI = lvl[i], Wi = L.W[i], Di = L.D[i], fd = grd.art.fords;
+        // Bog colours here: a bog tile, or dry land whose water comes from a bog beside it.
+        let bog = L.B[i] === 1;
+        if (!bog && !Wi) for (let dy = -1; dy <= 1 && !bog; dy++) for (let dx = -1; dx <= 1; dx++){ const x = gx + dx, y = gy + dy; if (x >= 0 && y >= 0 && x < cols && y < rows && L.B[y * cols + x]){ bog = true; break; } }
         // Stepping stones here: only those still standing in their crossing (not painted over).
         let stones = L.stones.get(i) || null;
-        if (stones){ stones = stones.filter(q => grd.tiles[Math.floor(fd.y[q] / t) * cols + Math.floor(fd.x[q] / t)] === k.STONES); if (!stones.length) stones = null; }
+        if (stones){ stones = stones.filter(q => grd.tiles[fd.crossings[fd.c[q]].mid] === k.STONES); if (!stones.length) stones = null; }
         for (let cx = px0; cx < px1; cx++){
           const wx = ox + (cx + 0.5) * step, ax = Math.floor(wx * 2), axm = ax & (NS - 1), c = cx - px0 + 1, cb = c * nRows;
           if (wet){ across(L.W, wx / t - 0.5, j0, colW); across(L.D, wx / t - 0.5, j0, colD); }
-          if (trail) across(L.P, wx / t - 0.5, j0, colP);
+          if (trail){ across(L.P, wx / t - 0.5, j0, colP); across(L.S, wx / t - 0.5, j0, colS); }
           const nx7 = NOISE[7 * NS + axm] + NOISE[3 * NS + ((ax >> 1) & (NS - 1))] * 0.5;   // waterfall streak strength of this column
           // A ragged foot (faces vary in height), grass hanging over the lip, water stains.
           const Fc = F + Math.round((NOISE[23 * NS + ((ax >> 2) & (NS - 1))] - 0.5) * 10 * res), overhang = Math.max(0, (NOISE[41 * NS + ((ax >> 1) & (NS - 1))] - 0.55) * 12 * res);
@@ -292,25 +300,33 @@
             if (wet){ const q = rowJ[r], a0 = colW[q]; w = a0 + (colW[q + 1] - a0) * rowF[r] + (NOISE[((ay + 31) & (NS - 1)) * NS + ((ax + 57) & (NS - 1))] - 0.5) * 0.14; }
             // Stepping stones: wet rock lit from the top left, a ring of foam, a bow wave upstream
             // and a wake trailing downstream.
-            if (stones && w >= 0.42 && !face){
+            if (stones && !face){
               const wy = oy + (cy + 0.5) * step;
               let best = 1e9, bq = -1, wake = 0;
               for (const q of stones){
                 const dx = wx - fd.x[q], dy = wy - fd.y[q], rr = fd.r[q], dd = Math.sqrt(dx * dx + dy * dy) - rr;
                 if (dd < best){ best = dd; bq = q; }
+                if (fd.land[q]) continue;
                 const along = dx * fd.fx[q] + dy * fd.fy[q], perp = Math.abs(dx * fd.fy[q] - dy * fd.fx[q]);
                 if (along > 0 && along < rr * 3.5 && perp < rr * (0.95 - along / (rr * 5))) wake = Math.max(wake, 1 - along / (rr * 3.5));
               }
               if (best < 0){
                 const dx = wx - fd.x[bq], dy = wy - fd.y[bq], rr = fd.r[bq], lit = -(dx + dy) / (rr * 1.4);
-                const tone = 0.5 + lit * 0.45 + (n - 0.5) * 0.3 + dith * 0.12;
-                if (best > -1.2) col = P.steel1;                                   // its dark wet edge
-                else if (lit > 0.1 && n > 0.8) col = P.leaf1;                      // moss on top
-                else col = tone > 0.78 ? P.plate1 : tone > 0.52 ? P.plate0 : tone > 0.3 ? P.steel2 : P.steel1;
-              } else if (w >= 0.5 && best < 1.8){
+                if (fd.land[bq]){
+                  // A flat slab set in the bank: pale, weathered stone, a dark edge, lichen.
+                  const tone = 0.5 + lit * 0.35 + (n - 0.5) * 0.35 + dith * 0.12;
+                  col = best > -0.9 ? P.char1 : n > 0.82 ? P.grass1 : tone > 0.72 ? P.dust5 : tone > 0.48 ? P.dust4 : tone > 0.25 ? P.plate0 : P.dust3;
+                } else {
+                  const tone = 0.5 + lit * 0.45 + (n - 0.5) * 0.3 + dith * 0.12;
+                  if (best > -1.2) col = P.steel1;                                 // its dark wet edge
+                  else if (lit > 0.1 && n > 0.8) col = P.leaf1;                    // moss on top
+                  else col = tone > 0.78 ? P.plate1 : tone > 0.52 ? P.plate0 : tone > 0.3 ? P.steel2 : P.steel1;
+                }
+              } else if (w >= 0.5 && !fd.land[bq] && best < 1.8){
                 const up = (wx - fd.x[bq]) * fd.fx[bq] + (wy - fd.y[bq]) * fd.fy[bq] < 0;
-                col = up && dith < 0.7 ? P.white : P.water3;                        // a thin foam ring, brightest upstream
+                col = up && dith < 0.7 ? P.white : P.water3;                      // a thin foam ring, brightest upstream
               } else if (w >= 0.5 && wake > 0 && dith < wake * 0.5) col = wake > 0.7 && n > 0.6 ? P.white : P.water3;
+              else if (w < 0.5 && fd.land[bq] && best < 1.2 && dith < 0.5) col = P.dust1;   // worn earth round a slab
             }
             if (col >= 0){ /* stone or foam */ }
             else if (face && ramp){
@@ -318,7 +334,8 @@
               // or steps cut into the rock, in the same band a rock face would take.
               const f = ft / Fc;
               if (ramp === 2) col = (Math.floor(ft / (7 * res)) & 1) ? (f > 0.5 ? P.dust1 : P.dust2) : (ft % (7 * res) < res ? P.dust4 : P.dust3);
-              else col = f < 0.08 ? P.grass3 : n + dith * 0.3 - f * 0.45 > 0.45 ? P.grass1 : P.grass0;
+              else if (f < 0.06 && dith < 0.5) col = P.grass3;                          // the lit brow
+              else { col = P.char0; alpha = (18 + f * 55 + dith * 12) | 0; }            // the grass darkening down the ramp
             }
             else if (face){
               const f = ft / Fc;
@@ -346,7 +363,12 @@
               // Shallows along the edge, open water, and dark where the channel runs deep.
               const q = rowJ[r], dd = wet ? colD[q] + (colD[q + 1] - colD[q]) * rowF[r] : Di;
               const depth = Math.min(1, (w - 0.5) * 1.6) * 0.55 + dd * 0.45 + (n - 0.5) * 0.12;
-              if (depth < 0.08) col = n + dith * 0.5 > 0.62 ? P.water3 : P.water2;
+              if (bog){
+                // Bog: dark, still, peaty water with duckweed and lily pads.
+                const lily = NOISE[((ay >> 1) & (NS - 1)) * NS + (((ax >> 1) + 40) & (NS - 1))];
+                col = lily > 0.8 ? (lily > 0.86 ? P.leaf2 : P.leaf1) : depth < 0.1 ? (dith < 0.5 ? P.grass0 : P.leaf1) : n + dith * 0.3 > 0.75 ? P.leaf1 : n > 0.35 ? P.leaf0 : P.water0;
+              }
+              else if (depth < 0.08) col = n + dith * 0.5 > 0.62 ? P.water3 : P.water2;
               else {
                 const band = depth < 0.3 ? 0 : depth < 0.66 ? 1 : 2, frac = depth < 0.3 ? depth / 0.3 : depth < 0.66 ? (depth - 0.3) / 0.36 : 0;
                 col = RAMP[Math.min(2, band + (band < 2 && frac > 0.7 && dith < (frac - 0.7) / 0.3 ? 1 : 0))];
@@ -360,13 +382,23 @@
             }
             if (col < 0 && trail && !face){
               // Trails: packed dirt along the contour, with pebbles and a darker worn line down
-              // the middle, fraying into grass at the edges.
+              // the middle, fraying into grass at the edges. Barren ground is the same bare
+              // earth, cracked and without the worn line; sodden fen ground is darker grass
+              // with water standing in the hollows.
               const q = rowJ[r], a0 = colP[q], pv = a0 + (colP[q + 1] - a0) * rowF[r] + (NOISE[((ay + 77) & (NS - 1)) * NS + ((ax + 13) & (NS - 1))] - 0.5) * 0.28;
-              if (pv >= 0.5){
+              const pk = L.PK[i], sv = colS[q] + (colS[q + 1] - colS[q]) * rowF[r] + (NOISE[((ay + 21) & (NS - 1)) * NS + ((ax + 70) & (NS - 1))] - 0.5) * 0.3;
+              if (sv > 0.4 && pv < 0.5){
+                if (sv >= 0.5){
+                  const pool = NOISE[(((ay >> 1) + 60) & (NS - 1)) * NS + (((ax >> 1) + 20) & (NS - 1))];
+                  if (pool > 0.78) col = pool > 0.83 ? P.water1 : P.leaf0;
+                  else { col = P.leaf0; alpha = 70 + ((dith * 40) | 0); }
+                } else if (dith < (sv - 0.4) * 6){ col = P.leaf0; alpha = 60; }
+              } else if (pv >= 0.5){
                 const pb = NOISE[((ay * 5) & (NS - 1)) * NS + ((ax * 5 + 3) & (NS - 1))];
                 if (pb > 0.86) col = P.dust4;                                 // pebble
                 else if (pb > 0.83) col = P.char1;                            // its shadow
-                else if (pv > 0.78 && n + dith * 0.3 < 0.45) col = P.dust1;   // the worn middle
+                else if (pk === 1 && NOISE[((ay * 2 + 9) & (NS - 1)) * NS + ((ax * 2) & (NS - 1))] > 0.84) col = P.dust0;   // cracks in the dry earth
+                else if (!pk && pv > 0.78 && n + dith * 0.3 < 0.45) col = P.dust1;   // the worn middle
                 else col = n + dith * 0.35 > 0.72 ? P.dust3 : n > 0.3 ? P.dust2 : P.dust1;
               } else if (pv > 0.4){
                 const k2 = (pv - 0.4) / 0.1;
@@ -419,7 +451,7 @@
       if (!any) return;
       // Open water from the cache (shaded the first time each position and depth is seen).
       for (const [gx, gy, px0, py0, tw, th] of openTiles){
-        const i = gy * cols + gx, key = res + '|' + L.D[i] + '|' + (gx & 3) + '|' + (gy & 3) + '|' + tw + 'x' + th;
+        const i = gy * cols + gx, key = res + '|' + L.D[i] + '|' + L.B[i] + '|' + (gx & 3) + '|' + (gy & 3) + '|' + tw + 'x' + th;
         let cv = openCache.get(key);
         if (!cv){
           const img = new ImageData(tw, th);
@@ -458,21 +490,23 @@
       // Stepping stones: ripples spreading downstream in chevrons, spray where the water hits
       // them and a little mist.
       if (fd) for (let q = 0; q < fd.count; q++){
+        if (fd.land[q]) continue;
         const x = fd.x[q], y = fd.y[q], rr = fd.r[q], fx = fd.fx[q], fy = fd.fy[q];
         if (x < v.x0 - 60 || x > v.x1 + 60 || y < v.y0 - 60 || y > v.y1 + 60) continue;
-        if (tiles[Math.floor(y / t) * cols + Math.floor(x / t)] !== k.STONES) continue;
-        g.strokeStyle = C.water3; g.lineWidth = 1.5;
+        if (tiles[fd.crossings[fd.c[q]].mid] !== k.STONES) continue;
+        if (waterAt(grd, L, x, y) < 0.5) continue;
+        g.strokeStyle = C.water3; g.lineWidth = 1;
         for (let s = 0; s < 2; s++){
-          const f = (ts * 0.8 + s / 2 + h(q, s, 31)) % 1, along = rr + f * rr * 3, half = rr * 0.7 + f * 6, back = 3 + f * 3;
+          const f = (ts * 0.8 + s / 2 + h(q, s, 31)) % 1, along = rr + f * rr * 3, half = rr * 0.7 + f * 4, back = 2 + f * 2;
           const cx = x + fx * along, cy = y + fy * along;
-          g.globalAlpha = 0.7 * (1 - f);
+          g.globalAlpha = 0.6 * (1 - f);
           g.beginPath();
           g.moveTo(cx + fy * half - fx * back, cy - fx * half - fy * back); g.lineTo(cx, cy); g.lineTo(cx - fy * half - fx * back, cy + fx * half - fy * back);
           g.stroke();
         }
         g.globalAlpha = 1;
-        spray(g, x - fx * rr, y - fy * rr, ts, q * 7 + 3, 3, rr, 7);
-        if (q % 2 === 0) mist(g, x, y, ts, q * 7 + 5, 1, rr * 2, 14, 4);
+        if (q % 2 === 0) spray(g, x - fx * rr, y - fy * rr, ts, q * 7 + 3, 2, rr, 6);
+        if (q % 5 === 0) mist(g, x, y, ts, q * 7 + 5, 1, rr * 2, 12, 4);
       }
       for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++){
         const i = gy * cols + gx, tl = tiles[i];
@@ -517,6 +551,10 @@
             spray(g, px + t / 2, py, ts, i, 6, t * 0.8, 10);
             mist(g, px + t / 2, py, ts, i, 3, t * 0.7, 24, 5);
           }
+        } else if (tl === k.VENT){
+          // Steam rising from a vent, now and then in a stronger burst.
+          const burst = ((ts * 0.15 + h(gx, gy, 51)) % 1) < 0.18 ? 2 : 1;
+          mist(g, gx * t + t / 2, gy * t + t / 2, ts, i, 4 * burst, 10, 40 * burst, 5);
         } else if ((tl === k.WATER || tl === k.DEEP) && dir[i] === 5){
           // The plunge pool: rings of foam spreading and fading.
           for (let s = 0; s < 3; s++){

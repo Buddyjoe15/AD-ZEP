@@ -1,0 +1,28 @@
+{
+  "name": "genesis_thicket",
+  "frameWidth": 116,
+  "frameHeight": 116,
+  "origin": [
+    57.5,
+    57.5
+  ],
+  "worldPxPerArtPx": 0.5,
+  "rows": [
+    "{\"r\":16}"
+  ],
+  "frameSizes": [
+    116
+  ],
+  "columns": "3 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      5,
+      5
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_thicket.png",
+  "sheetWidth": 348,
+  "sheetHeight": 116
+}

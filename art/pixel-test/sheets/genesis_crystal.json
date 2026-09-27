@@ -1,0 +1,30 @@
+{
+  "name": "genesis_crystal",
+  "frameWidth": 104,
+  "frameHeight": 104,
+  "origin": [
+    51.5,
+    51.5
+  ],
+  "worldPxPerArtPx": 0.5,
+  "rows": [
+    "{\"r\":10}",
+    "{\"r\":14}"
+  ],
+  "frameSizes": [
+    76,
+    104
+  ],
+  "columns": "3 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      5,
+      5
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_crystal.png",
+  "sheetWidth": 312,
+  "sheetHeight": 208
+}

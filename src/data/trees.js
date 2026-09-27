@@ -51,10 +51,30 @@ GW.TREES.props = {
   // places). `hp` and `wood` by size, as for the dead wood; boulders can't be destroyed.
   bush:      { name: 'Bush',           sizes: [{ r: 7 }, { r: 10 }, { r: 13 }], hp: [30, 50, 80], wood: [1, 2, 3] },
   flowers:   { name: 'Wildflowers',    sizes: [{ r: 8 }], hp: [10], wood: [0] },
-  boulder:   { name: 'Boulder',        sizes: [{ r: 7 }, { r: 11 }, { r: 15 }], hp: [Infinity, Infinity, Infinity], wood: [0, 0, 0] },
+  boulder:   { name: 'Boulder',        sizes: [{ r: 7 }, { r: 11 }, { r: 15 }, { r: 21 }], hp: [Infinity, Infinity, Infinity, Infinity], wood: [0, 0, 0, 0] },
   reeds:     { name: 'Reeds',          sizes: [{ r: 9 }], hp: [15], wood: [0] },
   mushrooms: { name: 'Mushrooms',      sizes: [{ r: 6 }], hp: [10], wood: [0] },
-  fern:      { name: 'Fern',           sizes: [{ r: 9 }, { r: 13 }], hp: [15, 20], wood: [0, 0] }
+  fern:      { name: 'Fern',           sizes: [{ r: 9 }, { r: 13 }], hp: [15, 20], wood: [0, 0] },
+  // The rest of the Genesis landscape, drawn the same way. `decor` things are too small to
+  // send a Crawler to, but blasts still clear the ones that can be destroyed.
+  tallgrass: { name: 'Tall grass',     sizes: [{ r: 11 }, { r: 15 }], hp: [5, 5], wood: [0, 0], decor: true },
+  thicket:   { name: 'Dense thicket',  sizes: [{ r: 16 }], hp: [60], wood: [2] },
+  mound:     { name: 'Termite mound',  sizes: [{ r: 12 }], hp: [Infinity], wood: [0] },
+  vent:      { name: 'Steam vent',     sizes: [{ r: 12 }], hp: [Infinity], wood: [0] },
+  crystal:   { name: 'Crystals',       sizes: [{ r: 10 }, { r: 14 }], hp: [Infinity, Infinity], wood: [0, 0] },
+  ore:       { name: 'Mineral outcrop', sizes: [{ r: 12 }], hp: [Infinity], wood: [0] },
+  alien:     { name: 'Alien plants',   sizes: [{ r: 10 }], hp: [20], wood: [0] },
+  logpile:   { name: 'Log pile',       sizes: [{ r: 14 }], hp: [80], wood: [20] },
+  sawhorse:  { name: 'Sawhorse',       sizes: [{ r: 10 }], hp: [30], wood: [3] },
+  burrow:    { name: 'Animal burrow',  sizes: [{ r: 9 }], hp: [Infinity], wood: [0], decor: true },
+  rubble:    { name: 'Rubble',         sizes: [{ r: 9 }, { r: 13 }], hp: [Infinity, Infinity], wood: [0, 0] },
+  tuft:      { name: 'Grass tuft',     sizes: [{ r: 5 }], hp: [2], wood: [0], decor: true },
+  weeds:     { name: 'Weeds',          sizes: [{ r: 5 }], hp: [2], wood: [0], decor: true },
+  pebbles:   { name: 'Pebbles',        sizes: [{ r: 6 }], hp: [Infinity], wood: [0], decor: true },
+  leaves:    { name: 'Fallen leaves',  sizes: [{ r: 7 }], hp: [1], wood: [0], decor: true },
+  twigs:     { name: 'Twigs',          sizes: [{ r: 8 }], hp: [1], wood: [0], decor: true },
+  bones:     { name: 'Bones',          sizes: [{ r: 6 }], hp: [Infinity], wood: [0], decor: true },
+  puddle:    { name: 'Puddle',         sizes: [{ r: 9 }], hp: [Infinity], wood: [0], decor: true }
 };
 GW.TREES.LOG_ANGLES = 16;
 // Every kind a Genesis map plants, in the order `grid.art.trees.kind` indexes: species first.

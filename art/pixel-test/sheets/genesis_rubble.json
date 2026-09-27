@@ -1,0 +1,30 @@
+{
+  "name": "genesis_rubble",
+  "frameWidth": 96,
+  "frameHeight": 96,
+  "origin": [
+    47.5,
+    47.5
+  ],
+  "worldPxPerArtPx": 0.5,
+  "rows": [
+    "{\"r\":9}",
+    "{\"r\":13}"
+  ],
+  "frameSizes": [
+    72,
+    96
+  ],
+  "columns": "3 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      3,
+      3
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_rubble.png",
+  "sheetWidth": 288,
+  "sheetHeight": 192
+}

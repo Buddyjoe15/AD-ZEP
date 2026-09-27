@@ -1,0 +1,28 @@
+{
+  "name": "genesis_burrow",
+  "frameWidth": 72,
+  "frameHeight": 72,
+  "origin": [
+    35.5,
+    35.5
+  ],
+  "worldPxPerArtPx": 0.5,
+  "rows": [
+    "{\"r\":9}"
+  ],
+  "frameSizes": [
+    72
+  ],
+  "columns": "2 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      2,
+      2
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_burrow.png",
+  "sheetWidth": 144,
+  "sheetHeight": 72
+}

@@ -195,11 +195,12 @@
     // True when trees are drawn every frame at zoom z (pixel art on, close enough to see them move).
     live(grd, z){ return this.has(grd) && !!pixelArt() && z >= this.LIVE_ZOOM; },
     // Every tree reaching into chunk (cx, cy), at rest, into a chunk canvas (world px).
-    paintChunk(ctx, grd, cx, cy){
+    // `groundOnly`: just the ground layer (the trees are drawn live).
+    paintChunk(ctx, grd, cx, cy, groundOnly = false){
       const I = index(grd), A = pixelArt(), c = cy * I.ncx + cx, st = states(grd), tiles = grd.tiles;
       if (cx < 0 || cy < 0 || cx >= I.ncx || cy >= I.ncy) return;
       let count = 0, extras = false;
-      const take = j => { if (visible(I, j, st, tiles)){ I.ids[count++] = j; I.dx[j] = 0; I.step[j] = 0; } };
+      const take = j => { if (visible(I, j, st, tiles) && !(groundOnly && layer(I.EK[j]))){ I.ids[count++] = j; I.dx[j] = 0; I.step[j] = 0; } };
       for (let p = I.start[c]; p < I.start[c + 1]; p++) take(I.list[p]);
       const x0 = cx * I.CS - REACH, x1 = (cx + 1) * I.CS + REACH, y0 = cy * I.CS - REACH, y1 = (cy + 1) * I.CS + REACH;
       for (const j of I.extraAt.values()) if (I.X[j] >= x0 && I.X[j] <= x1 && I.Y[j] >= y0 && I.Y[j] <= y1){ extras = true; take(j); }
@@ -227,7 +228,7 @@
           const j = I.list[p];
           if (I.seen[j] === stamp) continue;
           I.seen[j] = stamp;
-          if (inView(j) && visible(I, j, st, tiles)) I.ids[count++] = j;
+          if (inView(j) && visible(I, j, st, tiles) && layer(I.EK[j])) I.ids[count++] = j;   // the ground layer is in the chunks
         }
       }
       for (const j of I.extraAt.values()){

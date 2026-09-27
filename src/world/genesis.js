@@ -222,6 +222,12 @@
     {
       const ids = k => G.Defs.terrain.get(k).id;
       const SHRUB = ids('bush'), FLOWERS = ids('wildflowers'), MUSH = ids('mushrooms'), ROCK = ids('rock'), MOSS = ids('mossy_rock'), REEDS = ids('reeds');
+      const THICK = ids('tall_grass'), THICKET = ids('thicket'), MOUND = ids('termite_mound'), VENT = ids('steam_vent'), CRYSTAL = ids('crystal'), ORE = ids('outcrop');
+      const ALIEN = ids('alien_flora'), LOGS = ids('log_pile'), SAWHORSE = ids('sawhorse'), BURROW = ids('burrow'), RUBBLE = ids('rubble');
+      // Ground detail marks that become props (the rest, stains and tracks, stay marks).
+      const DK = key => (G.WOODLANDS_DETAIL || []).indexOf(key) + 1;
+      const MARKS = new Map([[DK('TUFT'), 'tuft'], [DK('WEEDS'), 'weeds'], [DK('FLOWER'), 'flowers'], [DK('PEBBLES'), 'pebbles'], [DK('LEAVES'), 'leaves'],
+        [DK('TWIGS'), 'twigs'], [DK('BRANCH'), 'twigs'], [DK('BONES'), 'bones'], [DK('PUDDLE'), 'puddle']]);
       const at = (x, y, j, spread) => [Math.floor(x * TILE + TILE / 2 + (hash(x, y, s + 901 + j) - 0.5) * spread), Math.floor(y * TILE + TILE / 2 + (hash(x, y, s + 903 + j) - 0.5) * spread)];
       const v8 = (x, y, j) => Math.floor(hash(x, y, s + 907 + j) * 256);
       for (let i = 0; i < N; i++){
@@ -231,11 +237,24 @@
         else if (tl === MUSH){ const [px, py] = at(x, y, 0, 30); add(px, py, 0, 'mushrooms', 0, v8(x, y, 0)); }
         else if (tl === ROCK || tl === MOSS){
           const mossy = tl === MOSS ? 2 : 0, [px, py] = at(x, y, 0, 12);
-          add(px, py, 0, 'boulder', h1 < 0.55 ? 1 : 2, mossy + (v8(x, y, 1) & 1));
+          add(px, py, 0, 'boulder', h1 < 0.2 ? 3 : h1 < 0.6 ? 1 : 2, mossy + (v8(x, y, 1) & 1));   // now and then a big one
           if (hash(x, y, s + 919) < 0.35){ const [qx, qy] = at(x, y, 2, 30); add(qx, qy, 0, 'boulder', 0, mossy + (v8(x, y, 3) & 1)); }
         }
         else if (tl === REEDS){ for (let j = 0; j < 2; j++){ const [px, py] = at(x, y, j, 32); add(px, py, 0, 'reeds', 0, v8(x, y, j)); } }
         else if (tl === FLOOR && h1 < 0.1){ const [px, py] = at(x, y, 0, 36); add(px, py, 0, 'fern', hash(x, y, s + 921) < 0.6 ? 0 : 1, v8(x, y, 0)); }
+        else if (tl === THICK){ for (let j = 0; j < 3; j++){ const [px, py] = at(x, y, j, 46); add(px, py, 0, 'tallgrass', hash(x, y, s + 923 + j) < 0.5 ? 0 : 1, v8(x, y, j)); } }
+        else if (tl === THICKET){ for (let j = 0; j < 2; j++){ const [px, py] = at(x, y, j, 30); add(px, py, 0, 'thicket', 0, v8(x, y, j)); } }
+        else if (tl === MOUND){ const [px, py] = at(x, y, 0, 14); add(px, py, 0, 'mound', 0, v8(x, y, 0)); }
+        else if (tl === VENT){ add(x * TILE + TILE / 2, y * TILE + TILE / 2, 0, 'vent', 0, v8(x, y, 0)); }
+        else if (tl === CRYSTAL){ const [px, py] = at(x, y, 0, 16); add(px, py, 0, 'crystal', h1 < 0.5 ? 0 : 1, v8(x, y, 0)); }
+        else if (tl === ORE){ const [px, py] = at(x, y, 0, 14); add(px, py, 0, 'ore', 0, v8(x, y, 0)); }
+        else if (tl === ALIEN){ for (let j = 0; j < 2; j++){ const [px, py] = at(x, y, j, 36); add(px, py, 0, 'alien', 0, v8(x, y, j)); } }
+        else if (tl === LOGS){ add(x * TILE + TILE / 2, y * TILE + TILE / 2, 0, 'logpile', 0, v8(x, y, 0)); }
+        else if (tl === SAWHORSE){ add(x * TILE + TILE / 2, y * TILE + TILE / 2, 0, 'sawhorse', 0, 0); }
+        else if (tl === BURROW){ const [px, py] = at(x, y, 0, 20); add(px, py, 0, 'burrow', 0, v8(x, y, 0)); }
+        else if (tl === RUBBLE){ const [px, py] = at(x, y, 0, 26); add(px, py, 0, 'rubble', h1 < 0.5 ? 0 : 1, v8(x, y, 0)); }
+        const mk = MARKS.get(art.detail[i]);
+        if (mk){ const [px, py] = at(x, y, 5, 30); add(px, py, 0, mk, 0, mk === 'flowers' ? Math.floor(vnoise(x / 6, y / 6, s + 917) * 6) % 6 : v8(x, y, 5)); art.detail[i] = 0; }
       }
     }
 
@@ -286,21 +305,43 @@
       if (!clearOf(Math.round(mx), Math.round(my), 14, [BRIDGE, FALLS])) continue;
       chosen.push({ ...c, mx, my });
     }
-    const out = { x: [], y: [], r: [], fx: [], fy: [] };
-    for (const c of chosen) for (let k = 1; k <= c.n; k++){
-      const tx = c.x + c.dx * k, ty = c.y + c.dy * k;
-      tiles[ty * W + tx] = STONES;
-      // Two rocks per tile along the crossing, nudged off the line a little.
-      for (let j = 0; j < 2; j++){
-        const along = (k - 1 + (j + 0.5) / 2) * TILE + TILE / 2 + (hash(tx, ty, s + 819 + j) - 0.5) * 8, off = (hash(tx, ty, s + 813 + j) - 0.5) * 16;
-        out.x.push(Math.round((c.x + 0.5) * TILE + c.dx * along + c.fx * off)); out.y.push(Math.round((c.y + 0.5) * TILE + c.dy * along + c.fy * off));
-        out.r.push(7 + Math.round(hash(tx, ty, s + 817 + j) * 4)); out.fx.push(c.fx); out.fy.push(c.fy);
+    // Each crossing is rows of rocks across the flow: two abreast mid-stream, widening to five or
+    // six where it meets the land, and carried a tile and a half onto each bank as flat slabs
+    // on a worn dirt apron (path), so it is grounded at both ends.
+    const PATH = id('path'), GROUNDABLE = new Set(['grass', 'tall_grass', 'wildflowers', 'forest', 'bush', 'reeds', 'mushrooms', 'clearing', 'swamp'].map(id));
+    const out = { x: [], y: [], r: [], fx: [], fy: [], land: [], c: [] };
+    chosen.forEach((c, ci) => {
+      for (let k = 1; k <= c.n; k++) tiles[(c.y + c.dy * k) * W + c.x + c.dx * k] = STONES;
+      for (const k of [0, -1, c.n + 1, c.n + 2]){
+        const x = c.x + c.dx * k, y = c.y + c.dy * k, i = y * W + x;
+        if (x >= 0 && y >= 0 && x < W && y < H && GROUNDABLE.has(tiles[i])) tiles[i] = PATH;
       }
-    }
+      const px = c.dy ? 1 : 0, py = c.dx ? 1 : 0;           // across the crossing
+      const w0 = 0.5, w1 = c.n + 0.5, mid = (w0 + w1) / 2, half = (w1 - w0) / 2 + 1.5;
+      const ox = (c.x + 0.5) * TILE, oy = (c.y + 0.5) * TILE;
+      let row = 0;
+      for (let sT = -1.4; sT <= c.n + 2.4; row++){
+        const u = Math.min(1, Math.abs(sT - mid) / half), onLand = sT < w0 || sT > w1;
+        const count = Math.round(2 + 4 * u ** 1.4), gap = onLand ? 11 : 12;
+        sT += (onLand ? 11 : 14) / TILE;
+        for (let j = 0; j < count; j++){
+          const hr = q => hash(ci * 997 + row, j, s + q);
+          if (onLand && hr(821) < 0.3) continue;              // slabs thin out into the grass
+          const along = sT * TILE + (hr(823) - 0.5) * 5, off = (j - (count - 1) / 2) * gap + (hr(827) - 0.5) * 5;
+          const rx = Math.round(ox + c.dx * along + px * off), ry = Math.round(oy + c.dy * along + py * off), ti = Math.floor(ry / TILE) * W + Math.floor(rx / TILE);
+          if (onLand && (grid.solidTerrain[tiles[ti]] !== 0 || tiles[ti] === BRIDGE)) continue;   // slabs only on open ground
+          out.x.push(rx); out.y.push(ry);
+          out.r.push(onLand ? 4 + Math.round(hr(829) * 2.5) : 4 + Math.round((1 - u) * 1.5 + hr(829) * 1.5));
+          out.fx.push(c.fx); out.fy.push(c.fy); out.land.push(onLand ? 1 : 0); out.c.push(ci);
+        }
+      }
+    });
     grid.touch();
     return {
       count: out.x.length, x: Int32Array.from(out.x), y: Int32Array.from(out.y), r: Uint8Array.from(out.r), fx: Int8Array.from(out.fx), fy: Int8Array.from(out.fy),
-      crossings: chosen.map(c => ({ x: c.x, y: c.y, dx: c.dx, dy: c.dy, n: c.n }))   // from bank tile (x, y), n stone tiles along (dx, dy)
+      land: Uint8Array.from(out.land), c: Uint8Array.from(out.c),
+      // From bank tile (x, y), n stone tiles along (dx, dy); `mid` is the middle stone tile.
+      crossings: chosen.map(c => ({ x: c.x, y: c.y, dx: c.dx, dy: c.dy, n: c.n, mid: (c.y + c.dy * Math.ceil(c.n / 2)) * W + c.x + c.dx * Math.ceil(c.n / 2) }))
     };
   }
 

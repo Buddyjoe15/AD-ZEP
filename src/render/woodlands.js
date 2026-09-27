@@ -134,6 +134,17 @@
   const CONTOUR = new Set([K.WATER, K.DEEP, K.FALLS, K.CLIFF, K.CAVE, K.PATH, K.SLOPE, K.STAIRS, K.STONES]);
   const ON_GRASS = new Set([K.REEDS, K.ROCKS, K.MOSSROCK, K.MUSHROOM, K.FLOWERS, K.BURROW, K.SHRUB, K.STUMP, K.LOGS, K.MOUND, K.VENT, K.ORE, K.CRYSTAL]);
   const PROPPED = new Set([K.SHRUB, K.FLOWERS, K.MUSHROOM, K.ROCKS, K.MOSSROCK, K.REEDS]);
+  // Genesis ground under props (G.TreeArt draws what stands on it): grass, or bare dust.
+  const GEN_GRASS = new Set([K.THICK, K.THICKET, K.MOUND, K.CRYSTAL, K.ALIEN, K.LOGS, K.SAWHORSE, K.BURROW, K.RUBBLE, K.PAD, K.BOG, K.BARREN, K.ORE, K.VENT, K.SWAMP]);
+  const GEN_DUST = new Set();   // (barren ground is drawn along contours by G.Landscape)
+  function dustBase(ctx, gx, gy, px, py, S){
+    const P = G.PixelArt;
+    if (!pix){ ctx.fillStyle = rgb(RGB[K.BARREN]); ctx.fillRect(px, py, S + .5, S + .5); return; }
+    const smooth = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = P.shrinks(ctx, S, P.tileArt());
+    ctx.drawImage(P.tile(gx, gy), px, py, S + .5, S + .5);
+    ctx.imageSmoothingEnabled = smooth;
+  }
   const genesis = () => !!(art && art.generator === 'genesis');
   function grassBase(ctx, gx, gy, px, py, S){
     if (pix) blit(ctx, variant(pix.grass, gx, gy, 11), px, py, S);
@@ -142,7 +153,8 @@
   function drawTile(ctx, i, t, gx, gy, px, py, S){
     if (t === K.LOG && art && art.trees && G.TreeArt.logOn(grid, i)) t = K.FOREST;   // a Genesis fallen tree lies here (G.TreeArt)
     const gen = genesis();
-    if (gen && CONTOUR.has(t)){ grassBase(ctx, gx, gy, px, py, S); return; }
+    if (gen && (CONTOUR.has(t) || GEN_GRASS.has(t))){ grassBase(ctx, gx, gy, px, py, S); return; }
+    if (gen && GEN_DUST.has(t)){ dustBase(ctx, gx, gy, px, py, S); return; }
     if (pix){ const str = pixelTile(i, t, gx, gy); if (str){ blit(ctx, str, px, py, S); return; } }
     const s = seed, h = [hash(gx, gy, s + 7), hash(gx, gy, s + 9), hash(gx, gy, s + 13)];
     const jit = Math.round((h[0] - .5) * 10), lw = Math.max(1, S * .08);
@@ -507,6 +519,7 @@
   function drawTop(ctx, t, gx, gy, px, py, S){
     const s = seed, h0 = hash(gx, gy, s + 7), h1 = hash(gx, gy, s + 9), h2 = hash(gx, gy, s + 17);
     if (t === K.TREE && art && art.trees) return;   // free-standing trees (Genesis) are drawn by G.TreeArt
+    if (art && art.generator === 'genesis' && (t === K.THICKET || t === K.MOUND || t === K.VENT)) return;   // props too
     if (t === K.TREE && pix && !fenAt(gx, gy)){
       // Trees that lean in the current wind are drawn every frame (drawTrees); the rest are
       // drawn upright into the chunk, and rustling leaves are drawn over them when close.
@@ -617,7 +630,9 @@
       if (G.TreeFX) G.TreeFX.paintScorch(ctx, x0 * S, y0 * S, ct * S);   // blast marks, under everything tall
       bakeTrees = !!(opts && opts.trees);
       this.paintTops(ctx, grd, x0, y0, ct, S, true);
-      if (art.trees && bakeTrees) G.TreeArt.paintChunk(ctx, grd, Math.floor(x0 / ct), Math.floor(y0 / ct));
+      // Trees at rest when asked; the ground layer (dead wood, bushes, grass, rocks) always, as it
+      // never moves.
+      if (art.trees) G.TreeArt.paintChunk(ctx, grd, Math.floor(x0 / ct), Math.floor(y0 / ct), !bakeTrees);
       bakeTrees = false;
     },
     // Pixel-art trees in view that move in the current weather, drawn every frame. Leaning

@@ -23,14 +23,26 @@ export const GENESIS_PROPS = {
   stump_cut: [{ r: 4 }, { r: 6 }], stump_broken: [{ r: 4 }, { r: 6 }],
   log: [{ length: 72, width: 6 }, { length: 108, width: 9 }],
   // Landscaping: bushes, flower patches, boulders, reeds, mushrooms and ferns.
-  bush: [{ r: 7 }, { r: 10 }, { r: 13 }], flowers: [{ r: 8 }], boulder: [{ r: 7 }, { r: 11 }, { r: 15 }],
-  reeds: [{ r: 9 }], mushrooms: [{ r: 6 }], fern: [{ r: 9 }, { r: 13 }]
+  bush: [{ r: 7 }, { r: 10 }, { r: 13 }], flowers: [{ r: 8 }], boulder: [{ r: 7 }, { r: 11 }, { r: 15 }, { r: 21 }],
+  reeds: [{ r: 9 }], mushrooms: [{ r: 6 }], fern: [{ r: 9 }, { r: 13 }],
+  // Everything else a Genesis map shows: tall grass and thickets, the zone features, camp
+  // leftovers, and small ground detail.
+  tallgrass: [{ r: 11 }, { r: 15 }], thicket: [{ r: 16 }], mound: [{ r: 12 }], vent: [{ r: 12 }], crystal: [{ r: 10 }, { r: 14 }],
+  ore: [{ r: 12 }], alien: [{ r: 10 }], logpile: [{ r: 14 }], sawhorse: [{ r: 10 }], burrow: [{ r: 9 }], rubble: [{ r: 9 }, { r: 13 }],
+  tuft: [{ r: 5 }], weeds: [{ r: 5 }], pebbles: [{ r: 6 }], leaves: [{ r: 7 }], twigs: [{ r: 8 }], bones: [{ r: 6 }], puddle: [{ r: 9 }]
 };
 export const LOG_ANGLES = 16;
-export const PROP_SHADOW = { stump_cut: [3, 3], stump_broken: [3, 3], log: [4, 4], bush: [5, 5], flowers: [2, 2], boulder: [6, 6], reeds: [3, 3], mushrooms: [2, 2], fern: [3, 3] };
+export const PROP_SHADOW = {
+  stump_cut: [3, 3], stump_broken: [3, 3], log: [4, 4], bush: [5, 5], flowers: [2, 2], boulder: [6, 6], reeds: [3, 3], mushrooms: [2, 2], fern: [3, 3],
+  tallgrass: [2, 2], thicket: [5, 5], mound: [7, 7], vent: [2, 2], crystal: [5, 5], ore: [4, 4], alien: [3, 3], logpile: [4, 4], sawhorse: [4, 4],
+  burrow: [2, 2], rubble: [3, 3], tuft: [1, 1], weeds: [1, 1], pebbles: [1, 1], leaves: [0, 0], twigs: [1, 1], bones: [1, 1], puddle: [0, 0]
+};
 const STUMP_VARIANTS = 3, LOG_VARIANTS = 2;
 // Variants per landscaping prop: flower patches come in six colours; boulders 2 and 3 are mossy.
-export const PROP_VARIANTS = { bush: 3, flowers: 6, boulder: 4, reeds: 3, mushrooms: 3, fern: 3 };
+export const PROP_VARIANTS = {
+  bush: 3, flowers: 6, boulder: 4, reeds: 3, mushrooms: 3, fern: 3, tallgrass: 3, thicket: 3, mound: 2, vent: 2, crystal: 3, ore: 3, alien: 3,
+  logpile: 2, sawhorse: 1, burrow: 2, rubble: 3, tuft: 3, weeds: 3, pebbles: 3, leaves: 3, twigs: 3, bones: 2, puddle: 3
+};
 
 // Run-length text: a palette character, then its repeat count when it repeats (the alphabet
 // has no digits, so the two never mix). src/render/trees.js expands it.
@@ -319,6 +331,104 @@ Object.assign(PROP_DRAW, {
         b.line(bx, by, bx + lx, by + ly, 0.6, s < 0.6 ? 'leaf2' : 'grass3');
       }
     }
+  }
+});
+Object.assign(PROP_DRAW, {
+  // Tall grass: a dense clump whose blades spread out from the middle and bend over, lit tips.
+  tallgrass(b, r, { r: R }){
+    b.disc(0, 0, R * 0.55, 'grass1');
+    for (let i = 0, n = Math.round(R * 3.2); i < n; i++){
+      const a0 = r() * TAU, d0 = Math.sqrt(r()) * R * 0.45, [x, y] = polar(a0, d0), [lx, ly] = polar(a0 + (r() - 0.5) * 0.9, R * (0.3 + r() * 0.3));
+      b.taper(x, y, x + lx, y + ly, 1.1, 0.5, r() < 0.3 ? 'grass3' : 'grass2');
+    }
+    for (let i = 0; i < 3; i++){ const [x, y] = polar(r() * TAU, R * (0.5 + r() * 0.3)); b.disc(x, y, 0.7, 'dust5'); }
+  },
+  // A thicket: a tangle of dark leaves and thorny stems, some with berries.
+  thicket(b, r, { r: R }, a, v){
+    b.disc(0, 0, R * 0.75, 'leaf0');
+    for (let i = 0; i < 9; i++){ const [x, y] = polar(r() * TAU, R * (0.3 + r() * 0.35)); b.disc(x, y, R * (0.25 + r() * 0.12), r() < 0.6 ? 'leaf1' : 'leaf0'); }
+    for (let i = 0; i < 10; i++){ const [x, y] = polar(r() * TAU, R * 0.85), [ex, ey] = polar(r() * TAU, R * 0.5); b.line(x, y, x * 0.4 + ex * 0.3, y * 0.4 + ey * 0.3, 0.5, 'char1'); }
+    for (let i = 0; i < 14; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.7); b.disc(x - 1, y - 1, R * 0.08, 'leaf2'); }
+    if (v !== 1) for (let i = 0; i < 7; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.7); b.disc(x, y, 0.7, v ? 'red1' : 'cyan0'); }
+  },
+  // A termite mound: a tall earthen cone seen from above, lit top left, with vent holes.
+  mound(b, r, { r: R }){
+    b.disc(0, 0, R, 'dust2');
+    b.disc(-R * 0.15, -R * 0.15, R * 0.7, 'dust3');
+    b.disc(-R * 0.25, -R * 0.25, R * 0.4, 'dust4');
+    for (let i = 0; i < 5; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.8); b.disc(x, y, 0.8, 'dust0'); }
+    for (let i = 0; i < 3; i++){ const [x, y] = polar(r() * TAU, R * (0.8 + r() * 0.2)); b.disc(x, y, R * 0.25, 'dust1'); }
+  },
+  // A steam vent: a ring of pale mineral crust round a dark hole.
+  vent(b, r, { r: R }){
+    b.disc(0, 0, R, 'dust4');
+    for (let i = 0; i < 8; i++){ const [x, y] = polar((i / 8) * TAU + r() * 0.4, R * 0.75); b.disc(x, y, R * 0.3, r() < 0.5 ? 'dust5' : 'plate1'); }
+    b.disc(0, 0, R * 0.45, 'char1'); b.disc(0.5, 0.5, R * 0.3, 'char0');
+    for (let i = 0; i < 4; i++){ const [x, y] = polar(r() * TAU, R * 0.6); b.disc(x, y, 0.7, 'amber1'); }
+  },
+  // Crystals: glassy shards pointing out from a cluster, glowing faintly.
+  crystal(b, r, { r: R }){
+    for (let i = 0, n = 5 + Math.floor(r() * 3); i < n; i++){
+      const [ex, ey] = polar(r() * TAU, R * (0.5 + r() * 0.5));
+      b.taper(0, 0, ex, ey, R * 0.35, 0.8, 'cyan0');
+      b.taper(-0.6, -0.6, ex * 0.8 - 0.6, ey * 0.8 - 0.6, R * 0.15, 0.5, 'cyan1');
+    }
+    b.disc(0, 0, R * 0.2, 'cyan2');
+  },
+  // A mineral outcrop: rusty, broken rock with bright seams.
+  ore(b, r, { r: R }){
+    for (let i = 0; i < 4; i++){ const [x, y] = polar(r() * TAU, R * 0.35); b.disc(x, y, R * (0.45 + r() * 0.15), 'rust1'); }
+    b.paint(-R, -R, R, R, (x, y) => Math.hypot(x, y) < R * 0.9 && x + y > R * 0.3 ? 'rust0' : null);
+    for (let i = 0; i < 4; i++){ const [x, y] = polar(r() * TAU, R * 0.5); b.line(x * 0.3, y * 0.3, x, y, 0.6, r() < 0.5 ? 'amber1' : 'gold1'); }
+    b.disc(-R * 0.3, -R * 0.3, R * 0.2, 'rust2');
+  },
+  // Alien plants: dark stems with glowing bulbs.
+  alien(b, r, { r: R }){
+    for (let i = 0, n = 6; i < n; i++){
+      const [ex, ey] = polar((i / n) * TAU + r(), R * (0.6 + r() * 0.4));
+      b.taper(0, 0, ex, ey, 1.4, 0.5, 'steel1');
+      b.disc(ex, ey, 1.2, 'cyan1'); b.disc(ex - 0.3, ey - 0.3, 0.5, 'cyan2');
+    }
+    b.disc(0, 0, R * 0.2, 'steel2');
+  },
+  // A pile of sawn logs, their cut ends showing rings.
+  logpile(b, r, { r: R }){
+    for (let row = 0; row < 3; row++) for (let k = 0; k < 4 - row; k++){
+      const x = (k - (3 - row) / 2) * 5.2, y = (row - 1) * 4.5 - row * 0.5;
+      b.line(x - 6, y, x + 6, y, 4, 'dust1'); b.line(x - 6, y - 1, x + 6, y - 1, 1, 'dust3');
+      b.disc(x - 6, y, 2.2, 'dust4'); b.disc(x - 6, y, 1, 'dust2');
+    }
+  },
+  // A sawhorse: two crossed legs at each end and a beam.
+  sawhorse(b, r, { r: R }){
+    b.line(-R * 0.8, 0, R * 0.8, 0, 2.4, 'dust2');
+    for (const x of [-R * 0.6, R * 0.6]){ b.line(x - 2, -4, x + 2, 4, 1.2, 'dust1'); b.line(x + 2, -4, x - 2, 4, 1.2, 'dust1'); }
+    b.line(-R * 0.8, -0.8, R * 0.8, -0.8, 0.6, 'dust4');
+  },
+  // An animal burrow: a mound of turned earth round a dark hole.
+  burrow(b, r, { r: R }){
+    b.disc(0, 0, R * 0.9, 'dust1');
+    for (let i = 0; i < 6; i++){ const [x, y] = polar(r() * TAU, R * 0.7); b.disc(x, y, R * 0.25, 'dust2'); }
+    b.disc(0, 1, R * 0.4, 'char0');
+  },
+  // Rubble: broken stone and brick among the grass.
+  rubble(b, r, { r: R }){
+    for (let i = 0, n = Math.round(R * 0.9); i < n; i++){
+      const [x, y] = polar(r() * TAU, r() * R * 0.8), w = 1 + r() * 2.2;
+      b.disc(x, y, w, r() < 0.3 ? 'rust1' : r() < 0.6 ? 'plate0' : 'dust3');
+      b.disc(x - w * 0.3, y - w * 0.3, w * 0.4, 'plate1');
+    }
+  },
+  tuft(b, r, { r: R }){ for (let i = 0; i < 9; i++){ const [ex, ey] = polar(-Math.PI / 2 + (r() - 0.5) * 2.4, R * (0.6 + r() * 0.4)); b.line(0, 1, ex, ey + 1, 0.6, r() < 0.4 ? 'grass3' : 'grass2'); } },
+  weeds(b, r, { r: R }){ for (let i = 0; i < 5; i++){ const [ex, ey] = polar(r() * TAU, R * 0.8); b.line(0, 0, ex, ey, 0.6, 'leaf2'); b.disc(ex, ey, 1, 'grass3'); } },
+  pebbles(b, r, { r: R }){ for (let i = 0; i < 5; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.8), w = 0.8 + r() * 1.2; b.disc(x, y, w, r() < 0.5 ? 'plate0' : 'dust3'); b.disc(x - w * 0.3, y - w * 0.3, w * 0.4, 'plate1'); } },
+  leaves(b, r, { r: R }){ for (let i = 0; i < 9; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.8), [lx, ly] = polar(r() * TAU, 1.2); b.taper(x - lx, y - ly, x + lx, y + ly, 1.3, 0.5, ['amber1', 'rust2', 'gold0', 'amber0'][i % 4]); } },
+  twigs(b, r, { r: R }){ for (let i = 0; i < 3; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.4), [lx, ly] = polar(r() * TAU, R * (0.5 + r() * 0.4)); b.line(x - lx, y - ly, x + lx, y + ly, 0.8, 'dust1'); b.line(x, y, x + ly * 0.4, y - lx * 0.4, 0.6, 'dust1'); } },
+  bones(b, r, { r: R }){ for (let i = 0; i < 2; i++){ const [lx, ly] = polar(r() * TAU, R * 0.7), ox = (r() - 0.5) * 3, oy = (r() - 0.5) * 3; b.line(ox - lx, oy - ly, ox + lx, oy + ly, 1, 'plate2'); b.disc(ox - lx, oy - ly, 1, 'plate2'); b.disc(ox + lx, oy + ly, 1, 'plate2'); } },
+  // A puddle: still water with a light rim and a sky reflection.
+  puddle(b, r, { r: R }){
+    for (let i = 0; i < 3; i++){ const [x, y] = polar(r() * TAU, R * 0.3); b.disc(x, y, R * (0.5 + r() * 0.2), 'water1'); }
+    b.disc(-R * 0.2, -R * 0.2, R * 0.2, 'water2'); b.disc(-R * 0.25, -R * 0.3, 0.6, 'water3');
   }
 });
 const propSize = spec => spec.length ? 4 * Math.ceil(spec.length / 2 + spec.width * 2.2 + 3) : 4 * Math.ceil(spec.r * 1.6 + 3);

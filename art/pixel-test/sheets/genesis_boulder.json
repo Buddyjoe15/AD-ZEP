@@ -1,21 +1,23 @@
 {
   "name": "genesis_boulder",
-  "frameWidth": 108,
-  "frameHeight": 108,
+  "frameWidth": 148,
+  "frameHeight": 148,
   "origin": [
-    53.5,
-    53.5
+    73.5,
+    73.5
   ],
   "worldPxPerArtPx": 0.5,
   "rows": [
     "{\"r\":7}",
     "{\"r\":11}",
-    "{\"r\":15}"
+    "{\"r\":15}",
+    "{\"r\":21}"
   ],
   "frameSizes": [
     60,
     84,
-    108
+    108,
+    148
   ],
   "columns": "4 variants",
   "shadow": {
@@ -27,6 +29,6 @@
     "elevation": "ground prop"
   },
   "image": "genesis_boulder.png",
-  "sheetWidth": 432,
-  "sheetHeight": 324
+  "sheetWidth": 592,
+  "sheetHeight": 592
 }
