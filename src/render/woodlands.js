@@ -135,7 +135,8 @@
   const ON_GRASS = new Set([K.REEDS, K.ROCKS, K.MOSSROCK, K.MUSHROOM, K.FLOWERS, K.BURROW, K.SHRUB, K.STUMP, K.LOGS, K.MOUND, K.VENT, K.ORE, K.CRYSTAL]);
   const PROPPED = new Set([K.SHRUB, K.FLOWERS, K.MUSHROOM, K.ROCKS, K.MOSSROCK, K.REEDS]);
   // Genesis ground under props (G.TreeArt draws what stands on it): grass, or bare dust.
-  const GEN_GRASS = new Set([K.THICK, K.THICKET, K.MOUND, K.CRYSTAL, K.ALIEN, K.LOGS, K.SAWHORSE, K.BURROW, K.RUBBLE, K.PAD, K.BOG, K.BARREN, K.ORE, K.VENT, K.SWAMP]);
+  const GEN_GRASS = new Set([K.THICK, K.THICKET, K.MOUND, K.CRYSTAL, K.ALIEN, K.LOGS, K.SAWHORSE, K.BURROW, K.RUBBLE, K.PAD, K.BOG, K.BARREN, K.ORE, K.VENT, K.SWAMP,
+    K.WALL, K.FLOOR, K.DOOR, K.LOGWALL, K.BRIDGE]);   // (houses and bridges: G.Structures)
   const GEN_DUST = new Set();   // (barren ground is drawn along contours by G.Landscape)
   function dustBase(ctx, gx, gy, px, py, S){
     const P = G.PixelArt;
@@ -622,6 +623,7 @@
           // Shifted up to a third of a tile and turned a little, so marks don't line up on the grid.
           if (d) drawDecal(ctx, d, gx, gy, lx * S + (hash(gx, gy, 931) - .5) * S * .66, ly * S + (hash(gx, gy, 933) - .5) * S * .66, S, art.angle[i] / 256 * TAU + (hash(gx, gy, 937) - .5) * .8, seed);
         }
+        G.Structures.paintChunk(ctx, grd, x0, y0, ct);   // houses, bridges and cave mouths
       }
       for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
         const gx = x0 + lx, gy = y0 + ly;

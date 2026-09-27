@@ -48,6 +48,14 @@
     return n;
   })();
   const noise = (ax, ay) => NOISE[(ay & (NS - 1)) * NS + (ax & (NS - 1))];
+  // The same noise sampled between its points, for large soft shapes at any scale.
+  const noiseB = (x, y) => {
+    const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0, xa = x0 & (NS - 1), xb = (x0 + 1) & (NS - 1), ya = (y0 & (NS - 1)) * NS, yb = ((y0 + 1) & (NS - 1)) * NS;
+    const a = NOISE[ya + xa], b = NOISE[ya + xb], c = NOISE[yb + xa], d = NOISE[yb + xb];
+    return a + (b - a) * fx + (c - a + (a - b - c + d) * fx) * fy;
+  };
+  // Two scales that don't line up, so the shapes don't visibly repeat.
+  const fbm = (x, y, sx, sy) => noiseB(x / 5.3 + sx, y / 5.3 + sy) * 0.65 + noiseB(x / 2.1 + sy, y / 2.1 + sx) * 0.35;
   // Fractured rock, 128 × 128 art px, repeating: irregular slabs (wider than tall) from a
   // jittered Voronoi pattern. ROCK_SHADE is each slab's tone (0–1); ROCK_EDGE is 2 on a crack
   // between slabs, 1 on a slab's lit top edge, 0 inside.
@@ -121,7 +129,7 @@
     const lv = (x, y) => inb(x, y) ? lvl[y * cols + x] : -1;
     for (let y = Math.max(0, y0 - 1); y < Math.min(rows, y0 + h + 1); y++) for (let x = Math.max(0, x0 - 1); x < Math.min(cols, x0 + w + 1); x++){
       const i = y * cols + x, t = tiles[i], l = lvl[i];
-      const wet = t === k.WATER || t === k.DEEP || t === k.FALLS || t === k.STONES || t === k.BOG;
+      const wet = t === k.WATER || t === k.DEEP || t === k.FALLS || t === k.STONES || t === k.BOG || t === k.BRIDGE;   // water flows under bridges
       L.B[i] = t === k.BOG ? 1 : 0;
       L.W[i] = wet ? 1 : 0;
       // Bare ground along contours: 1 a trail, 2 barren or sodden ground (drawn by kind, below).
@@ -382,9 +390,18 @@
               const q = rowJ[r], dd = wet ? colD[q] + (colD[q + 1] - colD[q]) * rowF[r] : Di;
               const depth = Math.min(1, (w - 0.5) * 1.6) * 0.55 + dd * 0.45 + (n - 0.5) * 0.12;
               if (bog){
-                // Bog: dark, still, peaty water with duckweed and lily pads.
+                // Bog: dark, still, peaty water with rafts of duckweed, lily pads (lit on the
+                // upper left, a notch cut from each) and the sky caught in a few still reaches.
                 const lily = NOISE[((ay >> 1) & (NS - 1)) * NS + (((ax >> 1) + 40) & (NS - 1))];
-                col = lily > 0.8 ? (lily > 0.86 ? P.leaf2 : P.leaf1) : depth < 0.1 ? (dith < 0.5 ? P.grass0 : P.leaf1) : n + dith * 0.3 > 0.75 ? P.leaf1 : n > 0.35 ? P.leaf0 : P.water0;
+                const weed = NOISE[(((ay >> 1) + 17) & (NS - 1)) * NS + (((ax >> 1) + 88) & (NS - 1))];
+                if (lily > 0.8){
+                  const up = NOISE[(((ay - 3) >> 1) & (NS - 1)) * NS + ((((ax - 3) >> 1) + 40) & (NS - 1))], notch = (ax & 15) > 6 && (ax & 15) < 9 && (ay & 15) < 7;
+                  col = notch ? P.water0 : lily < 0.815 ? P.leaf0 : up < lily - 0.01 ? P.leaf2 : P.leaf1;
+                }
+                else if (depth < 0.1) col = dith < 0.5 ? P.grass0 : P.leaf1;
+                else if (weed > 0.6) col = dith < (weed - 0.6) * 5 ? (n > 0.6 ? P.grass2 : P.leaf2) : P.leaf1;
+                else if (weed < 0.3 && ((ay + (ax >> 3)) & 7) === 0 && NOISE[((ay * 3) & (NS - 1)) * NS + ((ax + 91) & (NS - 1))] > 0.7) col = P.water1;
+                else col = n + dith * 0.3 > 0.78 ? P.leaf0 : P.water0;
               }
               else if (depth < 0.08) col = n + dith * 0.5 > 0.62 ? P.water3 : P.water2;
               else {
@@ -407,8 +424,23 @@
               const pk = L.PK[i], sv = colS[q] + (colS[q + 1] - colS[q]) * rowF[r] + (NOISE[((ay + 21) & (NS - 1)) * NS + ((ax + 70) & (NS - 1))] - 0.5) * 0.3;
               if (sv > 0.4 && pv < 0.5){
                 if (sv >= 0.5){
-                  const pool = NOISE[(((ay >> 1) + 60) & (NS - 1)) * NS + (((ax >> 1) + 20) & (NS - 1))];
-                  if (pool > 0.78) col = pool > 0.83 ? P.water1 : P.leaf0;
+                  // Fen: peaty pools with a muddy lip and lily pads, mossy hummocks lit on the
+                  // upper left, sedge standing in tufts, and sodden dark ground between.
+                  const pool = fbm(ax, ay, 20, 60) + (sv - 0.5) * 0.08, hum = fbm(ax, ay, 90, 30), sedge = NOISE[5 * NS + ((ax * 3) & (NS - 1))];
+                  if (pool > 0.66){
+                    const lily = fbm(ax * 2, ay * 2, 44, 9);
+                    col = pool < 0.672 ? P.dust0 : pool < 0.685 ? (dith < 0.5 ? P.leaf0 : P.water0) : lily > 0.7 ? (lily > 0.74 ? P.leaf2 : P.leaf1)
+                      : ((ay + (ax >> 3)) & 7) === 0 && n > 0.62 ? P.water1 : P.water0;
+                  } else if (hum > 0.64){
+                    // A mossy hummock, lit on its upper-left flank, darker on the far one.
+                    const up = hum - fbm(ax - 10, ay - 10, 90, 30);
+                    const tuft = NOISE[((ay * 3 + 11) & (NS - 1)) * NS + ((ax * 3) & (NS - 1))];
+                    col = up < -0.02 && dith < 0.6 ? P.grass3 : up > 0.012 ? (dith < 0.5 ? P.grass0 : P.grass1) : tuft + dith * 0.3 > 0.8 ? P.grass3 : tuft > 0.45 ? P.grass2 : P.grass1;
+                  } else if (hum > 0.56 && fbm(ax - 8, ay - 8, 90, 30) > 0.64 && dith < 0.8){
+                    col = P.leaf0; alpha = 150;   // its shadow on the lower right
+                  } else if (sedge > 0.78 && ((ay + ((sedge * 97) | 0)) % 13) < 4){
+                    col = ((ay + ((sedge * 97) | 0)) % 13) === 0 ? P.grass3 : P.leaf2;   // a blade of sedge, its lit tip
+                  } else if (pool > 0.62 && dith < (pool - 0.62) * 20){ col = P.leaf0; }   // wet dark ground round the pools
                   else { col = P.leaf0; alpha = 70 + ((dith * 40) | 0); }
                 } else if (dith < (sv - 0.4) * 6){ col = P.leaf0; alpha = 60; }
               } else if (pv >= 0.5){
@@ -487,15 +519,6 @@
       ctx.drawImage(s.cv, bx0, by0, bx1 - bx0, by1 - by0, bx0, by0, bx1 - bx0, by1 - by0);
       for (let q = 0; q < open.length; q += 3) ctx.drawImage(open[q], open[q + 1], open[q + 2]);
       ctx.imageSmoothingEnabled = smooth; ctx.restore();
-      // Cave mouths open in their faces.
-      for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
-        const gx = x0 + lx, gy = y0 + ly;
-        if (gx < cols && gy < rows && grd.tiles[gy * cols + gx] === k.CAVE){
-          const cx = lx * t + t / 2, cy = ly * t + t * 0.62;
-          ctx.fillStyle = C.char0; ctx.beginPath(); ctx.ellipse(cx, cy, t * 0.26, t * 0.24, 0, Math.PI, 0); ctx.lineTo(cx + t * 0.26, cy + t * 0.3); ctx.lineTo(cx - t * 0.26, cy + t * 0.3); ctx.closePath(); ctx.fill();
-          ctx.fillStyle = '#12100e'; ctx.beginPath(); ctx.ellipse(cx, cy + t * 0.06, t * 0.17, t * 0.16, 0, Math.PI, 0); ctx.lineTo(cx + t * 0.17, cy + t * 0.3); ctx.lineTo(cx - t * 0.17, cy + t * 0.3); ctx.closePath(); ctx.fill();
-        }
-      }
     },
 
     // Waterfalls and glints on open water in the visible rectangle `v`, at game time `ts`.
