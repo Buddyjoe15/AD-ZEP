@@ -75,10 +75,40 @@ export function rng(seed){
 // "forward" is -y, and the whole local frame is turned clockwise by `angle` on screen.
 // Shapes are rasterised by testing pixel centres, so the up-right facing is drawn at 45°
 // directly rather than resampled from the up facing.
-export function painter(g, angle = 0, origin = [(g.w - 1) / 2, (g.h - 1) / 2]){
+// `scale` is art px per local unit. At 2, shapes keep their size in local units (world px)
+// and are drawn with twice the pixels across: curves and diagonals come out smoother, and
+// the outline and shading passes, which work per pixel, come out finer. A rect covers whole
+// local units (as whole pixels do at scale 1), a dot fills one local unit, and a line is
+// one local unit wide.
+export function painter(g, angle = 0, origin = [(g.w - 1) / 2, (g.h - 1) / 2], scale = 1){
   const [cx, cy] = origin, co = Math.cos(angle), si = Math.sin(angle), E = 1e-6;
-  const toLocal = (x, y) => { const dx = x - cx, dy = y - cy; return [dx * co + dy * si, -dx * si + dy * co]; };
-  const toGrid = (lx, ly) => [Math.round(cx + lx * co - ly * si + E), Math.round(cy + lx * si + ly * co + E)];
+  const toLocal = (x, y) => { const dx = (x - cx) / scale, dy = (y - cy) / scale; return [dx * co + dy * si, -dx * si + dy * co]; };
+  const toGrid = (lx, ly) => [Math.round(cx + (lx * co - ly * si) * scale + E), Math.round(cy + (lx * si + ly * co) * scale + E)];
+  if (scale !== 1){
+    const fill = (test, c) => {
+      for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++){
+        const [lx, ly] = toLocal(x, y);
+        if (test(lx, ly)) g.set(x, y, C[c]);
+      }
+      return S;
+    };
+    const S = {
+      fill,
+      ellipse(x, y, rx, ry, c){ return fill((lx, ly) => ((lx - x) / rx) ** 2 + ((ly - y) / ry) ** 2 <= 1 + E, c); },
+      rect(x0, y0, x1, y1, c){ return fill((lx, ly) => lx >= x0 - 0.5 && lx <= x1 + 0.5 && ly >= y0 - 0.5 && ly <= y1 + 0.5, c); },
+      dot(x, y, c){ return S.rect(x, y, x, y, c); },
+      thick(x0, y0, x1, y1, w, c){
+        const dx = x1 - x0, dy = y1 - y0, L2 = dx * dx + dy * dy || 1, r2 = (w / 2) ** 2 + E;
+        return fill((lx, ly) => {
+          const t = Math.max(0, Math.min(1, ((lx - x0) * dx + (ly - y0) * dy) / L2)), ex = lx - x0 - t * dx, ey = ly - y0 - t * dy;
+          return ex * ex + ey * ey <= r2;
+        }, c);
+      },
+      line(x0, y0, x1, y1, c){ return S.thick(x0, y0, x1, y1, 1, c); },
+      scale
+    };
+    return S;
+  }
   const P = {
     fill(test, c){
       for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++){

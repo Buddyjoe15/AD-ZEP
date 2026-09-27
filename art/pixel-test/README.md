@@ -1,6 +1,6 @@
 # Pixel-art sprite test set
 
-A set of straight top-down pixel sprites, drawn at 1 art px per world px (48 × 48 art px per tile). The rules for new art are in [../PIXEL_ART_RULES.md](../PIXEL_ART_RULES.md). It exists to prove sizes, the palette and the pipeline, and isn't final art. The repair station is a stand-in design.
+A set of straight top-down pixel sprites. Units and structures are drawn at 2 art px per world px, and terrain at 1 (48 × 48 art px per tile). The rules for new art are in [../PIXEL_ART_RULES.md](../PIXEL_ART_RULES.md). It exists to prove sizes, the palette and the pipeline, and isn't final art. The repair station is a stand-in design.
 
 The game uses this art by default. Spiders, security and hostile drones, survey drones, Vance, the Repair Station (including its construction site and rubble) and grass/clearing terrain are drawn with it. Add `?art=classic` or use **DEBUG → Pixel-art sprites** to switch back to the original art. How it's wired in is described under "Pixel art" in `docs/ARCHITECTURE.md`.
 
@@ -25,17 +25,17 @@ npm run sprites:preview  # also previews/ (needs Playwright + Chromium)
 
 | Sprite | Frame | Facings | Animations |
 |---|---|---|---|
-| Utility Spider | 49×49 | 8 | idle 2f, walk 4f, work 4f |
-| Drone (security / hostile) | 33×33 | 8 | fly 4f (spinning rotors) |
-| Commander Vance | 49×49 | 8 | hover-idle 4f, walk 4f |
-| Repair station (2×2) | 96×96 | 1 | foundation, frame, near-complete, finished, working 4f, damaged, rubble |
+| Utility Spider | 98×98 (49 world px) | 8 | idle 2f, walk 4f, work 4f |
+| Drone (security / hostile) | 66×66 (33 world px) | 8 | fly 4f (spinning rotors) |
+| Commander Vance | 98×98 (49 world px) | 8 | hover-idle 4f, walk 4f |
+| Repair station (2×2) | 192×192 (96 world px) | 1 | foundation, frame, near-complete, finished, working 4f, damaged, rubble |
 | Dust plain terrain | 48×48 | – | v1: 4 variants (as tested), v2: 8 variants (the fix) |
 
 `sheets/` holds the real 1× game files. Each sprite has a PNG sheet with the magenta team colours still in place, plus JSON metadata (frame size, origin, facing order, animation ranges, fps, shadow offset). `palette.json` and `palette.png` hold the 37-colour palette. `src/render/pixel-data.js` has the same data as palette-indexed text. The game and the preview both read it, and it lets the preview recolour teams under `file://`.
 
 ## Rules
 
-- **Scale.** One art pixel is 1 world px, so a 48 px tile is 48 art px. Draw new art to it. Draw at whole multiples of the art pixel where possible, and use nearest-neighbour sampling.
+- **Scale.** Terrain: one art pixel is 1 world px, so a 48 px tile is 48 art px. Units and structures: 2 art px per world px, drawn in world px with the painter at scale 2. Draw new art to these scales, and use nearest-neighbour sampling.
 - **Palette.** Only the 37 colours in `palette.json`. `team0`–`team2` (magenta) are placeholders, replaced per team at load.
 - **Alpha.** Every pixel is fully opaque or fully transparent.
 - **Shadows are drawn by the engine, never baked into sprites.** The engine stamps the sprite's silhouette at the `shadow.offset` in its metadata and darkens whatever is underneath by 55%. It merges all shadows into one mask first, so overlapping shadows don't double up. Ground units get a small offset. Hovering and flying units get larger ones.
@@ -56,6 +56,7 @@ npm run sprites:preview  # also previews/ (needs Playwright + Chromium)
 - **Diagonal Spiders.** Rotating the leg layout made the up-right Spider look like a plus sign. Here the up-right frame is drawn at 45° directly, and the legs splay radially, so the diagonal keeps an X of legs.
 - **Unit size confirmed in play.** The pixel units are smaller than the old Canvas art: a Spider is about one tile across, where the old one spanned almost two. After testing the build, this size was kept.
 - **Redrawn at double resolution.** The first set was drawn at 2 world px per art px (24 × 24 per tile, a 25 × 25 Spider). Everything was redrawn at 1 world px per art px for more detail: jointed Spider legs with gold knees, twin eyes and hatch seams; Vance's pauldrons, nozzles, power core and antenna; two-blade drone rotors and running lights; station deck plating, rivets and a hazard strip; and two-octave dust with lit pebbles and branching cracks. Sizes on screen are unchanged. Readability at ⅓ zoom still passes.
+- **Units and structures doubled again.** Spiders, drones, Vance and the Repair Station are drawn at 2 art px per world px (a 98 × 98 Spider), with the same designs and the same size on screen. Their shapes are rasterised at double resolution, so curves, diagonal legs and rotor blades are smoother, and the outline and edge shading are half as thick. Terrain and trees stay at 1 art px per world px.
 - **Still open.**
   - The drone's diagonal facing is busy: its rotors and arms blur together at ⅓.
   - Vance reads slightly smaller than a Spider. He may need a 27×27 frame or larger shoulders.
