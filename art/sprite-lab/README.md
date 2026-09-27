@@ -4,6 +4,7 @@ Makes and tests pixel-art sprites from 3D models built in code, straight top-dow
 
 - **`specs/`**: one file per sprite, a model built with `tools/sprite-kit.mjs`. `example_spider.mjs` is the worked example to copy.
 - **`page.html`**: the template for the test page.
+- **`PROMPT.md`**: a prompt to paste into a Claude Code session where `/sprite` isn't available.
 - **`out/<key>/`** (generated, not committed): `sheet.png`, `meta.json` and `index.html`, a self-contained test page you can open from disk or publish.
 
 ```
