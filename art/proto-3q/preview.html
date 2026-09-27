@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spider three-quarter prototype</title>
+<style>
+  body { background: #0e1318; color: #dfe7ea; font: 14px/1.4 system-ui, sans-serif; margin: 20px; }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  h2 { font-size: 16px; margin: 0 0 4px; }
+  p { color: #9fb0b8; max-width: 980px; margin: 0 0 10px; }
+  section { background: #151c22; border-radius: 6px; padding: 14px; margin: 0 0 22px; display: inline-block; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+  figure { margin: 0; }
+  figcaption { color: #9fb0b8; font-size: 12px; margin-top: 4px; }
+  canvas { display: block; image-rendering: pixelated; }
+  button { background: #22303a; color: #dfe7ea; border: 1px solid #34495a; border-radius: 4px; padding: 3px 10px; margin: 0 4px 8px 0; }
+</style>
+</head>
+<body>
+<h1>Utility Spider: three-quarter prototype</h1>
+<p>Rendered by <code>tools/spider-3q.mjs</code> from a 3D model built in code: 8 facings, each its own render, at 2 art px per world px (today's art is 1). Everything is compared on the game's Woodlands grass. Shadows darken the ground by 55%, as the engine does.</p>
+
+<section id="compare">
+  <h2>At game zoom: today (left) and the prototype (right)</h2>
+  <p>1.5 screen px per world px is zoom 1 on a high-density screen (the renderer caps density at 1.5). 3.3 is the closest zoom the game allows (2.2 × 1.5).</p>
+  <div class="row" id="compareRow"></div>
+</section>
+<br>
+<section id="ring">
+  <h2>Walking in a ring: today (left) and the prototype (right), 2.2 screen px per world px</h2>
+  <p>Eight Spiders of each team walk a circle, so every facing shows. In the prototype, Spiders nearer the bottom of the screen are drawn over those behind them.</p>
+  <div class="row" id="ringRow"></div>
+</section>
+<br>
+<section id="sheet">
+  <h2>Sheet</h2>
+  <p>Rows: up, up-right, right, down-right, down, down-left, left, up-left. Columns: idle 2 frames, walk 8, work 4 (the laser arm reaches down). 1 screen px per art px.</p>
+  <div><button data-team="blue">Blue</button><button data-team="red">Red</button></div>
+  <div id="sheetBox"></div>
+</section>
+
+<script src="../../src/render/pixel-data.js"></script>
+<script src="spider-3q.js"></script>
+<script>
+'use strict';
+const Q = new URLSearchParams(location.search), FROZEN = Q.has('t') ? +Q.get('t') : null;
+const OLD = window.PIXEL_ART, NEW = window.PROTO_3Q, CH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const OLD_PAL = OLD.palette.map(c => hex(c.hex)), NEW_PAL = NEW.palette.map(hex);
+
+function imageCanvas(w, h, fill){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'), img = g.createImageData(w, h); fill(img.data); g.putImageData(img, 0, 0);
+  return c;
+}
+const cache = new Map();
+const memo = (key, make) => cache.get(key) || cache.set(key, make()).get(key);
+
+// Today's Spider: one character per pixel, 1 art px per world px.
+function oldSprite(f, i, team, silhouette){
+  return memo(['old', f, i, team, silhouette].join(), () => {
+    const sp = OLD.sprites.spider, s = sp.frames[f][i], T = OLD.teams[team].map(hex);
+    return imageCanvas(sp.frameWidth, sp.frameHeight, d => {
+      for (let j = 0; j < s.length; j++){
+        const v = OLD.alphabet.indexOf(s[j]);
+        if (!v) continue;
+        const k = OLD.teamIndex.indexOf(v), c = silhouette ? [0, 0, 0] : k >= 0 ? T[k] : OLD_PAL[v - 1];
+        d.set([c[0], c[1], c[2], 255], j * 4);
+      }
+    });
+  });
+}
+// The prototype: run-length text, 2 art px per world px, with its own shadow mask.
+function rle(s){ const o = []; for (let i = 0; i < s.length; i += 2){ const v = CH.indexOf(s[i]), n = CH.indexOf(s[i + 1]) + 1; for (let k = 0; k < n; k++) o.push(v); } return o; }
+function newSprite(f, i, team, shadow){
+  return memo(['new', f, i, team, shadow].join(), () => {
+    const px = rle((shadow ? NEW.shadows : NEW.frames)[f][i]), T = NEW.teams[team].map(hex);
+    return imageCanvas(NEW.frameWidth, NEW.frameHeight, d => {
+      px.forEach((v, j) => {
+        if (!v) return;
+        const k = NEW.teamIndex.indexOf(v), c = shadow ? [0, 0, 0] : k >= 0 ? T[k] : NEW_PAL[v - 1];
+        d.set([c[0], c[1], c[2], 255], j * 4);
+      });
+    });
+  });
+}
+function grassTile(v){
+  return memo('grass' + v, () => { const s = OLD.woodlands.grass.tiles[v], A = OLD.tileArt;
+    return imageCanvas(A, A, d => { for (let j = 0; j < s.length; j++){ const c = OLD_PAL[OLD.alphabet.indexOf(s[j]) - 1]; d.set([c[0], c[1], c[2], 255], j * 4); } }); });
+}
+function pickGrass(x, y){
+  const W = OLD.woodlands.grass.weights, total = W.reduce((a, b) => a + b, 0);
+  let h = Math.imul(x * 73856093 ^ y * 19349663, 2654435761) >>> 0, r = h % total;
+  for (let v = 0; v < W.length; v++){ if (r < W[v]) return v; r -= W[v]; }
+  return 0;
+}
+
+// Draws Spiders at `k` screen px per world px: grass, then every shadow in one mask, then
+// sprites from the back of the screen to the front.
+function drawScene(cv, k, items){
+  const g = cv.getContext('2d'), A = OLD.tileArt;
+  g.imageSmoothingEnabled = false;
+  for (let ty = 0; ty * A * k < cv.height; ty++) for (let tx = 0; tx * A * k < cv.width; tx++) g.drawImage(grassTile(pickGrass(tx, ty)), tx * A * k, ty * A * k, A * k, A * k);
+  const sh = document.createElement('canvas'); sh.width = cv.width; sh.height = cv.height;
+  const sg = sh.getContext('2d');
+  const place = (u, which) => {
+    if (u.kind === 'old'){
+      const sp = OLD.sprites.spider, img = oldSprite(u.facing, u.frame, u.team, which === 'shadow');
+      const off = which === 'shadow' ? sp.shadow.offset : [0, 0];
+      return [img, (u.x - sp.origin[0] + off[0]) * k, (u.y - sp.origin[1] + off[1]) * k, sp.frameWidth * k, sp.frameHeight * k, k];
+    }
+    const s = k / NEW.artPxPerWorldPx, img = newSprite(u.facing, u.frame, u.team, which === 'shadow');
+    return [img, u.x * k - NEW.origin[0] * s, u.y * k - NEW.origin[1] * s, NEW.frameWidth * s, NEW.frameHeight * s, s];
+  };
+  // Scales below 1 are smoothed, like the pre-shrunk atlas levels the game uses.
+  const blit = (ctx, [img, x, y, w, h, s]) => { ctx.imageSmoothingEnabled = s < 1; ctx.drawImage(img, Math.round(x), Math.round(y), w, h); };
+  items.forEach(u => blit(sg, place(u, 'shadow')));
+  g.globalAlpha = 0.55; g.drawImage(sh, 0, 0); g.globalAlpha = 1;
+  [...items].sort((a, b) => a.y - b.y).forEach(u => blit(g, place(u, 'sprite')));
+}
+function fig(el, caption){ const f = document.createElement('figure'); f.append(el); const c = document.createElement('figcaption'); c.textContent = caption; f.append(c); return f; }
+function canvas(w, h){ const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+
+// ---- Game zoom comparison ----
+const DR = 3, DOWN = 4;   // facings: down-right, down
+for (const k of [1.5, 3.3]){
+  const cv = canvas(Math.round(200 * k), Math.round(88 * k));
+  drawScene(cv, k, [
+    { kind: 'old', x: 42, y: 44, facing: DR, frame: 0, team: 'blue' },
+    { kind: 'old', x: 76, y: 44, facing: DOWN, frame: 0, team: 'red' },
+    { kind: 'new', x: 128, y: 44, facing: DR, frame: 0, team: 'blue' },
+    { kind: 'new', x: 164, y: 44, facing: DOWN, frame: 0, team: 'red' }
+  ]);
+  document.getElementById('compareRow').append(fig(cv, `${k} screen px per world px`));
+}
+
+// ---- Walking rings ----
+const K = 2.2, RW = 250, RH = 200, RINGS = ['old', 'new'].map(kind => { const cv = canvas(Math.round(RW * K), Math.round(RH * K)); document.getElementById('ringRow').append(fig(cv, kind === 'old' ? 'today' : 'prototype')); return { kind, cv }; });
+function ringItems(kind, t){
+  const out = [], n = 8, walk = kind === 'old' ? OLD.sprites.spider.animations.walk : NEW.animations.walk;
+  for (let j = 0; j < n; j++){
+    const a = t * 0.35 + j / n * Math.PI * 2, x = RW / 2 + Math.cos(a) * 78, y = RH / 2 + Math.sin(a) * 62;
+    const dx = -Math.sin(a) * 78, dy = Math.cos(a) * 62, heading = Math.atan2(dx, -dy);
+    const facing = ((Math.round(heading / (Math.PI / 4)) % 8) + 8) % 8;
+    out.push({ kind, x, y, facing, frame: walk.start + Math.floor(t * walk.fps + j) % walk.frames, team: j % 2 ? 'red' : 'blue' });
+  }
+  return out;
+}
+function drawRings(t){ for (const r of RINGS) drawScene(r.cv, K, ringItems(r.kind, t)); }
+
+// ---- Sheet ----
+function drawSheet(team){
+  const cols = NEW.frames[0].length, cv = canvas(cols * NEW.frameWidth, NEW.facings.length * NEW.frameHeight), g = cv.getContext('2d');
+  g.fillStyle = '#5d7a4f'; g.fillRect(0, 0, cv.width, cv.height);
+  NEW.facings.forEach((_, f) => { for (let i = 0; i < cols; i++){
+    const x = i * NEW.frameWidth, y = f * NEW.frameHeight;
+    g.globalAlpha = 0.55; g.drawImage(newSprite(f, i, team, true), x, y); g.globalAlpha = 1;
+    g.drawImage(newSprite(f, i, team, false), x, y);
+  } });
+  const box = document.getElementById('sheetBox'); box.textContent = ''; box.append(cv);
+}
+document.querySelectorAll('[data-team]').forEach(b => b.onclick = () => drawSheet(b.dataset.team));
+drawSheet('blue');
+
+if (FROZEN != null){ drawRings(FROZEN); window.PREVIEW_READY = true; }
+else {
+  const loop = now => { drawRings(now / 1000); window.PREVIEW_READY = true; requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
