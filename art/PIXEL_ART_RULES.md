@@ -85,12 +85,13 @@ Save change: none | <what and why>
 ### 2.1 Scale and view
 
 - **Straight top-down.** Not isometric and not three-quarter view. The camera looks straight down.
-- **Terrain: 1 art pixel = 1 world px.** A map tile is 48 world px, which is **48 × 48 art px**. Terrain props such as Woodlands trees are part of the terrain and use this scale too.
-- **Units and structures: 2 art px per world px.** They have twice the terrain's resolution. A Spider is 49 world px across and **98 × 98 art px**; its metadata says `worldPxPerArtPx: 0.5`.
+- **Everything: 2 art px per world px.** A map tile is 48 world px, which is **96 × 96 art px**.
+- **Terrain** tiles and terrain props such as Woodlands trees are 96 × 96. Size their features in world px and draw them at twice that in art px. Keep seams, joints, blades and cracks one art px wide, so they come out finer. The data's top-level `worldPxPerArtPx` is 0.5.
+- **Units and structures** are drawn the same way. A Spider is 49 world px across and **98 × 98 art px**; its metadata says `worldPxPerArtPx: 0.5`.
   - Draw them in world px, with the painter at scale 2 (`painter(g, angle, origin, 2)`). Each shape is rasterised at double resolution, so curves and diagonals come out smoother.
   - The shading and outline passes still work per art px, so edges and outlines come out half as thick as the terrain's.
-- History: the first test set used 2 world px per art px (24 × 24 per tile). Everything was redrawn at 1 world px per art px, then units and structures were doubled again to 2 art px per world px. Don't change a scale again without redrawing every asset that uses it.
-- The engine only ever draws the art at whole art pixels, nearest-neighbour. Never draw sub-pixel detail or anti-aliasing.
+- History: the first test set used 2 world px per art px (24 × 24 per tile). Everything was redrawn at 1 world px per art px, then units and structures were doubled again to 2 art px per world px, then terrain and trees too (96 × 96 per tile). Don't change a scale again without redrawing every asset that uses it.
+- Up close the engine draws the art nearest-neighbour, at whole art pixels. When art lands on fewer screen pixels than it has (zoomed out, or terrain in a 1× chunk), the engine averages it instead so fine detail doesn't shimmer. Never draw sub-pixel detail or anti-aliasing.
 
 ### 2.2 Palette: 37 colours, nothing else
 
@@ -177,7 +178,7 @@ Save change: none | <what and why>
 
 ### 2.7 Terrain tiles
 
-- **48 × 48**, seamless, flat top-down. Use `dust` colours for the dust plain; another terrain type needs its own ramp, so ask first. No outline and no shading pass.
+- **96 × 96** (48 world px), seamless, flat top-down. Use `dust` colours for the dust plain; another terrain type needs its own ramp, so ask first. No outline and no shading pass.
 - **8 variants, weighted.** Mostly plain, with rare feature variants. The dust plain uses weights 6, 6, 6, 4, 3, 2, 1, 1.
 - **Edge-matched:** every variant shares the same values along its edges, so any two variants meet without a seam.
 - **Tone-matched:** every variant has the same overall brightness (the same interior values, reshuffled), so no tile stands out.

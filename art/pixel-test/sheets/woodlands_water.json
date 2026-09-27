@@ -1,7 +1,7 @@
 {
   "name": "woodlands_water",
-  "frameWidth": 48,
-  "frameHeight": 48,
+  "frameWidth": 96,
+  "frameHeight": 96,
   "variants": 8,
   "weights": [
     6,
@@ -15,6 +15,6 @@
   ],
   "hash": "mix32",
   "image": "woodlands_water.png",
-  "sheetWidth": 384,
-  "sheetHeight": 48
+  "sheetWidth": 768,
+  "sheetHeight": 96
 }

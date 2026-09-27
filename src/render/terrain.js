@@ -73,7 +73,7 @@
       const g = cv.getContext('2d'), r = G.RNG(G.State.seed + cx * 13007 + cy * 9011);
       g.scale(res, res);
       const P = G.PixelArt, dust = P.enabled ? P.dustIds() : null, WA = G.WoodlandsArt;
-      g.imageSmoothingEnabled = false;
+      g.imageSmoothingEnabled = !!dust && P.shrinks(g, T, P.tileArt());   // 96 px tiles average down in 1× chunks
       // A Woodlands map draws every tile in its own style, with height and ground detail.
       if (WA.isWoodlands(grid)){ WA.paintChunk(g, grid, cx * ct, cy * ct, ct, T, { trees: !!low }); return cv; }
       for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){

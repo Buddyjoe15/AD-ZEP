@@ -65,7 +65,9 @@ test('sheet PNGs are fully opaque or fully transparent', () => {
 
 test('woodlands pilot: full terrain tiles, edge-matched variants, shoreline and cliff pieces, outlined tree props', () => {
   const W = data.woodlands, T = data.tileArt;
-  assert.equal(T, 48, 'woodlands art is drawn at 1 art px per world px');
+  assert.equal(T, 96, 'terrain art is drawn at 2 art px per world px: 96 × 96 per tile');
+  assert.equal(data.worldPxPerArtPx, 0.5);
+  for (const v of ['v1', 'v2']) for (const s of data.terrain[v].tiles) assert.equal(s.length, T * T, 'dust plain ' + v);
   for (const key of ['grass', 'tall_grass', 'water', 'deep_water', 'shore', 'cliff']){
     for (const s of W[key].tiles){ assert.equal(s.length, T * T, key); assert.ok(!s.includes('.'), key + ' tiles are fully opaque'); }
   }
@@ -76,12 +78,12 @@ test('woodlands pilot: full terrain tiles, edge-matched variants, shoreline and 
   // A south face has rock across its middle rows; a north rim keeps grass there.
   const S = decode(W.cliff.tiles[W.cliff.pieces.indexOf('S')], T), N = decode(W.cliff.tiles[W.cliff.pieces.indexOf('N')], T);
   const name = i => PALETTE[i - 1][0];
-  assert.ok(name(S.get(24, 24)).startsWith('dust') || name(S.get(24, 24)).startsWith('char'));
-  assert.ok(name(N.get(24, 24)).startsWith('grass'));
+  assert.ok(name(S.get(T / 2, T / 2)).startsWith('dust') || name(S.get(T / 2, T / 2)).startsWith('char'));
+  assert.ok(name(N.get(T / 2, T / 2)).startsWith('grass'));
   // Tree props: three kinds, each variant with 9 frames (lean * 3 + rustle): leans move further
   // downwind (east), rustle steps change the leaves without moving the crown;
   // transparent 1 px margin, outlined, engine shadow offset.
-  assert.deepEqual([...W.tree.shadow.offset], [4, 4]);
+  assert.deepEqual([...W.tree.shadow.offset], [8, 8], 'the tree shadow sits 4 world px down and right');
   assert.equal(W.tree.types.join(), 'oak,pine,birch');
   assert.equal(W.tree.animations.lean.frames * W.tree.animations.rustle.frames, 9);
   const cx = g => { let sum = 0, n = 0; for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) if (g.get(x, y)){ sum += x; n++; } return sum / n; };

@@ -13,10 +13,11 @@ export const DATA_FILE = path.join(ROOT, 'src/render/pixel-data.js');
 
 export const FACINGS = ['up', 'up-right', 'right', 'down-right', 'down', 'down-left', 'left', 'up-left'];
 const DIAG = Math.PI / 4;
-// World scale. Terrain: one art pixel is 1 world px, so a 48 px tile is 48 art px. Units and
+// World scale. Everything is drawn at 2 art px per world px. Terrain: a 48 world px tile is
+// TILE_ART = 96 art px, and terrain features are sized in world px times K. Units and
 // structures are drawn at SPRITE_RES art px per world px: their shapes are given in world px
 // and drawn with twice the pixels across, so a Spider is 49 world px and 98 art px.
-const WORLD_PX_PER_ART_PX = 1, TILE_ART = 48, SPRITE_RES = 2;
+const TERRAIN_RES = 2, K = TERRAIN_RES, WORLD_PX_PER_ART_PX = 1 / TERRAIN_RES, TILE_ART = 48 * TERRAIN_RES, SPRITE_RES = 2;
 
 // ---- Units: draw(p, anim, frame) in local coordinates, forward = -y ----
 
@@ -248,14 +249,14 @@ function stationFrames(){
   return out;
 }
 
-// ---- Dust plain terrain (48×48 tiles, seamless) ----
-// Two octaves of value noise: a coarse lattice (8 px cells, the same world scale as the
-// first set) and a fine one (4 px cells) for grain. `matched` (v2): every variant shares
-// the lattice values on its border row and column, so any two variants meet without a
-// seam, and its interior values are a permutation of one fixed set, so every variant has
-// the same overall tone.
+// ---- Dust plain terrain (96×96 tiles, seamless) ----
+// Three octaves of value noise: a coarse lattice (8 world px cells, the same world scale as
+// the first set), a fine one (4 world px) and a grain (2 world px). `matched` (v2): every
+// variant shares the lattice values on its border row and column, so any two variants meet
+// without a seam, and its interior values are a permutation of one fixed set, so every
+// variant has the same overall tone. Feature sizes are in world px, times K.
 const lattice = (L, seed) => { const r = rng(seed); return { L, border: Array.from({ length: 2 * L - 1 }, () => r()), interior: Array.from({ length: (L - 1) ** 2 }, () => r()) }; };
-const SHARED = [lattice(6, 9001), lattice(12, 9002)];
+const SHARED = [lattice(6, 9001), lattice(12, 9002), lattice(24, 9003)];
 function noise(r, shared, matched){
   const L = shared.L, cell = TILE_ART / L;
   let lat;
@@ -273,35 +274,42 @@ function noise(r, shared, matched){
     return (at(x0, y0) * (1 - tx) + at(x0 + 1, y0) * tx) * (1 - ty) + (at(x0, y0 + 1) * (1 - tx) + at(x0 + 1, y0 + 1) * tx) * ty;
   };
 }
+// A shaded pebble or stone w × h art px, lit top-left, with a contact shadow along its
+// lower right (terrain is never rotated, so its light can be drawn in).
+function stoneAt(put, x, y, w, h, tones){
+  for (let dy = 0; dy <= h; dy++) for (let dx = 0; dx <= w; dx++){
+    const ex = (dx - w / 2) / (w / 2 + 0.3), ey = (dy - h / 2) / (h / 2 + 0.3), d = ex * ex + ey * ey;
+    if (d > 1) continue;
+    const lit = ex + ey;
+    put(x + dx, y + dy, d > 0.62 ? (lit > 0.2 ? tones[4] : tones[1]) : lit < -0.7 ? tones[0] : lit < -0.1 ? tones[1] : lit < 0.5 ? tones[2] : tones[3]);
+  }
+  for (let dx = 1; dx <= w; dx++) put(x + dx, y + h + 1, tones[4]);
+  for (let dy = Math.ceil(h / 3); dy <= h; dy++) put(x + w + 1, y + dy, tones[4]);
+}
+const DUST_STONE = ['dust5', 'dust4', 'dust3', 'dust1', 'dust0'];
 function dustTile(seed, { speckles = 24, pebbles = 0, stones = 0, crack = false, matched = false } = {}){
   const r = rng(seed), g = new Grid(TILE_ART, TILE_ART), N = TILE_ART;
-  const coarse = noise(r, SHARED[0], matched), fine = noise(r, SHARED[1], matched);
+  const coarse = noise(r, SHARED[0], matched), fine = noise(r, SHARED[1], matched), grain = noise(r, SHARED[2], matched);
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++){
-    const v = coarse(x, y) * 0.62 + fine(x, y) * 0.26 + r() * 0.12;
+    const v = coarse(x, y) * 0.56 + fine(x, y) * 0.22 + grain(x, y) * 0.12 + r() * 0.1;
     g.set(x, y, C[v < 0.36 ? 'dust1' : v < 0.64 ? 'dust2' : 'dust3']);
   }
   const put = (x, y, c) => g.set(((x % N) + N) % N, ((y % N) + N) % N, C[c]);   // wraps: seamless
-  for (let i = 0; i < speckles; i++) put(Math.floor(r() * N), Math.floor(r() * N), r() < 0.5 ? 'dust0' : 'dust4');
-  // Pebble: lit top-left, shadowed bottom-right (terrain is never rotated).
-  const PEBBLE = [[1, 0, 'dust4'], [2, 0, 'dust4'], [0, 1, 'dust4'], [1, 1, 'dust5'], [2, 1, 'dust4'], [3, 1, 'dust3'],
-    [0, 2, 'dust3'], [1, 2, 'dust3'], [2, 2, 'dust3'], [3, 2, 'dust1'], [1, 3, 'dust0'], [2, 3, 'dust0'], [3, 3, 'dust1']];
-  for (let i = 0; i < pebbles; i++){ const x = Math.floor(r() * N), y = Math.floor(r() * N); for (const [dx, dy, c] of PEBBLE) put(x + dx, y + dy, c); }
+  // Speckles: single grains, and a few two-pixel grits.
+  for (let i = 0; i < speckles * K * K; i++){ const x = Math.floor(r() * N), y = Math.floor(r() * N), c = r() < 0.5 ? 'dust0' : 'dust4'; put(x, y, c); if (r() < 0.2) put(x + 1, y, c); }
+  for (let i = 0; i < pebbles; i++) stoneAt(put, Math.floor(r() * N), Math.floor(r() * N), 2 * K + Math.floor(r() * K), 2 * K - 1, DUST_STONE);
   for (let i = 0; i < stones; i++){
-    const x = Math.floor(r() * N), y = Math.floor(r() * N), w = 7, h = 6;
-    for (let dy = 0; dy <= h; dy++) for (let dx = 0; dx <= w; dx++){
-      const ex = (dx - w / 2) / (w / 2), ey = (dy - h / 2) / (h / 2), d = ex * ex + ey * ey;
-      if (d > 1) continue;
-      const lit = ex + ey;   // -2 at the top-left, +2 at the bottom-right
-      put(x + dx, y + dy, d > 0.7 ? (lit > 0 ? 'dust0' : 'dust3') : lit < -0.6 ? 'dust5' : lit < 0.3 ? 'dust4' : 'dust3');
-    }
-    for (let dx = 1; dx < w; dx++) put(x + dx, y + h + 1, 'dust0');   // contact shadow
+    const x = Math.floor(r() * N), y = Math.floor(r() * N);
+    stoneAt(put, x, y, 7 * K, 6 * K, DUST_STONE);
+    for (let k = 0; k < 3; k++) put(x + 2 + Math.floor(r() * 5 * K), y + 2 + Math.floor(r() * 3 * K), 'dust4');   // pits in the stone
   }
   if (crack){
+    // A branching crack: one-pixel line, a lit lip on its upper side.
     let x = Math.floor(r() * N), y = Math.floor(r() * N);
-    for (let i = 0; i < 30; i++){
-      put(x, y, 'dust0'); if (i % 3 === 0) put(x, y + 1, 'dust1');
-      x += r() < 0.6 ? 1 : 0; y += r() < 0.5 ? 1 : r() < 0.3 ? -1 : 0;
-      if (i === 14){ let bx = x, by = y; for (let k = 0; k < 8; k++){ put(bx, by, 'dust0'); bx -= r() < 0.5 ? 1 : 0; by += 1; } }   // branch
+    for (let i = 0; i < 30 * K; i++){
+      put(x, y, 'dust0'); put(x, y - 1, 'dust4'); if (i % 4 === 0) put(x, y + 1, 'dust1');
+      x += r() < 0.6 ? 1 : 0; y += r() < 0.45 ? 1 : r() < 0.3 ? -1 : 0;
+      if (i === 14 * K){ let bx = x, by = y; for (let k = 0; k < 8 * K; k++){ put(bx, by, 'dust0'); bx -= r() < 0.5 ? 1 : 0; by += 1; } }   // branch
     }
   }
   return g;
@@ -316,11 +324,11 @@ export const TERRAIN = {
       .map((o, i) => dustTile(21 + i, { ...o, matched: true })) }
 };
 
-// ---- Woodlands terrain and tree props (48×48) ----
-// Same method as the dust plain v2: two octaves of smooth value lattice whose border values
-// are shared by every variant (edge-matched) and whose interior values are one shuffled set
-// (tone-matched), then small features that wrap across the edges. Drawn at 1 art px per
-// world px; the first pilot was 24×24 at 2 world px per art px.
+// ---- Woodlands terrain and tree props (96×96) ----
+// Same method as the dust plain v2: three octaves of smooth value lattice whose border
+// values are shared by every variant (edge-matched) and whose interior values are one
+// shuffled set (tone-matched), then small features that wrap across the edges. Sizes are
+// in world px times K; seams, joints and blades stay one art px wide.
 const W_WEIGHTS = [6, 6, 6, 4, 3, 2, 1, 1], N = TILE_ART;
 const wrap = v => ((v % N) + N) % N;
 function latticeTile(seed, sharedSeed, pickColour){
@@ -337,84 +345,92 @@ function latticeTile(seed, sharedSeed, pickColour){
       return (at(x0, y0) * (1 - tx) + at(x0 + 1, y0) * tx) * (1 - ty) + (at(x0, y0 + 1) * (1 - tx) + at(x0 + 1, y0 + 1) * tx) * ty;
     };
   };
-  const coarse = octave(6), fine = octave(12);
-  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) g.set(x, y, C[pickColour(coarse(x, y) * 0.62 + fine(x, y) * 0.24 + r() * 0.14)]);
+  const coarse = octave(6), fine = octave(12), grain = octave(24);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) g.set(x, y, C[pickColour(coarse(x, y) * 0.56 + fine(x, y) * 0.2 + grain(x, y) * 0.12 + r() * 0.12)]);
   const put = (x, y, c) => g.set(wrap(x), wrap(y), C[c]);
   const at = () => [Math.floor(r() * N), Math.floor(r() * N)];
   return { g, r, put, at };
 }
-// A blade of grass from its root (x, y) upwards: `len` px, bending `bend` px sideways over
-// its length, a dark root, the body in `body` and a lit tip.
+// A blade of grass from its root (x, y) upwards: `len` art px, bending `bend` art px sideways
+// over its length, a dark root, the body in `body` and a lit tip.
 function blade(put, x, y, len, bend, body = 'grass2', tip = 'grass3'){
   for (let k = 0; k < len; k++){
     const bx = x + Math.round(bend * (k / len) ** 2);
-    put(bx, y - k, k === 0 ? 'grass0' : k >= len - 1 ? tip : body);
+    put(bx, y - k, k === 0 ? 'grass0' : k >= len - 2 ? tip : body);
   }
   put(x + 1, y, 'grass0');   // shadow at the root
 }
-// A shaded pebble or stone, lit top-left, with a contact shadow along its lower right.
-function stone(put, x, y, w, h, tones = ['dust5', 'dust4', 'dust3', 'dust1']){
-  for (let dy = 0; dy <= h; dy++) for (let dx = 0; dx <= w; dx++){
-    const ex = (dx - w / 2) / (w / 2 + 0.3), ey = (dy - h / 2) / (h / 2 + 0.3), d = ex * ex + ey * ey;
-    if (d > 1) continue;
-    const lit = ex + ey;
-    put(x + dx, y + dy, d > 0.6 && lit > 0.3 ? tones[3] : lit < -0.7 ? tones[0] : lit < 0.2 ? tones[1] : tones[2]);
-  }
-  for (let dx = 1; dx <= w; dx++) put(x + dx, y + h + 1, 'char1');
-}
+const GRASS_STONE = ['dust5', 'dust4', 'dust3', 'dust1', 'char1'];
 function grassTile(seed, { speckles = 30, blades = 14, clover = 0, tufts = 0, pebble = 0, flowers = 0 } = {}){
   const { g, r, put, at } = latticeTile(seed, 7101, v => v < 0.36 ? 'grass0' : v < 0.66 ? 'grass1' : 'grass2');
-  for (let i = 0; i < speckles; i++){ const [x, y] = at(); put(x, y, r() < 0.5 ? 'grass0' : 'grass3'); }
-  // Short blades give the lawn a grain at this scale.
-  for (let i = 0; i < blades; i++){ const [x, y] = at(); blade(put, x, y, 2 + Math.floor(r() * 3), r() < 0.5 ? 0 : r() < 0.5 ? -1 : 1); }
-  for (let i = 0; i < clover; i++){
+  for (let i = 0; i < speckles * K * K; i++){ const [x, y] = at(); put(x, y, r() < 0.5 ? 'grass0' : 'grass3'); }
+  // Short blades give the lawn a grain.
+  for (let i = 0; i < blades * K * K; i++){ const [x, y] = at(); blade(put, x, y, (2 + Math.floor(r() * 3)) * K - Math.floor(r() * 2), (r() < 0.5 ? 0 : r() < 0.5 ? -1 : 1) * K); }
+  for (let i = 0; i < clover * 2; i++){
+    // Three round leaflets around a stem, each lit top-left and shaded bottom-right, with a pale vein.
     const [x, y] = at();
-    // Three round leaflets around a stem, each lit top-left and shaded bottom-right.
-    for (const [lx, ly] of [[0, 0], [4, 0], [2, 3]]){
-      for (const [dx, dy, c] of [[1, 0, 'grass3'], [2, 0, 'grass3'], [0, 1, 'grass3'], [1, 1, 'grass3'], [2, 1, 'grass2'], [3, 1, 'grass2'], [1, 2, 'grass2'], [2, 2, 'grass0']]) put(x + lx + dx, y + ly + dy, c);
+    for (const [lx, ly] of [[0, 0], [4, 0], [2, 3.4]]){
+      const cx = x + lx * K, cy = y + ly * K, rr = 1.8 * K;
+      for (let dy = -rr; dy <= rr; dy++) for (let dx = -rr; dx <= rr; dx++){
+        const d = Math.hypot(dx, dy) / rr;
+        if (d > 1) continue;
+        put(Math.round(cx + dx), Math.round(cy + dy), d > 0.75 && dx + dy > 0 ? 'grass0' : dx + dy < -rr * 0.4 ? 'grass3' : 'grass2');
+      }
+      put(Math.round(cx), Math.round(cy), 'grass3');
     }
-    put(x + 3, y + 6, 'grass0'); put(x + 3, y + 7, 'grass0');
+    for (let k = 0; k < 3 * K; k++) put(x + 2 * K + (k > K ? 1 : 0), y + 5 * K + k, 'grass0');
   }
-  for (let i = 0; i < tufts; i++){
+  for (let i = 0; i < tufts * 2; i++){
     const [x, y] = at();
-    for (let k = -2; k <= 2; k++) blade(put, x + k * 2, y, 4 + Math.floor(r() * 4) - Math.abs(k), k * 1.4);
+    for (let k = -3; k <= 3; k++) blade(put, x + k * K, y + Math.abs(k), (5 + Math.floor(r() * 4) - Math.abs(k)) * K, k * 1.4 * K);
   }
-  for (let i = 0; i < flowers; i++){ const [x, y] = at(); put(x, y - 1, 'amber1'); put(x - 1, y, 'amber1'); put(x + 1, y, 'amber1'); put(x, y + 1, 'amber1'); put(x, y, 'dust5'); put(x + 1, y + 1, 'grass0'); }
-  for (let i = 0; i < pebble; i++){ const [x, y] = at(); stone(put, x, y, 4, 3); }
+  for (let i = 0; i < flowers * 3; i++){
+    // Four petals round a pale centre.
+    const [x, y] = at(), petal = r() < 0.5 ? 'amber1' : 'amber2';
+    for (const [dx, dy] of [[0, -K], [-K, 0], [K, 0], [0, K]]) for (let a = 0; a < K; a++) for (let b = 0; b < K; b++) put(x + dx + a, y + dy + b, petal);
+    for (let a = 0; a < K; a++) for (let b = 0; b < K; b++) put(x + a, y + b, 'dust5');
+    put(x + K, y + 2 * K, 'grass0');
+  }
+  for (let i = 0; i < pebble * 2; i++){ const [x, y] = at(); stoneAt(put, x, y, 3 * K + Math.floor(r() * K), 2 * K + 1, GRASS_STONE); }
   return g;
 }
 function tallGrassTile(seed, { blades = 70, seedheads = 0 } = {}){
   const { g, r, put, at } = latticeTile(seed, 7202, v => v < 0.45 ? 'grass0' : 'grass1');
-  for (let i = 0; i < blades; i++){
-    const [x, y] = at(), len = 6 + Math.floor(r() * 6), bend = (r() < 0.3 ? 2 : r() < 0.4 ? -2 : 0) + (r() - 0.5);
-    blade(put, x, y, len, bend);
+  for (let i = 0; i < blades * K * 1.6; i++){
+    const [x, y] = at(), len = (6 + Math.floor(r() * 6)) * K, bend = ((r() < 0.3 ? 2 : r() < 0.4 ? -2 : 0) + (r() - 0.5)) * K;
+    blade(put, x, y, len, bend, r() < 0.3 ? 'grass1' : 'grass2');
   }
-  for (let i = 0; i < seedheads; i++){
-    const [x, y] = at();
-    blade(put, x, y, 8, 1, 'grass2', 'grass2');
-    for (const [dx, dy, c] of [[1, -8, 'dust5'], [1, -9, 'dust5'], [2, -9, 'dust4'], [1, -10, 'dust4'], [2, -8, 'dust3']]) put(x + dx, y + dy, c);
+  for (let i = 0; i < seedheads * 2; i++){
+    const [x, y] = at(), h = 8 * K;
+    blade(put, x, y, h, K, 'grass2', 'grass2');
+    // A drooping seed head of small grains.
+    for (let k = 0; k < 3 * K; k++){ put(x + K + (k & 1), y - h - k + K, k % 2 ? 'dust4' : 'dust5'); if (k % 2 === 0) put(x + K + 1 + (k & 1), y - h - k + K, 'dust3'); }
   }
   return g;
 }
 function waterTile(seed, { deep = false, ripples = 10, sparkle = 0 } = {}){
   const { g, r, put, at } = latticeTile(seed, deep ? 7404 : 7303, deep ? (v => v < 0.78 ? 'water0' : 'water1') : (v => v < 0.3 ? 'water0' : v < 0.78 ? 'water1' : 'water2'));
   // A ripple: a lit crest with a darker trough under it, thinning at both ends.
-  for (let i = 0; i < ripples; i++){
-    const [x, y] = at(), len = 5 + Math.floor(r() * 6);
+  for (let i = 0; i < ripples * K; i++){
+    const [x, y] = at(), len = (5 + Math.floor(r() * 6)) * K;
     for (let k = 0; k < len; k++){
-      const end = k === 0 || k === len - 1;
+      const end = k < K || k >= len - K;
       if (!end || r() < 0.5) put(x + k, y, deep ? 'water1' : 'water2');
       if (!end) put(x + k + 1, y + 1, 'water0');
+      if (!end && k % 3 === 1 && r() < 0.5) put(x + k, y - 1, deep ? 'water1' : 'water2');
     }
   }
-  for (let i = 0; i < sparkle; i++){ const [x, y] = at(); put(x, y, 'water3'); put(x - 1, y, 'water2'); put(x + 1, y, 'water2'); put(x, y - 1, 'water2'); put(x, y + 1, 'water2'); }
+  for (let i = 0; i < sparkle * 2; i++){
+    const [x, y] = at();
+    for (let k = -K; k <= K; k++){ put(x + k, y, Math.abs(k) < K ? 'water3' : 'water2'); put(x, y + k, Math.abs(k) < K ? 'water3' : 'water2'); }
+  }
   return g;
 }
 // Shoreline: open water with a muddy bank and a broken foam line along each side that
 // touches land. `mask` bits: 1 north, 2 east, 4 south, 8 west. Where two neighbouring
 // sides are land, the corner is rounded.
 function shoreTile(mask){
-  const g = waterTile(31), R = 12, pat = rng(5150 + mask);
+  const g = waterTile(31), R = 12 * K, pat = rng(5150 + mask);
   const noise = Array.from({ length: N * N }, () => pat());
   // A little wobble along the bank, the same on every tile so neighbouring pieces line up.
   const WOBBLE = [0, 0.4, 0.8, 1.2, 1.6, 1.2, 0.8, 0.4, 0, -0.3, -0.6, -0.3];
@@ -426,7 +442,7 @@ function shoreTile(mask){
     const corner = (a, b, cx, cy) => { if ((mask & a) && (mask & b) && Math.abs(x - cx) < R && Math.abs(y - cy) < R) d = Math.min(d, R - Math.hypot(R - Math.abs(x - cx) - 0.5, R - Math.abs(y - cy) - 0.5)); };
     corner(1, 8, 0, 0); corner(1, 2, N - 1, 0); corner(4, 2, N - 1, N - 1); corner(4, 8, 0, N - 1);
     const along = (mask & 5) && !(mask & 10) ? x : (mask & 10) && !(mask & 5) ? y : x + y;
-    d += WOBBLE[along % 12];
+    d = d / K + WOBBLE[Math.floor(along / K) % 12];        // in world px from here on
     const n = noise[y * N + x];
     if (d < 2.4) g.set(x, y, C[n < 0.5 ? 'dust1' : n < 0.9 ? 'dust0' : 'dust2']);          // wet mud
     else if (d < 5) g.set(x, y, C[n < 0.6 ? 'dust2' : n < 0.9 ? 'dust1' : 'dust3']);        // bank shallows
@@ -440,34 +456,35 @@ function shoreTile(mask){
 // hanging over, then irregular stone blocks (lit on their top-left edges, shaded bottom-right,
 // darker further down, grained inside), cracks, moss and loose stones at the foot. A drop on
 // another side shows the grass top with a ragged rock rim on that side; a corner drop a
-// rounded rim. Every block band has a joint on column 0, and rims wobble with a 48 px
-// period, so pieces line up with their neighbours.
-const RIM = Array.from({ length: N }, (_, k) => 6 + Math.round(Math.sin(k / N * Math.PI * 4) * 1.6 + Math.sin(k / N * Math.PI * 6 + 1) * 1.2));
+// rounded rim. Every block band has a joint on column 0, and rims wobble with a period of one
+// tile, so pieces line up with their neighbours. Rows and sizes are in world px times K.
+const RIM = Array.from({ length: N }, (_, k) => Math.round((6 + Math.sin(k / N * Math.PI * 4) * 1.6 + Math.sin(k / N * Math.PI * 6 + 1) * 1.2) * K));
 function cliffFace(variant){
   const g = new Grid(N, N), r = rng(6100 + variant * 53), set = (x, y, c) => g.set(x, y, C[c]);
   // Grassy lip.
-  for (let y = 0; y < 8; y++) for (let x = 0; x < N; x++)
-    set(x, y, y >= 6 ? (y === 7 ? 'char1' : 'grass0') : (x * 7 + y * 5 + variant * 3) % 13 === 0 ? 'grass3' : (x + y * 3) % 5 === 0 ? 'grass2' : 'grass1');
+  for (let y = 0; y < 8 * K; y++) for (let x = 0; x < N; x++)
+    set(x, y, y >= 6 * K ? (y >= 8 * K - 1 ? 'char1' : 'grass0') : (x * 7 + y * 5 + variant * 3) % 13 === 0 ? 'grass3' : (x + y * 3) % 5 === 0 ? 'grass2' : 'grass1');
   // Stone blocks in bands; deeper bands are darker.
-  const bands = [[8, 17], [18, 26], [27, 34], [35, 41]], tones = [['dust4', 'dust3', 'dust2'], ['dust3', 'dust2', 'dust1'], ['dust3', 'dust2', 'dust1'], ['dust2', 'dust1', 'dust0']];
+  const bands = [[8, 17], [18, 26], [27, 34], [35, 41]].map(([a, b]) => [a * K, (b + 1) * K - 1]);
+  const tones = [['dust4', 'dust3', 'dust2'], ['dust3', 'dust2', 'dust1'], ['dust3', 'dust2', 'dust1'], ['dust2', 'dust1', 'dust0']];
   bands.forEach(([y0, y1], b) => {
-    let x = b % 2 ? -Math.floor(4 + r() * 6) : 0;
+    let x = b % 2 ? -Math.floor((4 + r() * 6) * K) : 0;
     while (x < N){
-      const w = 8 + Math.floor(r() * 10), x0 = Math.max(0, x), x1 = Math.min(N - 1, x + w - 1), [hi, mid, lo] = tones[b];
+      const w = Math.floor((8 + r() * 10) * K), x0 = Math.max(0, x), x1 = Math.min(N - 1, x + w - 1), [hi, mid, lo] = tones[b];
       for (let y = y0; y <= y1; y++) for (let xx = x0; xx <= x1; xx++){
         let c = mid;
         if (r() < 0.12) c = r() < 0.5 ? hi : lo;                                 // grain
         if (y === y0 || xx === x0 + 1) c = hi;                                   // lit top and left edges
-        if (y === y0 + 1 && xx > x0 + 1 && xx < x1 - 1 && r() < 0.5) c = hi;
+        if ((y === y0 + 1 || y === y0 + 2) && xx > x0 + 1 && xx < x1 - 1 && r() < 0.5) c = hi;
         if (y === y1 || xx === x1) c = lo;                                       // shaded bottom and right edges
-        if (y === y1 - 1 && xx === x1) c = 'char1';
+        if (y >= y1 - 1 && xx >= x1 - 1 && (y === y1 || xx === x1)) c = 'char1';
         if (xx === x0 && x > 0) c = 'char1';                                     // joint
         set(xx, y, c);
       }
       // A chip or two knocked out of the face.
-      for (let k = 0; k < 2; k++) if (r() < 0.4){
-        const px = x0 + 2 + Math.floor(r() * Math.max(1, x1 - x0 - 4)), py = y0 + 2 + Math.floor(r() * Math.max(1, y1 - y0 - 3));
-        set(px, py, lo); set(px + 1, py, lo); set(px, py + 1, 'char1'); set(px + 1, py - 1, hi);
+      for (let k = 0; k < 3; k++) if (r() < 0.4){
+        const px = x0 + 2 * K + Math.floor(r() * Math.max(1, x1 - x0 - 4 * K)), py = y0 + 2 * K + Math.floor(r() * Math.max(1, y1 - y0 - 3 * K));
+        for (let a = 0; a < K; a++){ set(px + a, py, lo); set(px + a + 1, py + 1, lo); } set(px, py + 1, 'char1'); set(px + K, py - 1, hi);
       }
       x = x1 + 1;
     }
@@ -475,33 +492,36 @@ function cliffFace(variant){
   });
   // Cracks running down a block or two, with a lit edge on one side.
   for (let i = 0; i < 2 + (variant % 2); i++){
-    let x = 6 + Math.floor(r() * 36), y = 10 + Math.floor(r() * 12);
-    for (let k = 0; k < 10 + Math.floor(r() * 10) && y < 41; k++){
+    let x = (6 + Math.floor(r() * 36)) * K, y = (10 + Math.floor(r() * 12)) * K;
+    for (let k = 0; k < (10 + Math.floor(r() * 10)) * K && y < 41 * K; k++){
       set(x, y, 'char0'); if (g.get(x + 1, y) && r() < 0.6) set(x + 1, y, 'dust1'); if (r() < 0.5) set(x - 1, y, 'dust4');
-      y++; if (r() < 0.3) x = Math.max(3, Math.min(44, x + (r() < 0.5 ? -1 : 1)));
+      y++; if (r() < 0.25) x = Math.max(3 * K, Math.min(44 * K, x + (r() < 0.5 ? -1 : 1)));
     }
   }
   // Moss on a few ledges.
   for (let i = 0; i < 3 + variant % 3; i++){
-    const x = 3 + Math.floor(r() * 40), y = [8, 18, 27][Math.floor(r() * 3)], w = 3 + Math.floor(r() * 4);
-    for (let k = 0; k < w; k++){ set(x + k, y, k % 3 ? 'leaf1' : 'leaf2'); if (r() < 0.6) set(x + k, y + 1, 'leaf0'); if (r() < 0.25) set(x + k, y + 2, 'leaf0'); }
+    const x = (3 + Math.floor(r() * 40)) * K, y = [8, 18, 27][Math.floor(r() * 3)] * K, w = (3 + Math.floor(r() * 4)) * K;
+    for (let k = 0; k < w; k++){
+      set(x + k, y, k % 3 ? 'leaf1' : 'leaf2'); if (r() < 0.7) set(x + k, y + 1, 'leaf1');
+      for (let d = 2; d < 2 * K + 1; d++) if (r() < 0.35 / d * 2) set(x + k, y + d, 'leaf0');
+    }
   }
   // Grass tufts hanging over the lip.
-  for (let i = 0; i < 5; i++){
-    const x = 2 + Math.floor(r() * 42), len = 2 + Math.floor(r() * 5);
-    for (let k = 0; k < len; k++) set(x, 8 + k, k === len - 1 ? 'grass0' : k === 0 ? 'grass3' : 'grass2');
-    if (r() < 0.6){ const l2 = Math.max(1, len - 2); for (let k = 0; k < l2; k++) set(x + 1, 8 + k, k === l2 - 1 ? 'grass0' : 'grass2'); }
-    set(x + 1, 8 + len, 'char1');
+  for (let i = 0; i < 5 * K; i++){
+    const x = (2 + Math.floor(r() * 42)) * K + Math.floor(r() * K), len = (2 + Math.floor(r() * 5)) * K;
+    for (let k = 0; k < len; k++) set(x, 8 * K + k, k === len - 1 ? 'grass0' : k === 0 ? 'grass3' : 'grass2');
+    if (r() < 0.6){ const l2 = Math.max(1, len - 2 * K); for (let k = 0; k < l2; k++) set(x + 1, 8 * K + k, k === l2 - 1 ? 'grass0' : 'grass2'); }
+    set(x + 1, 8 * K + len, 'char1');
   }
   // Foot: a shadow band and loose stones.
   for (let x = 0; x < N; x++){
-    set(x, 42, (x + variant) % 4 ? 'char1' : 'dust0'); set(x, 43, (x * 3 + variant) % 5 ? 'char1' : 'char0');
-    for (let y = 44; y < 47; y++) set(x, y, 'char0');
-    set(x, 47, (x * 5 + variant) % 7 === 0 ? 'char1' : 'char0');
+    for (let y = 42 * K; y < 44 * K; y++) set(x, y, (x + y + variant) % 4 ? 'char1' : 'dust0');
+    for (let y = 44 * K; y < N - 1; y++) set(x, y, (x * 3 + y + variant) % 11 === 0 ? 'char1' : 'char0');
+    set(x, N - 1, (x * 5 + variant) % 7 === 0 ? 'char1' : 'char0');
   }
-  for (let i = 0; i < 5; i++){
-    const x = 1 + Math.floor(r() * 44), y = 41 + Math.floor(r() * 3), w = 2 + Math.floor(r() * 2);
-    for (let k = 0; k <= w; k++){ set(x + k, y, k === 0 ? 'dust4' : 'dust3'); set(x + k, y + 1, k === w ? 'dust0' : 'dust1'); }
+  for (let i = 0; i < 5 * K; i++){
+    const x = K + Math.floor(r() * 44 * K), y = 41 * K + Math.floor(r() * 3 * K);
+    stoneAt((px, py, c) => { if (px >= 0 && px < N && py >= 0 && py < N) set(px, py, c); }, x, y, K + 1 + Math.floor(r() * 2 * K), K + Math.floor(r() * K), ['dust4', 'dust3', 'dust2', 'dust1', 'char0']);
   }
   return g;
 }
@@ -510,9 +530,9 @@ function cliffTile(key, variant = 0){
   if (!corner && key.startsWith('S')){
     const g = cliffFace(variant);
     // The face turning away at an east or west end.
-    const side = xs => { for (let y = 8; y < 42; y++) xs.forEach((x, k) => g.set(x, y, C[k < 2 ? 'char1' : k < 4 ? 'dust1' : k === 4 ? 'dust4' : 'dust3'])); };
-    if (key.includes('E')) side([N - 1, N - 2, N - 3, N - 4, N - 5, N - 6]);
-    if (key.includes('W')) side([0, 1, 2, 3, 4, 5]);
+    const cols = 6 * K, side = xs => { for (let y = 8 * K; y < 42 * K; y++) xs.forEach((x, k) => g.set(x, y, C[k < 2 * K ? 'char1' : k < 4 * K ? 'dust1' : k < 5 * K ? 'dust4' : 'dust3'])); };
+    if (key.includes('E')) side(Array.from({ length: cols }, (_, k) => N - 1 - k));
+    if (key.includes('W')) side(Array.from({ length: cols }, (_, k) => k));
     return g;
   }
   const g = grassTile(21), r = rng(6200 + key.length * 13);
@@ -522,7 +542,7 @@ function cliffTile(key, variant = 0){
       const w = RIM[k];
       for (let d = 0; d < w + 1; d++){
         const [x, y] = at(k, d);
-        g.set(x, y, C[d < 2 ? 'char1' : d < 3 ? 'dust0' : d < 4 ? 'dust1' : d < w - 1 ? (r() < 0.15 ? 'dust3' : 'dust2') : d < w ? 'dust4' : ((k * 3) % 5 ? 'dust5' : 'grass0')]);
+        g.set(x, y, C[d < 2 * K ? 'char1' : d < 3 * K ? 'dust0' : d < 4 * K ? 'dust1' : d < w - K ? (r() < 0.15 ? 'dust3' : 'dust2') : d < w ? 'dust4' : ((k * 3) % 5 ? 'dust5' : 'grass0')]);
       }
       if (r() < 0.12){ const [x, y] = at(k, w + 1); g.set(x, y, C.grass3); }
       if (r() < 0.08){ const [x, y] = at(k, w + 2); g.set(x, y, C.grass0); }
@@ -531,7 +551,7 @@ function cliffTile(key, variant = 0){
   if (corner){
     const [cx, cy] = { NE: [N, 0], SE: [N, N], SW: [0, N], NW: [0, 0] }[corner];
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++){
-      const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+      const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) / K;
       if (d < 9.2) g.set(x, y, C[d < 3.2 ? 'char1' : d < 5.2 ? 'dust1' : d < 7.2 ? 'dust2' : d < 8.2 ? 'dust4' : 'dust5']);
     }
     return g;
@@ -546,12 +566,14 @@ export const CLIFF_KEYS = ['S', 'S2', 'S3', 'S4', 'SE', 'SW', 'SEW', 'N', 'E', '
 function cliffPieces(){
   return CLIFF_KEYS.map(k => /^S\d$/.test(k) ? cliffTile('S', +k[1] - 1) : cliffTile(k));
 }
-// Tree canopy props, three kinds. Each variant has 9 frames: 3 leans (at rest, then 2 and
-// 4 art px downwind, east) × 3 leaf-rustle steps (frame = lean * 3 + rustle). The canopy
-// sits 2 px left of centre at rest so the furthest lean still keeps the 1 px outline margin.
-// Outline and top-left light are added by the pipeline (the leaf ramp shades); the engine
-// draws the shadow.
-const TREE_LEAN_PX = 2, TREE_CX = 21.5, TREE_CY = 23.5;
+// Tree canopy props, three kinds. Shapes are in world px, drawn with the painter at scale K,
+// so crowns come out smooth at 96 × 96. Each variant has 9 frames: 3 leans (at rest, then 2
+// and 4 world px downwind, east) × 3 leaf-rustle steps (frame = lean * 3 + rustle). The canopy
+// sits 2 world px left of centre at rest so the furthest lean still keeps the 1 px outline
+// margin. Outline and top-left light are added by the pipeline (the leaf ramp shades); the
+// engine draws the shadow.
+const TREE_LEAN = 2, TREE_CX = 21.5, TREE_CY = 23.5;       // world px, on a 48 px tile
+const toArt = v => v * K + (K - 1) / 2;                    // a 48 px tile coordinate on the 96 px grid
 const TREE_KINDS = {
   // Broadleaf: a round, lobed crown with lighter leaf clumps and dark gaps between them.
   oak(p, r){
@@ -560,6 +582,8 @@ const TREE_KINDS = {
     for (let i = 0; i < lobes; i++){ const a = (i / lobes) * Math.PI * 2 + r() * 0.6, d = 8.4 + r() * 2.4, rr = 6 + r() * 2.2; p.ellipse(Math.cos(a) * d, Math.sin(a) * d, rr, rr, 'leaf1'); }
     for (let i = 0; i < 7; i++) p.ellipse((r() - 0.5) * 18, (r() - 0.5) * 18, 1.4 + r() * 1.4, 1.2 + r() * 1.2, 'leaf0');
     for (let i = 0; i < 12; i++){ const x = (r() - 0.5) * 18, y = (r() - 0.5) * 18; p.ellipse(x, y, 2.2 + r() * 1.6, 2 + r() * 1.4, 'leaf2'); p.ellipse(x + 1, y + 1.2, 1.2, 1, 'leaf1'); }
+    // Leaf texture at the finer scale: small clusters and dark gaps across the crown.
+    for (let i = 0; i < 26; i++){ const a = r() * Math.PI * 2, d = r() * 12; p.ellipse(Math.cos(a) * d, Math.sin(a) * d, 0.7 + r() * 0.6, 0.6 + r() * 0.5, r() < 0.4 ? 'leaf0' : 'leaf2'); }
     p.ellipse(-3, -3, 4, 3.6, 'leaf2');
   },
   // Conifer: a dark star of needle points around a tight centre, needles along each spoke.
@@ -569,10 +593,10 @@ const TREE_KINDS = {
     for (let i = 0; i < spikes; i++){
       const a = ((i + turn) / spikes) * Math.PI * 2, len = 16.4 + r() * 2;
       for (let k = 0; k <= 20; k++){ const t = k / 20, w = (1 - t) * 3.2; p.ellipse(Math.cos(a) * len * t, Math.sin(a) * len * t, w + 0.5, w + 0.5, 'leaf0'); }
-      // Needles: short strokes angled out from the spoke.
-      for (let k = 4; k < 16; k += 3) for (const s of [-1, 1]){
+      // Needles: short strokes angled out from the spoke, half a world px wide.
+      for (let k = 3; k < 16; k += 1.5) for (const s of [-1, 1]){
         const t = k / len, bx = Math.cos(a) * k, by = Math.sin(a) * k, na = a + s * 0.7;
-        p.line(bx, by, bx + Math.cos(na) * 2.4 * (1 - t * 0.5), by + Math.sin(na) * 2.4 * (1 - t * 0.5), 'leaf0');
+        p.thick(bx, by, bx + Math.cos(na) * 2.4 * (1 - t * 0.5), by + Math.sin(na) * 2.4 * (1 - t * 0.5), 0.5, 'leaf0');
       }
     }
     for (let i = 0; i < spikes; i++){
@@ -591,17 +615,17 @@ const TREE_KINDS = {
       p.ellipse(x, y, rr, rr, 'leaf2');
       p.ellipse(x + rr * 0.35, y + rr * 0.35, rr * 0.45, rr * 0.45, 'leaf1');   // shade inside each cluster
       p.ellipse(x - rr * 0.4, y - rr * 0.4, 1, 1, 'grass3');                  // lit leaf tip
+      for (let k = 0; k < 4; k++) p.ellipse(x + (r() - 0.5) * rr * 1.4, y + (r() - 0.5) * rr * 1.4, 0.6, 0.6, r() < 0.5 ? 'leaf1' : 'grass3');
     }
     for (let i = 0; i < 6; i++) p.ellipse((r() - 0.5) * 18, (r() - 0.5) * 18, 1.6, 1.6, 'leaf1');
     // Pale twigs showing through the gaps.
-    for (let i = 0; i < 3; i++){ const a = r() * Math.PI * 2; p.line(0, 0, Math.cos(a) * 7, Math.sin(a) * 7, 'dust5'); }
+    for (let i = 0; i < 3; i++){ const a = r() * Math.PI * 2; p.thick(0, 0, Math.cos(a) * 7, Math.sin(a) * 7, 0.6, 'dust5'); }
   }
 };
 export const TREE_TYPES = Object.keys(TREE_KINDS), TREE_LEANS = 3, TREE_RUSTLES = 3, TREE_FRAMES = TREE_LEANS * TREE_RUSTLES;
 // Leaf rustle: step 0 is the crown as drawn; steps 1 and 2 move a few leaf tips along the
-// edge (some drop back, some poke out, in pairs so they read at 1 art px per world px) and
-// catch the light in different places. The same changes are used at every lean, so
-// rustling and leaning combine smoothly.
+// edge (some drop back, some poke out, in K × K clumps) and catch the light in different
+// places. The same changes are used at every lean, so rustling and leaning combine smoothly.
 function rustle(g, kind, seed, step, cx){
   if (!step) return;
   const r = rng(seed * 13 + step * 977), glint = kind === 'birch' ? C.grass3 : C.leaf2, leaf = kind === 'pine' ? C.leaf0 : kind === 'birch' ? C.leaf2 : C.leaf1;
@@ -611,18 +635,18 @@ function rustle(g, kind, seed, step, cx){
     if (v && (open(x - 1, y) || open(x + 1, y) || open(x, y - 1) || open(x, y + 1))) edge.push([x, y]);
     else if (!v && (g.get(x - 1, y) || g.get(x + 1, y) || g.get(x, y - 1) || g.get(x, y + 1))) outside.push([x, y]);
   }
-  const pick = list => list[Math.floor(r() * list.length)];
-  for (let i = 0; i < 9; i++){ const [x, y] = pick(edge), [dx, dy] = r() < 0.5 ? [1, 0] : [0, 1]; g.set(x, y, 0); if (edge.some(([a, b]) => a === x + dx && b === y + dy)) g.set(x + dx, y + dy, 0); }
-  for (let i = 0; i < 9; i++){ const [x, y] = pick(outside), [dx, dy] = r() < 0.5 ? [1, 0] : [0, 1]; g.set(x, y, leaf); if (!g.get(x + dx, y + dy)) g.set(x + dx, y + dy, leaf); }
-  for (let i = 0; i < 8; i++){
-    const x = Math.round(cx + (r() - 0.5) * 20), y = Math.round(TREE_CY + (r() - 0.5) * 20);
+  const pick = list => list[Math.floor(r() * list.length)], clump = (x, y, f) => { for (let a = 0; a < K; a++) for (let b = 0; b < K; b++) f(x + a, y + b); };
+  for (let i = 0; i < 9 * K; i++){ const [x, y] = pick(edge); clump(x, y, (a, b) => { if (edge.some(([p, q]) => p === a && q === b)) g.set(a, b, 0); }); }
+  for (let i = 0; i < 9 * K; i++){ const [x, y] = pick(outside); clump(x, y, (a, b) => { if (!g.get(a, b) && a > 1 && b > 1 && a < N - 2 && b < N - 2) g.set(a, b, leaf); }); }
+  for (let i = 0; i < 8 * K; i++){
+    const x = Math.round(cx + (r() - 0.5) * 20 * K), y = Math.round(toArt(TREE_CY) + (r() - 0.5) * 20 * K);
     if (g.get(x, y) && g.get(x, y) !== C.leaf0){ g.set(x, y, glint); if (g.get(x + 1, y) && g.get(x + 1, y) !== C.leaf0) g.set(x + 1, y, glint); }
   }
 }
 function treeFrames(kind, seed){
   const out = [];
   for (let lean = 0; lean < TREE_LEANS; lean++) for (let step = 0; step < TREE_RUSTLES; step++){
-    const g = new Grid(N, N), cx = TREE_CX + lean * TREE_LEAN_PX, p = painter(g, 0, [cx, TREE_CY]);
+    const g = new Grid(N, N), cx = toArt(TREE_CX + lean * TREE_LEAN), p = painter(g, 0, [cx, toArt(TREE_CY)], K);
     TREE_KINDS[kind](p, rng(seed));
     rustle(g, kind, seed, step, cx);
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (x === 0 || y === 0 || x === N - 1 || y === N - 1) g.set(x, y, 0);
@@ -691,7 +715,7 @@ export function build(){
     sheets['woodlands_' + key] = { meta, rows: [tiles] };
   }
   // Trees: per kind, variants of 9 frames (lean * 3 + rustle). One sheet row per kind.
-  const trees = treeSet(), shadow = { drawnBy: 'engine', offset: [4, 4], elevation: 'prop' };
+  const trees = treeSet(), shadow = { drawnBy: 'engine', offset: [4 * K, 4 * K], elevation: 'prop' };
   const animations = { lean: { frames: TREE_LEANS, fps: 'set by the weather' }, rustle: { frames: TREE_RUSTLES, fps: 'set by the weather' }, frame: 'lean * 3 + rustle' };
   woodlands.tree = { types: TREE_TYPES, animations, shadow, variants: Object.fromEntries(TREE_TYPES.map(k => [k, trees[k].map(fr => fr.map(g => g.encode()))])) };
   sheets.woodlands_tree = {
