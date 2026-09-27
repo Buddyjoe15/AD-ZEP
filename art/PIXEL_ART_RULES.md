@@ -4,6 +4,8 @@ These are the rules for making new pixel art for the game. They match the art al
 
 **If you are an AI asked to make art with these rules:** start with the questions in section 1. Don't draw anything until you have the answers and the requester has confirmed your spec summary (section 1.3). If an answer conflicts with a rule below, point out the conflict and ask; don't bend the rule silently.
 
+**Exception: test sprites from a short description.** `/sprite <description>` (section 5) makes a test sprite in the sprite lab without the question round. It fills the gaps with the defaults here, checks the idea against the lore (section 5.1), and publishes a test page that serves as the spec summary for the requester to confirm. Nothing it makes goes into the game until they confirm it.
+
 ---
 
 ## 1. Ask first
@@ -212,3 +214,51 @@ Inside this repository:
 - Hand-drawing the six rotated facings, or resampling `up` to make `up-right`.
 - Terrain variants that don't match at the edges or differ in tone, or linear variant picking.
 - New saved state for a purely visual effect. Anything that must persist follows the save rules in `CLAUDE.md`.
+
+## 5. Sprite lab and `/sprite`
+
+The sprite lab (`art/sprite-lab/`) makes test sprites from 3D models built in code. It renders them straight top-down at 96 art px per tile, checks them against these rules, and writes a test page. In Claude Code, `/sprite <short description>` runs the whole process (`.claude/skills/sprite/SKILL.md`), for example `/sprite a salvage crawler that strips wrecks for metal`.
+
+### 5.1 Lore and style check
+
+Check every new design against the world before drawing it. `docs/DESIGN.md` has the full design and the story.
+- **The expedition.** Commander Elias Vance and the UES Aster Vale are thrown between alternate Earths by a damaged warp drive. The ship's AI, ARIA, controls the ship, fabricates the drone army and speaks in terse, classified status lines. Vance believes the worlds are planets ("Planet 001"); they are Earths whose history went a different way.
+- **Crew technology** is fabricated on site from metal, steel, electronics and fuel rods. It is practical field engineering: modular hulls, bolted plates, hazard striping, exposed pistons and cables, cyan sensor lights and amber warning lights.
+- **Hostiles.** Today's Hostile Autonomous Machines and Hostile Drones stand in for the Omega, which is still being designed. Make hostiles machines: harsher and more angular than crew tech, dark steel with rust, red sensor lights. Flag any organic or Omega design for the requester's approval.
+- **Element P** is the ship's rare fuel: show it as contained cyan-white light, never loose magic. **Lost archives** are black-box recordings from Earths that also tried the warp: salvaged recorders and data cores.
+- **The Earths.** Woods World (Northern Canada, abandoned settlements, logging camps, wind and rain) comes first. Later: Medieval Earth, Lava World, Snow Earth, Earth at War (a WW2-era world war, wasteland salvage), Omega World. Local structures belong to their Earth, such as timber and stone on Woods World.
+- **Tone.** Grounded science fiction. No fantasy magic, cartoon faces, text or logos (a short stencil mark is fine), gore, or anything cute.
+
+| Faction | Materials (`MAT` in `tools/sprite-kit.mjs`) | Team colour | Lights |
+|---|---|---|---|
+| Crew | `steel`, `plate`, `dark`, `chrome`, `gold` joints, `amber` hazard bands | yes | `glow` sensors, `lampAmber`, `lampGreen` |
+| Hostile | `dark`, `steel`, `rust`, `red`, `chrome` | yes (red in play) | `lampRed` |
+| Local (the Earth's own) | `wood`, `log`, `stone`, `rust`, weathered `plate` | no | `lampAmber` lanterns at most |
+| Nature | `bark`, `leaf`, `pine`, `stone`, `water` | no | none |
+| Anomaly (Element P, archives) | `dark`, `chrome` housings | no | `glow`, contained |
+
+If a request doesn't fit (a dragon, a wizard), reinterpret it inside the world, keeping what the requester cares about (silhouette, role, mood), and list the change on the test page.
+
+### 5.2 Lab rules
+
+- **Specs.** One file per sprite, `art/sprite-lab/specs/<key>.mjs`: a model in world px (x east, y up, z south; units face −z) built with `tools/sprite-kit.mjs`. `example_spider.mjs` is the worked example.
+- **Straight top-down at 2 art px per world px,** rendered by `tools/render3d.mjs` with no height shift.
+  - Light from the top left on every facing, a glint on shiny materials, and ambient occlusion in creases.
+  - Lines where parts meet, and a 1 px outline.
+  - Colours only from the shared palette, through the material ramps in the kit.
+- **Frames: 96 × 96 per tile.**
+  - Units: `standard` 96 × 96 (48 world px, Spider-sized), `small` 64 × 64 (drone-sized) or `large` 192 × 192, with the origin at the centre.
+  - Structures and props: footprint × 96.
+  - The game's current Spider and drone use odd world sizes (98 and 66 art px); the lab uses whole tiles. Both are 2 art px per world px, and the engine reads the size from the metadata.
+- **Facings.** A unit's 8 facings are each rendered from the model, with the light staying top left. This replaces the rule to author `up` and `up-right` and rotate them: it gives the same silhouettes with the same light.
+- **Shadows** stay engine-drawn from the silhouette, at the offset for the elevation (section 2.3).
+- **Checks** (`npm run sprite -- <spec>`). A fail must be fixed; a warn is for the requester to decide.
+  - Frame size.
+  - Inside the frame, and for units inside the inscribed circle less 1 world px.
+  - Palette only.
+  - Team colour: at least 6 × 6 world px on a Spider-sized unit (scaled by frame area), and none on teamless art.
+  - Animation and state names the engine plays (warn).
+  - Silhouette overlap with the in-game Utility Spider above 75% (warn).
+- **Output** in `art/sprite-lab/out/<key>/` (not committed): `sheet.png`, `meta.json` and `index.html`. The page has the fit report, the frame at every zoom, the facings, the animations or states, the sprite beside today's Spiders, a crowd at ⅓ zoom, the checks and the metadata.
+- **Into the game.** A lab sprite goes into the game only once the requester confirms it, through section 3: its sheet and metadata into the pipeline, mapped in `src/render/pixelart.js`.
+

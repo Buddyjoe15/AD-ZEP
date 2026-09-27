@@ -20,7 +20,6 @@
 export const H = 0.8;                                 // screen px up per px of height
 export const LIGHT = norm([-0.5, 0.75, -0.45]);       // toward the light: west, up and north
 export const VIEW = norm([0, 1, H]);                  // toward the viewer
-const HALF = norm(add(LIGHT, VIEW));
 const AMBIENT = 0.3, DIFFUSE = 0.8, TAU = Math.PI * 2;
 
 // ---- Vectors ----
@@ -153,15 +152,15 @@ export class Model {
 
 // ---- Rendering ----
 // Renders `model` turned to `heading` into a w×h sprite at `res` art px per world px, with the
-// model origin at pixel (ox, oy). Materials: { ramp: palette indices dark to light, spec?,
+// model origin at pixel (ox, oy). `lift` is the screen px up per px of height (default H). Materials: { ramp: palette indices dark to light, spec?,
 // shine?, emissive?, pattern?(p) → ramp steps to add, or another material to use there }.
 // Returns palette indices (0 = transparent) and the ground shadow mask.
-export function renderSprite(model, { w, h, ox, oy, res, heading = 0, ss = 2, outline, edge = 2.5, ao = 0.5 }){
-  const S = ss, W = w * S, HH = h * S, N = W * HH, r = res * S, R = rotY(heading);
+export function renderSprite(model, { w, h, ox, oy, res, heading = 0, ss = 2, outline, edge = 2.5, ao = 0.5, lift = H }){
+  const L = lift, half = norm(add(LIGHT, norm([0, 1, L]))), S = ss, W = w * S, HH = h * S, N = W * HH, r = res * S, R = rotY(heading);
   const depth = new Float32Array(N).fill(-Infinity), tri = new Int32Array(N).fill(-1);
   const b0 = new Float32Array(N), b1 = new Float32Array(N), shadowS = new Uint8Array(N);
   const tris = model.tris.map(t => ({ ...t, w: t.p.map(p => apply(R, p)), wn: t.n.map(n => apply(R, n)) }));
-  const proj = p => [ox * S + p[0] * r, oy * S + (p[2] - p[1] * H) * r, p[1] + H * p[2]];
+  const proj = p => [ox * S + p[0] * r, oy * S + (p[2] - p[1] * L) * r, p[1] + L * p[2]];
   const ground = p => { const k = p[1] / LIGHT[1]; return proj([p[0] - LIGHT[0] * k, 0, p[2] - LIGHT[2] * k]); };
   tris.forEach((t, id) => {
     raster(t.w.map(proj), W, HH, (i, d, w0, w1) => { if (d > depth[i]){ depth[i] = d; tri[i] = id; b0[i] = w0; b1[i] = w1; } });
@@ -186,17 +185,17 @@ export function renderSprite(model, { w, h, ox, oy, res, heading = 0, ss = 2, ou
     else {
       // A neighbour occludes when it stands in front of where this sample's own surface would
       // be at that spot, so steep faces don't shade themselves.
-      const x = i % W, y = (i / W) | 0, facing = n[1] + H * n[2];
+      const x = i % W, y = (i / W) | 0, facing = n[1] + L * n[2];
       let occ = 0, seen = 0;
       if (facing > 0.15) for (const [dx, dy] of aoOff){
         const nx = x + dx, ny = y + dy;
         if (nx < 0 || ny < 0 || nx >= W || ny >= HH) continue;
         const j = ny * W + nx, X = dx / r, Y = dy / r, up = -(n[0] * X + n[2] * Y) / facing;
         seen++;
-        if (tri[j] >= 0 && depth[j] - (depth[i] + up * (1 + H * H) + H * Y) > 0.8) occ++;
+        if (tri[j] >= 0 && depth[j] - (depth[i] + up * (1 + L * L) + L * Y) > 0.8) occ++;
       }
       const shade = 1 - ao * Math.min(1, 2 * occ / (seen || 1));
-      const spec = (mat.spec || 0) * Math.pow(Math.max(0, dot(n, HALF)), mat.shine || 20);
+      const spec = (mat.spec || 0) * Math.pow(Math.max(0, dot(n, half)), mat.shine || 20);
       const I = (AMBIENT + DIFFUSE * Math.max(0, dot(n, LIGHT))) * shade + spec;
       step = Math.round(Math.max(0, Math.min(1, (I - AMBIENT) / DIFFUSE)) * top) + delta;
       step = Math.max(0, Math.min(top, step));

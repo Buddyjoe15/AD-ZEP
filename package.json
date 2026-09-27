@@ -14,6 +14,7 @@
     "sprites": "node tools/sprites.mjs",
     "sprites:preview": "node tools/sprites.mjs --capture",
     "proto:spider": "node tools/spider-3q.mjs",
-    "proto:spider:preview": "node tools/spider-3q.mjs --capture"
+    "proto:spider:preview": "node tools/spider-3q.mjs --capture",
+    "sprite": "node tools/sprite-lab.mjs"
   }
 }
