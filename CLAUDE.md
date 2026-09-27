@@ -10,6 +10,7 @@ Abyssal Dawn: Zero Earth Protocol, a browser strategy game. Read `README.md` and
 - The simulation layers (`src/core`, `src/data`, `src/world`, `src/sim`) never touch the DOM.
 - Commands: `npm test` (static checks + headless tests), `npm run test:browser` (Playwright, if installed), `npm run build`, `npm run save:snapshot`.
 - New pixel art follows `art/PIXEL_ART_RULES.md` (scale, palette, facings, shadows, and the questions to ask before drawing).
+- Three-quarter sprites (96 art px per tile, 60% face height) follow `art/SPRITE_ART_RULES.md` and are made and tested in the sprite lab (`art/sprite-lab/`, `npm run sprite`). In Claude Code, `/sprite <description>` runs the whole process.
 
 ## Save format rules
 

@@ -102,3 +102,19 @@ test('woodlands pilot: full terrain tiles, edge-matched variants, shoreline and 
     }
   }
 });
+
+test('sprite lab: the reference Utility Spider passes every three-quarter check, and a sprite too big for its frame fails', async () => {
+  const { loadSpec, renderSpec, check } = await import('../tools/sprite-lab.mjs');
+  const { Model, MAT, mul, translate, scale, unitFrame } = await import('../tools/sprite-kit.mjs');
+  const spec = await loadSpec(path.join(path.dirname(new URL(import.meta.url).pathname), '../art/sprite-lab/specs/utility_spider.mjs'));
+  const R = renderSpec(spec);
+  assert.equal(R.rows.length, 8, 'eight facings');
+  assert.equal(R.rows[0].length, 10, 'idle 2 + walk 4 + work 4');
+  const results = check(spec, R);
+  assert.deepEqual(results.filter(c => c.level !== 'pass').map(c => c.name), [], JSON.stringify(results));
+  // A box wider than the frame's ground reach, with no team colour where one is required.
+  const big = { ...spec, key: 'too_big', animations: { idle: { frames: 1, fps: 1 } }, build: () => new Model().box(mul(translate(0, 5, 0), scale(40, 10, 40)), MAT.steel) };
+  const bad = check(big, renderSpec(big), { spec, R }).filter(c => c.level === 'fail').map(c => c.name);
+  assert.ok(bad.includes('Inside the frame') && bad.includes('Team colour'), bad.join());
+  assert.equal(unitFrame().w, 96, 'a one-tile unit frame is 96 art px');
+});

@@ -1,0 +1,339 @@
+<meta charset="utf-8">
+<title>@TITLE@</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap">
+<style>
+/* AD-ZEP sprite test page, built by tools/sprite-lab.mjs from art/sprite-lab/page.html.
+   The game's HUD is dark-only, so this page is too. */
+:root{
+  color-scheme: dark;
+  --ground:#111713; --panel:#101713; --raised:#202a22; --inset:#0b100d;
+  --line:#536054; --line-soft:#39463c; --rule:#2a352d;
+  --ink:#e8eee8; --ink-soft:#cad5ca; --label:#b9c5ba; --muted:#9eaaa0;
+  --highlight:#f1dc74; --heading:#8ed6d3;
+  --button:#243127; --button-hover:#34463a; --button-active:#52603f;
+  --pass:#5fd16b; --warn:#f1dc74; --fail:#ee6b62;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font:14px/1.55 var(--sans);margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:28px 64px;display:flex;flex-direction:column;gap:30px}
+.eyebrow,.kicker,.chip,.plabel,.ctl label,.cap{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em}
+.eyebrow,.kicker{font-size:11px;color:var(--heading)}
+h1{font-size:30px;line-height:1.15;font-weight:800;letter-spacing:.03em;margin:6px 0 8px;text-wrap:balance}
+h2{font-size:18px;font-weight:700;margin:2px 0 4px;text-wrap:balance}
+.request{margin:0 0 10px;color:var(--ink-soft);max-width:70ch;border-left:2px solid var(--line);padding-left:12px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:10px;color:var(--label);border:1px solid var(--line-soft);border-radius:3px;padding:2px 6px;white-space:nowrap}
+.chip.status{color:var(--ink)}
+.note{max-width:74ch;color:var(--muted);margin:0}
+.fit{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:12px}
+.box{background:var(--panel);border:1px solid var(--line-soft);border-radius:6px;padding:12px 14px;min-width:0}
+.box h3{margin:0 0 6px;font:600 11px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--heading)}
+.box p,.box ul{margin:0;color:var(--ink-soft)}
+.box ul{padding-left:18px}
+.controls{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(16,23,19,.95);border:1px solid var(--line-soft);border-radius:6px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center}
+.ctl{display:flex;align-items:center;gap:8px}
+.ctl label{font-size:10.5px;color:var(--label)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.seg button{font:600 12px var(--sans);color:var(--ink);background:var(--button);border:0;padding:6px 10px;cursor:pointer;min-height:30px}
+.seg button+button{border-left:1px solid var(--line-soft)}
+.seg button:hover{background:var(--button-hover)}
+.seg button[aria-pressed="true"]{background:var(--button-active);color:#fff;box-shadow:inset 0 -2px 0 var(--highlight)}
+button:focus-visible{outline:2px solid var(--highlight);outline-offset:1px}
+section{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+.cell{display:flex;flex-direction:column;gap:5px;min-width:0;max-width:100%}
+.cap{font-size:9.5px;color:var(--muted)}
+canvas.px{image-rendering:pixelated;image-rendering:crisp-edges;display:block;max-width:100%;height:auto;background:var(--inset);border:1px solid var(--rule);border-radius:3px}
+canvas.soft{image-rendering:auto}
+.scroll{overflow-x:auto;max-width:100%}
+.scroll canvas{max-width:none}
+.checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.checks li{display:grid;grid-template-columns:56px 150px 1fr;gap:10px;align-items:baseline;background:var(--panel);border:1px solid var(--line-soft);border-radius:4px;padding:7px 10px}
+.pill{font:700 10px var(--mono);letter-spacing:.08em;text-align:center;border-radius:3px;padding:2px 0;color:#0b100d}
+.pill.pass{background:var(--pass)} .pill.warn{background:var(--warn)} .pill.fail{background:var(--fail)}
+.checks b{font-weight:600}
+.checks span{color:var(--ink-soft)}
+pre{margin:0;background:var(--inset);border:1px solid var(--rule);border-radius:4px;padding:12px;overflow-x:auto;font:12px/1.5 var(--mono);color:var(--ink-soft);max-height:360px}
+.copy{align-self:flex-start;font:600 12px var(--sans);color:var(--ink);background:var(--button);border:1px solid var(--line);border-radius:4px;padding:6px 12px;cursor:pointer}
+.copy:hover{background:var(--button-hover)}
+code{font-family:var(--mono);font-size:12px;background:var(--raised);padding:1px 4px;border-radius:3px}
+@media (max-width:560px){h1{font-size:24px}.controls{position:static}.checks li{grid-template-columns:52px 1fr}.checks li span{grid-column:1/-1}}
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">AD-ZEP · Sprite lab</span>
+    <h1 id="name"></h1>
+    <p class="request" id="request"></p>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <section>
+    <div><span class="kicker">Fit</span><h2>How it fits AD-ZEP</h2></div>
+    <div class="fit" id="fit"></div>
+  </section>
+
+  <div class="controls" role="group" aria-label="View controls">
+    <div class="ctl" id="teamCtl"><label>Team</label><span class="seg" id="teamSeg"><button type="button" data-v="blue">Blue</button><button type="button" data-v="red">Red</button><button type="button" data-v="neutral">Neutral</button></span></div>
+    <div class="ctl"><label>Motion</label><span class="seg" id="motionSeg"><button type="button" data-v="on">On</button><button type="button" data-v="off">Off</button></span></div>
+    <div class="ctl"><label>Zoom</label><span class="seg" id="zoomSeg"><button type="button" data-v="1">1×</button><button type="button" data-v="2">2×</button><button type="button" data-v="3">3×</button></span></div>
+    <div class="ctl"><label>Guides</label><span class="seg" id="guideSeg"><button type="button" data-v="on">Show</button><button type="button" data-v="off">Hide</button></span></div>
+    <div class="ctl"><label>Ground</label><span class="seg" id="groundSeg"><button type="button" data-v="grass">Grass</button><button type="button" data-v="dust">Dust</button></span></div>
+  </div>
+
+  <section>
+    <div><span class="kicker">Frame</span><h2 id="frameTitle"></h2>
+    <p class="note">The dashed box is the frame, the cross is the unit's position (or the centre of the footprint), and the yellow square is the tile footprint the game uses. At zoom 1× one art pixel is one screen pixel. The small copies show it at the game's zoom levels, 1 world px being 2 art px.</p></div>
+    <div class="row">
+      <div class="cell"><span class="cap">Art pixels</span><canvas class="px" id="frameCv"></canvas></div>
+      <div class="cell"><span class="cap">Game zoom 1:3</span><canvas class="px soft" id="z3"></canvas></div>
+      <div class="cell"><span class="cap">Game zoom 1:1</span><canvas class="px soft" id="z1"></canvas></div>
+      <div class="cell"><span class="cap">Game zoom 2:1</span><canvas class="px" id="z2"></canvas></div>
+    </div>
+  </section>
+
+  <section id="facingSec">
+    <div><span class="kicker">Facings</span><h2>Eight directions, each rendered from the model</h2></div>
+    <div class="row" id="facings"></div>
+  </section>
+
+  <section>
+    <div><span class="kicker" id="animKicker">Animations</span><h2 id="animTitle"></h2></div>
+    <div id="anims" style="display:flex;flex-direction:column;gap:14px"></div>
+  </section>
+
+  <section>
+    <div><span class="kicker">Scale</span><h2>Next to Utility Spiders</h2>
+    <p class="note">Drawn back to front on the ground, as the game would draw three-quarter sprites.</p></div>
+    <div class="scroll"><canvas class="px" id="scene"></canvas></div>
+  </section>
+
+  <section id="crowdSec">
+    <div><span class="kicker">Readability</span><h2>In a crowd, at ⅓ zoom on a phone</h2>
+    <p class="note">Two dozen of this unit among Utility Spiders. Left: the size a phone shows at the game's farthest zoom. Right: the same pixels enlarged. It should still be picked out by shape and team colour.</p></div>
+    <div class="row">
+      <div class="cell"><span class="cap">Actual size</span><canvas class="soft" id="crowdSmall" style="display:block"></canvas></div>
+      <div class="cell"><span class="cap">Enlarged 3×</span><canvas class="px" id="crowdBig"></canvas></div>
+    </div>
+  </section>
+
+  <section>
+    <div><span class="kicker">Checks</span><h2>Against the sprite art rules</h2></div>
+    <ul class="checks" id="checks"></ul>
+  </section>
+
+  <section>
+    <div><span class="kicker">Metadata</span><h2>Sheet metadata</h2>
+    <p class="note" id="files"></p></div>
+    <button type="button" class="copy" id="copyMeta">Copy metadata</button>
+    <pre id="metaPre"></pre>
+  </section>
+</div>
+
+<script>
+(function(){
+'use strict';
+const D = /*@DATA@*/null;
+const M = D.meta, RM = D.ref.meta, unit = D.spec.kind === 'unit';
+const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const S = { team: D.spec.faction === 'hostile' ? 'red' : 'blue', motion: !reduced, zoom: 2, guides: true, ground: 'grass' };
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const canvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+const load = src => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = src; });
+const FACINGS = ['up', 'up-right', 'right', 'down-right', 'down', 'down-left', 'left', 'up-left'];
+
+// ---- Text ----
+$('name').textContent = D.spec.name;
+$('request').textContent = 'Request: ' + D.spec.request;
+const checks = D.checks, count = l => checks.filter(c => c.level === l).length;
+const chip = t => `<span class="chip">${esc(t)}</span>`;
+$('chips').innerHTML = [
+  `<span class="chip status">${count('fail') ? count('fail') + ' failing' : 'All checks pass'}${count('warn') ? ' · ' + count('warn') + ' to review' : ''}</span>`,
+  chip(D.spec.kind + (unit ? '' : ' · ' + D.spec.footprint.join(' × ') + ' tiles')), chip(D.spec.faction), chip(D.spec.team ? 'team colour' : 'no team'),
+  chip(`frame ${M.frameWidth} × ${M.frameHeight}`), chip(D.spec.elevation), chip('3/4 · 60% face height'), chip('96 px per tile'),
+  D.spec.gameKey ? chip('game key ' + D.spec.gameKey) : ''
+].join('');
+const F = D.spec.fit || {};
+$('fit').innerHTML = [
+  ['Lore', `<p>${esc(F.lore || '')}</p>`], ['Art style', `<p>${esc(F.style || '')}</p>`], ['Silhouette', `<p>${esc(F.silhouette || '')}</p>`],
+  ['Changed from the request', (F.changes && F.changes.length) ? `<ul>${F.changes.map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : '<p>Nothing: made as described.</p>']
+].map(([h, b]) => `<div class="box"><h3>${h}</h3>${b}</div>`).join('');
+$('frameTitle').textContent = `${M.frameWidth} × ${M.frameHeight} art px, ${unit ? 'facing down-right' : 'first state'}`;
+$('checks').innerHTML = checks.map(c => `<li><span class="pill ${c.level}">${c.level.toUpperCase()}</span><b>${esc(c.name)}</b><span>${esc(c.detail)}</span></li>`).join('');
+$('metaPre').textContent = JSON.stringify(M, null, 2);
+$('files').innerHTML = `Model: <code>${esc(D.files.spec)}</code> · Output: <code>${esc(D.files.out)}/</code> (<code>sheet.png</code>, <code>shadow.png</code>, <code>meta.json</code>) · Rules: <code>${esc(D.files.rules)}</code>`;
+$('copyMeta').onclick = () => {
+  const t = JSON.stringify(M, null, 2), b = $('copyMeta');
+  const done = () => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy metadata'; }, 1500); };
+  try { navigator.clipboard.writeText(t).then(done, () => selectMeta()); } catch (e){ selectMeta(); }
+};
+function selectMeta(){ const r = document.createRange(); r.selectNodeContents($('metaPre')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+if (!D.spec.team) $('teamCtl').hidden = true;
+if (!unit){ $('facingSec').hidden = true; $('crowdSec').hidden = true; $('animKicker').textContent = 'States'; }
+$('animTitle').textContent = unit ? 'Every frame, facing down-right' : 'Every state';
+
+// ---- Images ----
+Promise.all([load(D.sheet), load(D.shadow), load(D.ref.sheet), load(D.ref.shadow), ...D.ground.grass.tiles.map(load), ...D.ground.dust.tiles.map(load)]).then(imgs => {
+  const [sheet, shadow, refSheet, refShadow] = imgs, grass = imgs.slice(4, 4 + D.ground.grass.tiles.length), dust = imgs.slice(4 + D.ground.grass.tiles.length);
+  const MAG = D.magenta.map(hex);
+  // Team colours replace the magenta placeholder ramp.
+  const recolour = (img, team) => {
+    const c = canvas(img.width, img.height), g = c.getContext('2d');
+    g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height), p = d.data, T = D.teams[team].map(hex);
+    for (let i = 0; i < p.length; i += 4){ if (!p[i + 3]) continue; for (let k = 0; k < 3; k++) if (p[i] === MAG[k][0] && p[i + 1] === MAG[k][1] && p[i + 2] === MAG[k][2]){ p[i] = T[k][0]; p[i + 1] = T[k][1]; p[i + 2] = T[k][2]; break; } }
+    g.putImageData(d, 0, 0); return c;
+  };
+  const SHEETS = {}, sheetFor = (which, team) => { const k = which + team; return SHEETS[k] || (SHEETS[k] = recolour(which === 'new' ? sheet : refSheet, team)); };
+  const GROUND = { grass: { tiles: grass, weights: D.ground.grass.weights }, dust: { tiles: dust, weights: D.ground.dust.weights } };
+  const fmix = h => { h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16; return h >>> 0; };
+  function ground(g, W, H, ox, oy, seed){
+    const G = GROUND[S.ground], total = G.weights.reduce((a, b) => a + b, 0);
+    g.imageSmoothingEnabled = false;
+    for (let ty = -1; ty * 96 + oy < H; ty++) for (let tx = -1; tx * 96 + ox < W; tx++){
+      let r = fmix(Math.imul(tx + seed, 0x9E3779B1) ^ Math.imul(ty - seed, 0x85EBCA77) ^ 0x2545F491) % total, v = 0;
+      for (let i = 0; i < G.weights.length; i++){ if (r < G.weights[i]){ v = i; break; } r -= G.weights[i]; }
+      g.drawImage(G.tiles[v], tx * 96 + ox, ty * 96 + oy, 96, 96);
+    }
+  }
+  const timeline = meta => meta.animations || meta.states;
+  const col = (meta, anim, t, offset = 0) => { const a = timeline(meta)[anim]; return a.start + (S.motion && a.fps ? (Math.floor(t * a.fps) + offset) % a.frames : 0); };
+  const mainAnim = meta => { const tl = timeline(meta); return tl.working ? 'working' : tl.walk ? 'walk' : tl.idle ? 'idle' : Object.keys(tl)[0]; };
+  // Draws one frame with its origin at (x, y): 'shadow' and 'body' are separate passes so
+  // shadows always sit under every sprite.
+  function draw(g, which, part, row, c, x, y, team = S.team){
+    const meta = which === 'new' ? M : RM;
+    x = Math.round(x); y = Math.round(y);
+    if (part === 'shadow'){
+      const sw = meta.shadow.frameWidth, shh = meta.shadow.frameHeight;
+      g.globalAlpha = 0.45; g.drawImage(which === 'new' ? shadow : refShadow, c * sw, row * shh, sw, shh, x - meta.origin[0], y - meta.origin[1], sw, shh); g.globalAlpha = 1;
+    } else {
+      const fw = meta.frameWidth, fh = meta.frameHeight;
+      g.drawImage(sheetFor(which, team), c * fw, row * fh, fw, fh, x - meta.origin[0], y - meta.origin[1], fw, fh);
+    }
+  }
+  const sized = (cv, w, h, css) => { if (cv.width !== w) cv.width = w; if (cv.height !== h) cv.height = h; cv.style.width = css + 'px'; return cv.getContext('2d'); };
+
+  // ---- Frame view ----
+  const PAD = 32, FW = M.frameWidth + PAD * 2, FH = M.frameHeight + PAD * 2, frameOff = canvas(FW, FH);
+  function drawFrame(t){
+    const g = frameOff.getContext('2d'), ox = PAD + M.origin[0], oy = PAD + M.origin[1];
+    const fp = unit ? [ox - 48, oy - 48, 96, 96] : [PAD, PAD + M.footprintOrigin[1], D.spec.footprint[0] * 96, D.spec.footprint[1] * 96];
+    ground(g, FW, FH, (fp[0] % 96) - 96, (fp[1] % 96) - 96, 3);
+    const row = unit ? 3 : 0, c = col(M, mainAnim(M), t);
+    draw(g, 'new', 'shadow', row, c, ox, oy); draw(g, 'new', 'body', row, c, ox, oy);
+    if (S.guides){
+      g.save(); g.lineWidth = 1;
+      g.setLineDash([4, 3]); g.strokeStyle = 'rgba(142,214,211,.9)'; g.strokeRect(PAD - 0.5, PAD - 0.5, M.frameWidth + 1, M.frameHeight + 1);
+      g.strokeStyle = 'rgba(241,220,116,.85)'; g.strokeRect(fp[0] + 0.5, fp[1] + 0.5, fp[2] - 1, fp[3] - 1);
+      g.setLineDash([]); g.strokeStyle = '#f1dc74'; g.beginPath(); g.moveTo(ox - 4, oy + 0.5); g.lineTo(ox + 5, oy + 0.5); g.moveTo(ox + 0.5, oy - 4); g.lineTo(ox + 0.5, oy + 5); g.stroke();
+      g.restore();
+    }
+    const main = sized($('frameCv'), FW, FH, FW * S.zoom); main.imageSmoothingEnabled = false; main.drawImage(frameOff, 0, 0);
+    // Game zooms: 1 world px = 2 art px, so zoom z shows art at z / 2. Downscales are averaged.
+    for (const [id, z] of [['z3', 1 / 3], ['z1', 1], ['z2', 2]]){
+      const w = Math.max(1, Math.round(FW * z / 2)), h = Math.max(1, Math.round(FH * z / 2)), g2 = sized($(id), w, h, w);
+      g2.imageSmoothingEnabled = z < 2; g2.imageSmoothingQuality = 'high'; g2.clearRect(0, 0, w, h); g2.drawImage(frameOff, 0, 0, w, h);
+    }
+  }
+
+  // ---- Facings ----
+  const facingCvs = unit ? FACINGS.map(name => {
+    const cell = document.createElement('div'); cell.className = 'cell';
+    cell.innerHTML = `<canvas class="px"></canvas><span class="cap">${name}</span>`;
+    $('facings').appendChild(cell); return cell.querySelector('canvas');
+  }) : [];
+  function drawFacings(t){
+    const anim = mainAnim(M), w = M.frameWidth, h = M.frameHeight;
+    facingCvs.forEach((cv, i) => {
+      const g = sized(cv, w, h, w * Math.min(S.zoom, 2));
+      ground(g, w, h, M.origin[0] - 48 - 96, M.origin[1] - 48 - 96, i + 1);
+      draw(g, 'new', 'shadow', i, col(M, anim, t), M.origin[0], M.origin[1]); draw(g, 'new', 'body', i, col(M, anim, t), M.origin[0], M.origin[1]);
+    });
+  }
+
+  // ---- Animations or states ----
+  const animRows = Object.entries(timeline(M)).map(([name, a]) => {
+    const wrap = document.createElement('div'); wrap.className = 'row';
+    wrap.innerHTML = `<div class="cell"><span class="cap">${esc(name)} · ${a.frames} frame${a.frames > 1 ? 's' : ''}${a.fps ? ' @ ' + a.fps + ' fps' : ''}</span><canvas class="px"></canvas></div><div class="cell"><span class="cap">Playing</span><canvas class="px"></canvas></div>`;
+    $('anims').appendChild(wrap);
+    const [strip, live] = wrap.querySelectorAll('canvas');
+    return { name, a, strip, live };
+  });
+  function drawAnims(t){
+    const w = M.frameWidth, h = M.frameHeight, row = unit ? 3 : 0, z = Math.min(S.zoom, 2);
+    for (const r of animRows){
+      const g = sized(r.strip, w * r.a.frames, h, w * r.a.frames * z);
+      ground(g, w * r.a.frames, h, M.origin[0] - 48 - 96, M.origin[1] - 48 - 96, 7);
+      for (let f = 0; f < r.a.frames; f++){ draw(g, 'new', 'shadow', row, r.a.start + f, M.origin[0] + f * w, M.origin[1]); }
+      for (let f = 0; f < r.a.frames; f++){ draw(g, 'new', 'body', row, r.a.start + f, M.origin[0] + f * w, M.origin[1]); }
+      const g2 = sized(r.live, w, h, w * z);
+      ground(g2, w, h, M.origin[0] - 48 - 96, M.origin[1] - 48 - 96, 7);
+      draw(g2, 'new', 'shadow', row, col(M, r.name, t), M.origin[0], M.origin[1]); draw(g2, 'new', 'body', row, col(M, r.name, t), M.origin[0], M.origin[1]);
+    }
+  }
+
+  // ---- Scale scene ----
+  const fpW = unit ? 1 : D.spec.footprint[0], fpH = unit ? 1 : D.spec.footprint[1];
+  const SW = (fpW + 4) * 96, SH = Math.max(3, fpH + 2) * 96 + (unit ? 0 : M.footprintOrigin[1]);
+  function drawScene(t){
+    const g = sized($('scene'), SW, SH, SW * [0.5, 1, 1.5][S.zoom - 1]);   // half the zoom of the close-ups: it is wide
+    const top = unit ? 0 : M.footprintOrigin[1];
+    ground(g, SW, SH, 0, top, 11);
+    const cx = 2 * 96 + fpW * 48, cy = top + 96 + fpH * 48;
+    const things = [
+      { which: 'new', x: cx, y: cy, row: unit ? 3 : 0, anim: mainAnim(M) },
+      { which: 'ref', x: 96, y: top + 96 + 48, row: 3, anim: 'idle' },
+      { which: 'ref', x: SW - 96 + 12, y: top + 96 + 60, row: 5, anim: 'walk' },
+      { which: 'ref', x: cx + fpW * 48 + 40, y: cy + fpH * 48 + 30, row: 7, anim: 'walk', off: 2 }
+    ].sort((a, b) => a.y - b.y);
+    for (const part of ['shadow', 'body']) for (const it of things){
+      const meta = it.which === 'new' ? M : RM, c = col(meta, it.anim, t, it.off || 0);
+      draw(g, it.which, part, it.row, c, it.x, it.y, it.which === 'ref' && part === 'body' ? 'blue' : S.team);
+    }
+  }
+
+  // ---- Crowd at 1:3 ----
+  const CW = 960, CH = 576, crowdOff = canvas(CW, CH), rnd = (() => { let a = 7; return () => { a = (a * 16807) % 2147483647; return a / 2147483647; }; })();
+  const CROWD = [];
+  if (unit){
+    for (let i = 0; i < 34; i++){ const ref = i % 3 === 2; CROWD.push({ which: ref ? 'ref' : 'new', x: 60 + rnd() * (CW - 120), y: 60 + rnd() * (CH - 110), row: Math.floor(rnd() * 8), off: Math.floor(rnd() * 8) }); }
+    CROWD.sort((a, b) => a.y - b.y);
+  }
+  function drawCrowd(t){
+    if (!unit) return;
+    const g = crowdOff.getContext('2d');
+    ground(g, CW, CH, 0, 0, 23);
+    for (const part of ['shadow', 'body']) for (const it of CROWD){
+      const meta = it.which === 'new' ? M : RM, anim = timeline(meta).walk ? 'walk' : mainAnim(meta);
+      draw(g, it.which, part, it.row, col(meta, anim, t, it.off), it.x, it.y, it.which === 'ref' && part === 'body' ? (S.team === 'blue' ? 'red' : 'blue') : S.team);
+    }
+    // 1:3 zoom: 1 world px = 2 art px, so one screen px covers 6 art px.
+    const w = CW / 6, h = CH / 6, small = sized($('crowdSmall'), w, h, w);
+    small.imageSmoothingEnabled = true; small.imageSmoothingQuality = 'high'; small.drawImage(crowdOff, 0, 0, w, h);
+    const big = sized($('crowdBig'), w, h, w * 3); big.imageSmoothingEnabled = true; big.drawImage(crowdOff, 0, 0, w, h);
+  }
+
+  // ---- Controls and loop ----
+  const t0 = performance.now(), now = () => (performance.now() - t0) / 1000;
+  function drawAll(){ const t = now(); drawFrame(t); drawFacings(t); drawAnims(t); drawScene(t); drawCrowd(t); }
+  function seg(id, key, parse){
+    const el = $(id), sync = () => el.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(parse(b.dataset.v) === S[key])));
+    el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S[key] = parse(b.dataset.v); sync(); drawAll(); });
+    sync();
+  }
+  seg('teamSeg', 'team', String); seg('motionSeg', 'motion', v => v === 'on'); seg('zoomSeg', 'zoom', Number); seg('guideSeg', 'guides', v => v === 'on'); seg('groundSeg', 'ground', String);
+  drawAll();
+  window.LAB_READY = true;
+  let last = 0;
+  const tick = ms => { if (S.motion && ms - last > 80){ last = ms; drawAll(); } requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+});
+})();
+</script>
