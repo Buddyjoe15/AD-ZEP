@@ -130,6 +130,7 @@
   }
 
   function drawTile(ctx, i, t, gx, gy, px, py, S){
+    if (t === K.LOG && art && art.trees && G.TreeArt.logOn(grid, i)) t = K.FOREST;   // a Genesis fallen tree lies here (G.TreeArt)
     if (pix){ const str = pixelTile(i, t, gx, gy); if (str){ blit(ctx, str, px, py, S); return; } }
     const s = seed, h = [hash(gx, gy, s + 7), hash(gx, gy, s + 9), hash(gx, gy, s + 13)];
     const jit = Math.round((h[0] - .5) * 10), lw = Math.max(1, S * .08);

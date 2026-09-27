@@ -4,6 +4,9 @@
 // the wind is a shift of the whole crown, done by the engine, so it needs no frames of its
 // own. Outline and top-left light come from the pipeline (finish); the engine draws the
 // shadow, further out for taller trees.
+// Dead wood goes with them: cut and snapped stumps, and fallen trees drawn at 16 angles
+// (each rendered at its angle with the light kept top left, never rotated afterwards).
+// Frames are stored run-length encoded (see rle), since a fallen tree's frame is mostly empty.
 import { C, Grid, rng, finish } from './pixelart.mjs';
 
 const K = 2, TAU = Math.PI * 2;
@@ -15,6 +18,23 @@ export const GENESIS_KINDS = Object.keys(GENESIS_CROWN);
 // Engine shadow offset in art px, by size: taller trees throw their shadow further.
 export const GENESIS_SHADOW = [[6, 6], [8, 8], [12, 12]];
 const VARIANTS = 2, RUSTLES = 3, MARGIN = 3;   // world px around the crown for rustled leaves and the outline
+// Dead wood: sizes as in GW.TREES.props (a test checks they match); shadows sit low.
+export const GENESIS_PROPS = {
+  stump_cut: [{ r: 4 }, { r: 6 }], stump_broken: [{ r: 4 }, { r: 6 }],
+  log: [{ length: 72, width: 6 }, { length: 108, width: 9 }]
+};
+export const LOG_ANGLES = 16;
+export const PROP_SHADOW = { stump_cut: [3, 3], stump_broken: [3, 3], log: [4, 4] };
+const STUMP_VARIANTS = 3, LOG_VARIANTS = 2;
+
+// Run-length text: a palette character, then its repeat count when it repeats (the alphabet
+// has no digits, so the two never mix). src/render/trees.js expands it.
+export function rle(str){
+  let o = '';
+  for (let i = 0; i < str.length;){ let j = i + 1; while (j < str.length && str[j] === str[i]) j++; o += str[i] + (j - i > 1 ? j - i : ''); i = j; }
+  return o;
+}
+export const unrle = s => s.replace(/(\D)(\d+)/g, (_, ch, n) => ch.repeat(+n));
 
 // Shapes in world px around the frame centre, rasterised only inside their bounding box
 // (a tree has hundreds of shapes, so scanning the whole frame for each would be slow).
@@ -35,7 +55,13 @@ function brush(g){
         return ex * ex + ey * ey <= w * w + E;
       }, col);
     },
-    line(x0, y0, x1, y1, w, col){ this.taper(x0, y0, x1, y1, w, w, col); }
+    line(x0, y0, x1, y1, w, col){ this.taper(x0, y0, x1, y1, w, w, col); },
+    // Any shape: `fn(x, y)` returns a colour name for the point, or nothing.
+    paint(x0, y0, x1, y1, fn){
+      const ax0 = Math.max(0, Math.floor(c0 + x0 * K)), ax1 = Math.min(g.w - 1, Math.ceil(c0 + x1 * K));
+      const ay0 = Math.max(0, Math.floor(c0 + y0 * K)), ay1 = Math.min(g.h - 1, Math.ceil(c0 + y1 * K));
+      for (let y = ay0; y <= ay1; y++) for (let x = ax0; x <= ax1; x++){ const col = fn((x - c0) / K, (y - c0) / K); if (col) g.set(x, y, C[col]); }
+    }
   };
 }
 const polar = (a, d) => [Math.cos(a) * d, Math.sin(a) * d];
@@ -163,13 +189,83 @@ function variantFrames(kind, z, v){
   }) };
 }
 
+// ---- Dead wood ----
+// Roots spreading from a stump's foot, under the bark ring.
+function roots(b, r, R, n){
+  for (let i = 0; i < n; i++){ const a = (i / n) * TAU + r() * 0.6, [ex, ey] = polar(a, R * (1.2 + r() * 0.35)); b.taper(0, 0, ex, ey, R * 0.95, 1.6, 'dust1'); }
+}
+const PROP_DRAW = {
+  // Sawn flat: a pale cut face with growth rings inside a dark bark ring.
+  stump_cut(b, r, { r: R }){
+    roots(b, r, R, 4 + Math.floor(r() * 3));
+    b.disc(0, 0, R, 'dust1');
+    b.disc(0, 0, R * 0.8, 'dust4');
+    const rings = [0.55, 0.3].map(f => f * R * (0.9 + r() * 0.2)), ox = (r() - 0.5) * R * 0.2, oy = (r() - 0.5) * R * 0.2;
+    b.paint(-R, -R, R, R, (x, y) => { const d = Math.hypot(x - ox, y - oy); return d < R * 0.78 && rings.some(q => Math.abs(d - q) < 0.3) ? 'dust3' : null; });
+    b.disc(ox, oy, 0.5, 'dust2');
+    const [cx, cy] = polar(r() * TAU, R * 0.75); b.line(ox, oy, cx, cy, 0.5, 'dust2');   // a drying crack
+    if (r() < 0.5){ const [mx, my] = polar(r() * TAU, R * 0.95); b.disc(mx, my, R * 0.25, 'leaf1'); }
+  },
+  // Snapped by the wind: splinters standing up around a dark, rotten heart.
+  stump_broken(b, r, { r: R }){
+    roots(b, r, R, 4 + Math.floor(r() * 3));
+    b.disc(0, 0, R, 'dust1');
+    const n = 7 + Math.floor(r() * 4);
+    for (let i = 0; i < n; i++){ const a = (i / n) * TAU + r() * 0.4, [ex, ey] = polar(a, R * (0.2 + r() * 0.75)); b.taper(0, 0, ex, ey, R * 0.45, 0.5, r() < 0.5 ? 'dust4' : 'dust5'); }
+    b.disc((r() - 0.5) * R * 0.3, (r() - 0.5) * R * 0.3, R * 0.28, 'char1');
+    if (r() < 0.6){ const [mx, my] = polar(r() * TAU, R * 0.9); b.disc(mx, my, R * 0.3, 'grass2'); }
+  },
+  // A fallen tree lying along angle `a`: the torn-up root plate at one end, a trunk lit on its
+  // top-left side and tapering, branch stubs, and the dead crown's bare branches at the other.
+  log(b, r, { length: L, width: w }, a){
+    const ux = Math.cos(a), uy = Math.sin(a), at = (s, p = 0) => [ux * s - uy * p, uy * s + ux * p];
+    const s0 = -L / 2 + w * 1.3, s1 = L * 0.22, lit = (Math.sin(a) - Math.cos(a)) / Math.SQRT2;   // n · (top-left light)
+    const E = L / 2 + w;
+    // Crown end first, so the trunk lies over its branch bases.
+    const [tx, ty] = at(L / 2 - 2);
+    b.taper(...at(s1), tx, ty, w * 0.5, 0.8, 'dust1');
+    for (let i = 0, n = 7 + Math.floor(r() * 4); i < n; i++){
+      const s = s1 - L * 0.1 + r() * (L / 2 - s1 + L * 0.05), side = i % 2 ? 1 : -1, ba = a + side * (0.45 + r() * 0.6), len = w * (1.2 + r() * 1.4);
+      const [bx, by] = at(s), ex = bx + Math.cos(ba) * len, ey = by + Math.sin(ba) * len;
+      b.taper(bx, by, ex, ey, Math.max(1, w * 0.18), 0.5, 'char1');
+      if (r() < 0.35) b.disc(ex, ey, 0.9 + r() * 0.8, 'leaf0');   // needles that still hang on
+    }
+    // Root plate: soil and roots torn up with the tree.
+    const [rx, ry] = at(-L / 2 + w * 1.2);
+    for (let i = 0, n = 8; i < n; i++){ const ra = a + Math.PI + (i / (n - 1) - 0.5) * 2.6, [ex, ey] = [rx + Math.cos(ra) * w * (1.2 + r() * 0.7), ry + Math.sin(ra) * w * (1.2 + r() * 0.7)]; b.taper(rx, ry, ex, ey, w * 0.35, 0.6, 'char1'); }
+    b.disc(rx, ry, w * 1.05, 'dust0');
+    for (let i = 0; i < 5; i++) b.disc(rx + (r() - 0.5) * w * 1.3, ry + (r() - 0.5) * w * 1.3, w * 0.22, r() < 0.5 ? 'dust1' : 'char1');
+    // Trunk, shaded across its width: lit top-left side, dark far side.
+    b.paint(-E, -E, E, E, (x, y) => {
+      const s = x * ux + y * uy, p = -x * uy + y * ux;
+      if (s < s0 || s > s1) return null;
+      const hw = w / 2 * (1 - 0.35 * (s - s0) / (s1 - s0)), q = p / hw;
+      if (Math.abs(q) > 1) return null;
+      const l = q * lit;
+      return l > 0.35 ? 'dust3' : l < -0.4 ? 'dust0' : 'dust2';
+    });
+    // Bark grooves along the trunk, moss, and a few snapped branch stubs.
+    for (let i = 0; i < Math.round(L / 9); i++){ const s = s0 + r() * (s1 - s0 - 4), p = (r() - 0.5) * w * 0.5; b.line(...at(s, p), ...at(s + 2 + r() * 4, p), 0.5, 'dust1'); }
+    for (let i = 0; i < 3; i++){ const s = s0 + r() * (s1 - s0), [mx, my] = at(s, (r() - 0.5) * w * 0.4); b.disc(mx, my, w * (0.15 + r() * 0.1), r() < 0.5 ? 'leaf1' : 'grass2'); }
+    for (let i = 0; i < 3; i++){ const s = s0 + (0.3 + r() * 0.6) * (s1 - s0), side = r() < 0.5 ? -1 : 1, [bx, by] = at(s, side * w * 0.45); b.taper(bx, by, ...at(s + w * 0.4, side * w * 0.95), 1.4, 0.8, 'char1'); }
+  }
+};
+// Half a frame, in world px: a fallen tree's branches reach up to 2.6 trunk widths past its tip.
+const propSize = spec => spec.length ? 4 * Math.ceil(spec.length / 2 + spec.width * 2.2 + 3) : 4 * Math.ceil(spec.r * 1.6 + 3);
+function propFrame(kind, spec, seed, angle){
+  const N = propSize(spec), g = new Grid(N, N);
+  PROP_DRAW[kind](brush(g), rng(seed), spec, angle);
+  const clear = f => { for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (x === 0 || y === 0 || x === N - 1 || y === N - 1) f.set(x, y, 0); return f; };
+  return { n: N, g: clear(finish(clear(g))) };
+}
+
 // { data, sheets }: data for pixel-data.js (frames as palette text) and one sheet per species
 // (rows are sizes, each smaller frame centred in the largest frame's cell).
 export function genesisTrees(){
   const art = {}, sheets = {};
   for (const kind of GENESIS_KINDS){
     const sets = GENESIS_SIZES.map((_, z) => Array.from({ length: VARIANTS }, (_, v) => variantFrames(kind, z, v)));
-    art[kind] = sets.map(vs => vs.map(({ n, frames }) => ({ n, frames: frames.map(f => f.encode()) })));
+    art[kind] = sets.map(vs => vs.map(({ n, frames }) => ({ n, frames: frames.map(f => rle(f.encode())) })));
     const cell = Math.max(...sets.flat().map(s => s.n));
     const pad = (f, n) => { const o = new Grid(cell, cell), off = (cell - n) / 2; for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) o.set(x + off, y + off, f.get(x, y)); return o; };
     sheets['genesis_tree_' + kind] = {
@@ -183,5 +279,26 @@ export function genesisTrees(){
       rows: sets.map(vs => vs.flatMap(({ n, frames }) => frames.map(f => pad(f, n))))
     };
   }
-  return { data: { kinds: GENESIS_KINDS, sizes: GENESIS_SIZES, crown: GENESIS_CROWN, shadow: GENESIS_SHADOW, art }, sheets };
+  // Stumps: per kind and size, STUMP_VARIANTS frames. Fallen trees: per size, every angle
+  // (angle × LOG_VARIANTS + variant), crown end pointing along the angle, clockwise from east.
+  for (const [kind, specs] of Object.entries(GENESIS_PROPS)){
+    const log = kind === 'log', count = log ? LOG_ANGLES * LOG_VARIANTS : STUMP_VARIANTS;
+    const sets = specs.map((spec, z) => Array.from({ length: count }, (_, k) => {
+      const angle = log ? Math.floor(k / LOG_VARIANTS) / LOG_ANGLES * TAU : 0, v = log ? k % LOG_VARIANTS : k;
+      return propFrame(kind, spec, 1901 + Object.keys(GENESIS_PROPS).indexOf(kind) * 97 + z * 13 + v * 7 + (log ? Math.floor(k / LOG_VARIANTS) * 3 : 0), angle);
+    }));
+    art[kind] = sets.map(fs => fs.map(({ n, g }) => ({ n, frames: [rle(g.encode())] })));
+    const cell = Math.max(...sets.flat().map(f => f.n));
+    const pad = ({ n, g }) => { const o = new Grid(cell, cell), off = (cell - n) / 2; for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) o.set(x + off, y + off, g.get(x, y)); return o; };
+    sheets['genesis_' + kind] = {
+      meta: {
+        name: 'genesis_' + kind, frameWidth: cell, frameHeight: cell, origin: [(cell - 1) / 2, (cell - 1) / 2], worldPxPerArtPx: 1 / K,
+        rows: specs.map(sp => JSON.stringify(sp)), frameSizes: sets.map(fs => fs[0].n),
+        columns: log ? `${LOG_ANGLES} angles clockwise from east (crown end) × ${LOG_VARIANTS} variants, each frame centred in its cell` : `${STUMP_VARIANTS} variants`,
+        shadow: { drawnBy: 'engine', offset: PROP_SHADOW[kind], elevation: 'ground prop' }
+      },
+      rows: sets.map(fs => fs.map(pad))
+    };
+  }
+  return { data: { encoding: 'rle', kinds: GENESIS_KINDS, sizes: GENESIS_SIZES, crown: GENESIS_CROWN, shadow: GENESIS_SHADOW, props: GENESIS_PROPS, propShadow: PROP_SHADOW, logAngles: LOG_ANGLES, art }, sheets };
 }

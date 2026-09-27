@@ -107,7 +107,11 @@ test('woodlands pilot: full terrain tiles, edge-matched variants, shoreline and 
 
 test('genesis trees: five species in three sizes drawn to the crowns the generator plants, outlined, with rustle frames', async () => {
   const { loadSim } = await import('./harness.mjs');
+  const { unrle, rle } = await import('../tools/genesis-trees.mjs');
   const G = loadSim(), GT = data.genesis.trees;
+  assert.equal(GT.encoding, 'rle');
+  assert.equal(unrle(rle('...AAAB.C')), '...AAAB.C');
+  assert.equal(rle('....AAAB'), '.4A3B');
   assert.deepEqual(GT.kinds, [...G.TREES.KINDS], 'same species as src/data/trees.js');
   assert.deepEqual(GT.sizes, [...G.TREES.SIZES]);
   for (const kind of GT.kinds){
@@ -117,7 +121,7 @@ test('genesis trees: five species in three sizes drawn to the crowns the generat
       for (const { n, frames } of variants){
         assert.equal(n % 4, 0, 'whole world px on each side of the centre');
         assert.equal(frames.length, kind === 'snag' ? 1 : 3, kind + ' rustle frames (a snag has no leaves)');
-        const gs = frames.map(str => { assert.equal(str.length, n * n); return decode(str, n); });
+        const gs = frames.map(str => { str = unrle(str); assert.equal(str.length, n * n); return decode(str, n); });
         for (const g of gs){
           for (let i = 0; i < n; i++) for (const [x, y] of [[i, 0], [0, i], [i, n - 1], [n - 1, i]]) assert.equal(g.get(x, y), 0, `${kind} margin`);
           // The crown fills its diameter (2 art px per world px), give or take the outline and rustled leaves.
@@ -126,12 +130,31 @@ test('genesis trees: five species in three sizes drawn to the crowns the generat
           const d = far;   // radius in art px = diameter in world px
           assert.ok(d <= GT.crown[kind][z] + 2 && d >= GT.crown[kind][z] * 0.75, `${kind} ${z} crown ${d} for ${GT.crown[kind][z]}`);
         }
-        assert.ok(frames[0].includes(ALPHABET[1]), 'outlined');
+        assert.ok(unrle(frames[0]).includes(ALPHABET[1]), 'outlined');
         for (let f = 1; f < frames.length; f++) assert.notEqual(frames[f], frames[0], kind + ' leaves move');
       }
     });
   }
   assert.deepEqual(GT.shadow.map(o => o[0] / 2), [3, 4, 6], 'taller trees throw their shadow further (world px)');
+  // Dead wood: the sizes the generator plants, stumps in variants, fallen trees at every angle.
+  assert.deepEqual(Object.keys(GT.props), Object.keys(G.TREES.props));
+  assert.equal(GT.logAngles, G.TREES.LOG_ANGLES);
+  for (const [kind, specs] of Object.entries(GT.props)){
+    assert.equal(JSON.stringify(specs), JSON.stringify(G.TREES.props[kind].sizes), kind + ' sizes match the generator');
+    GT.art[kind].forEach((frames, z) => {
+      assert.equal(frames.length, kind === 'log' ? GT.logAngles * 2 : 3, kind + ' frames');
+      for (const { n, frames: [str] } of frames){
+        const g = decode(unrle(str), n);
+        for (let i = 0; i < n; i++) for (const [x, y] of [[i, 0], [0, i], [i, n - 1], [n - 1, i]]) assert.equal(g.get(x, y), 0, `${kind} margin`);
+        assert.ok(unrle(str).includes(ALPHABET[1]), 'outlined');
+      }
+    });
+  }
+  // A fallen tree's crown end points along its angle: at angle 0 the root plate is west.
+  const log0 = GT.art.log[1][0], g0 = decode(unrle(log0.frames[0]), log0.n), mid = log0.n / 2;
+  let west = 0, east = 0;
+  for (let y = 0; y < log0.n; y++) for (let x = 0; x < log0.n; x++){ const v = g0.get(x, y); if (v && PALETTE[v - 1][0] === 'dust0') x < mid ? west++ : east++; }
+  assert.ok(west > east, 'root plate (dark soil) at the west end');
 });
 
 test('sprite lab: the example spec renders top-down at 96 × 96 and passes every check; a sprite too big for its frame fails', async () => {

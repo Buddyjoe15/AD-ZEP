@@ -739,13 +739,13 @@ test('a woodlands game starts, plays and survives a save', () => {
   assert.equal(fnv(G.State.grid.art.level), level, 'heights rebuilt from the seed');
 });
 
-test('genesis plants free-standing trees in thick and thin clusters, off the tile centres', () => {
+test('genesis plants free-standing trees in thick and thin clusters, off the tile centres, with stumps and fallen trees among them', () => {
   const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
   const grid = G.MapGen.genesis(72491), art = grid.art, tr = art.trees, cols = grid.cols;
   // Pinned: saves of this map type rebuild their terrain and trees from the seed.
   assert.equal(art.generator, 'genesis');
-  assert.equal(fnv(grid.tiles), 439118594, 'genesis terrain unchanged');
-  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 2558658699, 'genesis trees unchanged');
+  assert.equal(fnv(grid.tiles), 1232051540, 'genesis terrain unchanged');
+  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 1354685051, 'genesis trees unchanged');
   const again = G.MapGen.genesis(72491);
   assert.equal(fnv(again.tiles), fnv(grid.tiles), 'same seed, same map');
   assert.equal(fnv(G.MapGen.woodlands(72491).tiles), 1031677493, 'woodlands itself is untouched');
@@ -762,21 +762,36 @@ test('genesis plants free-standing trees in thick and thin clusters, off the til
   const counts = [...blocks.values()];
   assert.ok(counts.filter(c => c >= 80).length > 40, 'thick stands');
   assert.ok(counts.filter(c => c > 0 && c <= 12).length > 200, 'thin woodland and lone trees');
-  // Every species, every size, in drawing order (small first, then north to south).
-  for (let k = 0; k < G.TREES.KINDS.length; k++) assert.ok(tr.kind.includes(k), G.TREES.KINDS[k]);
+  // Every species and kind of dead wood, every size, in drawing order (dead wood, then small
+  // trees first, then north to south).
+  const ALL = G.TREES.ALL, KN = G.TREES.KINDS.length, layer = k => tr.kind[k] >= KN ? 0 : 1, is = (k, name) => ALL[tr.kind[k]] === name;
+  for (let k = 0; k < ALL.length; k++) assert.ok(tr.kind.includes(k), ALL[k]);
   for (let z = 0; z < 3; z++) assert.ok(tr.size.includes(z), 'size ' + z);
-  for (let k = 1; k < tr.count; k++) assert.ok(tr.size[k - 1] < tr.size[k] || (tr.size[k - 1] === tr.size[k] && tr.y[k - 1] <= tr.y[k]), 'drawing order at ' + k);
+  for (let k = 1; k < tr.count; k++){
+    const a = [layer(k - 1), tr.size[k - 1], tr.y[k - 1]], b = [layer(k), tr.size[k], tr.y[k]];
+    assert.ok(a[0] < b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] <= b[2]))), 'drawing order at ' + k);
+  }
+  const count = name => { let c = 0; for (let k = 0; k < tr.count; k++) if (is(k, name)) c++; return c; };
+  assert.ok(count('log') > 150 && count('stump_cut') > 300 && count('stump_broken') > 1000, `dead wood: ${count('log')} fallen, ${count('stump_cut')} cut, ${count('stump_broken')} snapped`);
 
   // Medium and large trunks block their tile, and every tree tile has one; small trees and
   // the forest between the trunks can be walked through.
-  const blocking = new Uint8Array(grid.size), SOIL = new Set(['tree', 'forest', 'bush', 'tall_grass', 'grass', 'wildflowers', 'mushrooms', 'swamp'].map(id));
+  // Fallen trees block the tiles along their trunk, and the old tile-sized stumps and fallen
+  // trees are gone: every fallen-tree tile is under a new one, and there are no stump tiles.
+  const blocking = new Uint8Array(grid.size), logged = new Uint8Array(grid.size), SOIL = new Set(['tree', 'forest', 'bush', 'tall_grass', 'grass', 'wildflowers', 'mushrooms', 'swamp', 'fallen_tree'].map(id));
   for (let k = 0; k < tr.count; k++){
     const i = Math.floor(tr.y[k] / T) * cols + Math.floor(tr.x[k] / T);
     assert.equal(tr.tile[k], i);
-    assert.ok(SOIL.has(grid.tiles[i]), `trunk ${k} on soil`);
-    if (tr.size[k] >= G.TREES.BLOCKS_FROM){ assert.equal(grid.tiles[i], id('tree')); blocking[i] = 1; }
+    assert.ok(SOIL.has(grid.tiles[i]), `${ALL[tr.kind[k]]} ${k} on soil`);
+    if (is(k, 'log')) G.TREES.logTiles(tr.x[k], tr.y[k], tr.size[k], tr.variant[k] >> 1, T, (x, y) => { logged[y * cols + x] = 1; assert.ok([id('fallen_tree'), id('tree')].includes(grid.tiles[y * cols + x]), 'fallen tree blocks its tiles'); });
+    else if (layer(k) && tr.size[k] >= G.TREES.BLOCKS_FROM){ assert.equal(grid.tiles[i], id('tree')); blocking[i] = 1; }
   }
-  for (let i = 0; i < grid.size; i++) if (grid.tiles[i] === id('tree')) assert.ok(blocking[i], 'tree tile without a trunk at ' + i);
+  for (let i = 0; i < grid.size; i++){
+    if (grid.tiles[i] === id('tree')) assert.ok(blocking[i], 'tree tile without a trunk at ' + i);
+    if (grid.tiles[i] === id('fallen_tree')) assert.ok(logged[i], 'old fallen-tree tile left at ' + i);
+    assert.notEqual(grid.tiles[i], id('stump'), 'old stump tile left at ' + i);
+  }
+  assert.ok(G.MapGen.woodlands(72491).tiles.includes(id('stump')), 'Woodlands keeps its own');
   assert.ok(G.Defs.terrain.get('forest').passable, 'forest floor is passable');
   // Nothing grows on the landing pad.
   const L = art.landing;

@@ -1,6 +1,7 @@
 /* Genesis map generator (v0.1): the landscaping test bed. For now it builds the Woodlands
    landscape for the seed (heights, rivers, waterfalls, lake, fen, villages, camps, trails)
-   and then replants every forest as free-standing trees (species in src/data/trees.js).
+   and then replants every forest as free-standing trees (species in src/data/trees.js), with
+   stumps and fallen trees among them in place of the tile-sized ones.
 
    Trees are not one per tile. Each has its own trunk position in world px, anywhere in its
    tile, and is spaced from its neighbours by a local density: thick stands where the crowns
@@ -29,17 +30,19 @@
   const pick = (h, table) => { let total = 0; for (const [, w] of table) total += w; h *= total; for (const [k, w] of table){ if (h < w) return k; h -= w; } return table[table.length - 1][0]; };
 
   // Spacing between trunks, in world px, from the thickest stand to the most open woodland.
-  const SPACING_THICK = 22, SPACING_THIN = 86;
+  const SPACING_THICK = 18, SPACING_THIN = 64;
+  // Tiles with at least this much forest cover (share of tree tiles nearby) grow woodland.
+  const WOODED = 0.08;
   // Candidate trunks are tried in PASSES rounds, each in a hashed share of the candidates, so
   // the scan order doesn't leave a direction in the pattern.
   const PASSES = 8;
 
   function plant(grid, s){
     const W = grid.cols, H = grid.rows, N = W * H, TILE = G.CONFIG.TILE, tiles = grid.tiles, art = grid.art;
-    const TR = G.TREES, KINDS = TR.KINDS, id = k => G.Defs.terrain.get(k).id;
-    const TREE = id('tree'), FLOOR = id('forest'), GRASS = id('grass'), BUSH = id('bush'), STUMP = id('stump');
+    const TR = G.TREES, ALL = TR.ALL, id = k => G.Defs.terrain.get(k).id;
+    const TREE = id('tree'), FLOOR = id('forest'), GRASS = id('grass'), BUSH = id('bush'), STUMP = id('stump'), LOG = id('fallen_tree');
     const SOIL = new Uint8Array(256), WET = new Uint8Array(256), FEN = new Uint8Array(256);
-    for (const k of ['tree', 'bush', 'tall_grass', 'grass', 'wildflowers', 'mushrooms', 'swamp']) SOIL[id(k)] = 1;
+    for (const k of ['tree', 'forest', 'bush', 'tall_grass', 'grass', 'wildflowers', 'mushrooms', 'swamp']) SOIL[id(k)] = 1;
     for (const k of ['water', 'deep_water', 'waterfall', 'bog', 'swamp', 'reeds']) WET[id(k)] = 1;
     for (const k of ['swamp', 'bog']) FEN[id(k)] = 1;
     const L = art.landing;
@@ -54,22 +57,38 @@
       x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(W - 1, x1); y1 = Math.min(H - 1, y1);
       return sat[(y1 + 1) * W1 + x1 + 1] - sat[y0 * W1 + x1 + 1] - sat[(y1 + 1) * W1 + x0] + sat[y0 * W1 + x0];
     };
-    const cover = new Float32Array(N), thick = new Float32Array(N), lone = new Uint8Array(N);
+    const cover = new Float32Array(N);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) cover[y * W + x] = clamp01(box(x - 2, y - 2, x + 2, y + 2) / 25 / 0.7);
+
+    // 2. Clear the Woodlands dead wood and brush off the grid: old tree tiles, the brush between
+    // them (the saplings stand in for it now), and the tile-sized stumps and fallen trees, whose
+    // places are kept for the new ones. All become forest floor, or grass out in the open.
+    const D = key => (G.WOODLANDS_DETAIL || []).indexOf(key) + 1;
+    const LEAVES = D('LEAVES'), TWIGS = D('TWIGS'), BRANCH = D('BRANCH'), PEBBLES = D('PEBBLES');
+    const oldStumps = [], lone = new Uint8Array(N);
+    for (let i = 0; i < N; i++){
+      const t = tiles[i], x = i % W, y = (i / W) | 0;
+      if (t === STUMP) oldStumps.push(i);
+      if (t === TREE && cover[i] < WOODED && Math.hypot(x - L.x, y - L.y) > 36) lone[i] = 1;
+      if (t !== TREE && t !== STUMP && t !== LOG && !(t === BUSH && cover[i] >= WOODED)) continue;
+      if (cover[i] < WOODED){ tiles[i] = GRASS; continue; }
+      tiles[i] = FLOOR;
+      const h = hash(x, y, s + 641);
+      art.detail[i] = h < 0.14 ? LEAVES : h < 0.21 ? TWIGS : h < 0.24 ? BRANCH : h < 0.25 ? PEBBLES : 0;
+      art.angle[i] = Math.floor(hash(x, y, s + 643) * 256);
+    }
+    // How thick the woodland is: whole stands (thick or open), clumps and glades.
+    const thick = new Float32Array(N);
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++){
-      const i = y * W + x, f = clamp01(box(x - 2, y - 2, x + 2, y + 2) / 25 / 0.7);
-      cover[i] = f;
-      if (!SOIL[tiles[i]]) continue;
-      if (f < 0.12){ if (tiles[i] === TREE && Math.hypot(x - L.x, y - L.y) > 36) lone[i] = 1; continue; }
-      // 2. How thick the woodland is here: whole stands (thick or open), clumps and glades.
-      const stand = clamp01((fbm(x / 30, y / 30, s + 601, 3) - 0.32) / 0.36), clump = fbm(x / 7, y / 7, s + 607, 2);
-      let t = f ** 1.5 * (0.15 + 0.85 * stand) + (clump - 0.5) * 0.7 * f;
-      if (clump < 0.3) t *= 0.35;
+      const i = y * W + x, f = cover[i];
+      if (f < WOODED || !SOIL[tiles[i]]) continue;
+      const stand = clamp01((fbm(x / 30, y / 30, s + 601, 3) - 0.3) / 0.34), clump = fbm(x / 7, y / 7, s + 607, 2);
+      let t = f ** 1.2 * (0.3 + 0.7 * stand) + (clump - 0.5) * 0.6 * f;
+      if (clump < 0.26) t *= 0.5;
       thick[i] = clamp01(t);
     }
 
-    // 3. Trunks by dart throwing with a spacing that follows the local thickness. A trunk is
-    // kept only if it is at least the mean of both trees' spacings from every other trunk, so
-    // thick and thin woodland meet without a seam. Neighbours are found in a per-tile grid.
+    // Everything planted: position (world px), spacing radius, kind (GW.TREES.ALL), size, variant.
     const cap = 1 << 16;
     let n = 0, X = new Int32Array(cap), Y = new Int32Array(cap), R = new Float32Array(cap);
     let K = new Uint8Array(cap), Z = new Uint8Array(cap), V = new Uint8Array(cap), NX = new Int32Array(cap);
@@ -78,6 +97,56 @@
       X = g(X, Int32Array); Y = g(Y, Int32Array); R = g(R, Float32Array); K = g(K, Uint8Array); Z = g(Z, Uint8Array); V = g(V, Uint8Array); NX = g(NX, Int32Array);
     };
     const head = new Int32Array(N).fill(-1);
+    const add = (px, py, r, kind, z, v) => {
+      if (n === X.length) grow();
+      const i = Math.floor(py / TILE) * W + Math.floor(px / TILE);
+      X[n] = px; Y[n] = py; R[n] = r; K[n] = ALL.indexOf(kind); Z[n] = z; V[n] = v; NX[n] = head[i]; head[i] = n;
+      return n++;
+    };
+    const tileAt = (px, py) => { const x = Math.floor(px / TILE), y = Math.floor(py / TILE); return x >= 0 && y >= 0 && x < W && y < H ? y * W + x : -1; };
+
+    // 3. Fallen trees first, so the living ones grow around them: windthrow, often a few
+    // together lying roughly the same way, on level wooded ground. Each blocks the tiles along
+    // its trunk (GW.TREES.logTiles).
+    const logs = [], logHead = new Int32Array(N).fill(-1), logNext = [];
+    const LOG_SIZES = TR.props.log.sizes, ANG = TR.LOG_ANGLES;
+    const axis = lg => { const d = LOG_SIZES[lg.z], th = lg.a / ANG * Math.PI * 2, ux = Math.cos(th), uy = Math.sin(th); return { ax: lg.x - ux * d.length / 2, ay: lg.y - uy * d.length / 2, bx: lg.x + ux * d.length * 0.3, by: lg.y + uy * d.length * 0.3, w: d.width }; };
+    const segDist = (px, py, s) => { const dx = s.bx - s.ax, dy = s.by - s.ay, l2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((px - s.ax) * dx + (py - s.ay) * dy) / l2)); return Math.hypot(px - s.ax - t * dx, py - s.ay - t * dy); };
+    // Distance from (px, py) to the nearest fallen tree's trunk, minus its half-width.
+    const nearLog = (px, py) => {
+      const x = Math.floor(px / TILE), y = Math.floor(py / TILE);
+      let best = Infinity;
+      for (let yy = Math.max(0, y - 3); yy <= Math.min(H - 1, y + 3); yy++) for (let xx = Math.max(0, x - 3); xx <= Math.min(W - 1, x + 3); xx++)
+        for (let q = logHead[yy * W + xx]; q >= 0; q = logNext[q]){ const sg = logs[q].seg; best = Math.min(best, segDist(px, py, sg) - sg.w); }
+      return best;
+    };
+    const wanted = Math.round(cover.reduce((a, f) => a + (f >= 0.35 ? 1 : 0), 0) / 420);
+    for (let tries = 0; tries < 20000 && logs.length < wanted; tries++){
+      const x0 = Math.floor(hash(tries, 1, s + 701) * W), y0 = Math.floor(hash(tries, 2, s + 701) * H), i0 = y0 * W + x0;
+      if (cover[i0] < 0.35 || !SOIL[tiles[i0]] || Math.hypot(x0 - L.x, y0 - L.y) < 40) continue;
+      const a0 = Math.floor(hash(tries, 3, s + 701) * ANG), g = hash(tries, 4, s + 701), members = 1 + Math.floor(g * g * 4), lvl = art.level[i0];
+      for (let m = 0; m < members; m++){
+        const off = m ? (hash(tries, 10 + m, s + 703) - 0.5) * 70 : 0, along = m ? (hash(tries, 20 + m, s + 703) - 0.5) * 40 : 0;
+        const a = (a0 + (m ? Math.floor(hash(tries, 30 + m, s + 703) * 3) - 1 : 0) + ANG) % ANG, th = a / ANG * Math.PI * 2;
+        const px = Math.floor(x0 * TILE + TILE / 2 + Math.cos(th) * along - Math.sin(th) * off), py = Math.floor(y0 * TILE + TILE / 2 + Math.sin(th) * along + Math.cos(th) * off);
+        const lg = { x: px, y: py, z: thick[i0] > 0.45 || hash(tries, 40 + m, s + 703) < 0.4 ? 1 : 0, a };
+        lg.seg = axis(lg);
+        let ok = true;
+        TR.logTiles(px, py, lg.z, a, TILE, (tx, ty) => { const i = ty * W + tx; if (!(tx >= 0 && ty >= 0 && tx < W && ty < H) || !SOIL[tiles[i]] || art.level[i] !== lvl || cover[i] < WOODED) ok = false; });
+        if (!ok) continue;
+        // Keep clear of other fallen trees (they may lie side by side, not across each other).
+        for (let k = 0; k <= 10 && ok; k++){ const t = k / 10; if (nearLog(lg.seg.ax + (lg.seg.bx - lg.seg.ax) * t, lg.seg.ay + (lg.seg.by - lg.seg.ay) * t) < lg.seg.w + 4) ok = false; }
+        if (!ok) continue;
+        const ci = tileAt(px, py);
+        logNext.push(logHead[ci]); logHead[ci] = logs.length; logs.push(lg);
+        add(px, py, 0, 'log', lg.z, a * 2 + Math.floor(hash(px, py, s + 707) * 2));
+      }
+    }
+
+    // 4. Trunks by dart throwing with a spacing that follows the local thickness. A trunk is
+    // kept only if it is at least the mean of both trees' spacings from every other trunk, so
+    // thick and thin woodland meet without a seam, and off every fallen tree. Now and then the
+    // tree is only a snapped stump, more often in open woodland.
     const wetNear = (x, y) => { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++){ const xx = x + dx, yy = y + dy; if (xx >= 0 && yy >= 0 && xx < W && yy < H && WET[tiles[yy * W + xx]]) return true; } return false; };
     const fenNear = (x, y) => { let c = 0; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++){ const xx = x + dx, yy = y + dy; if (xx >= 0 && yy >= 0 && xx < W && yy < H && FEN[tiles[yy * W + xx]]) c++; } return c >= 3; };
     // Species by habitat: black spruce and dead snags in the fen, spruce and pine on high
@@ -99,60 +168,58 @@
       const pS = kind === 'snag' ? 0 : 0.35 - 0.25 * t, pL = 0.15 + 0.45 * t;
       return h < pS ? 0 : h > 1 - pL ? 2 : 1;
     }
+    const spaced = (px, py, r) => {
+      const x = Math.floor(px / TILE), y = Math.floor(py / TILE);
+      for (let yy = Math.max(0, y - 2); yy <= Math.min(H - 1, y + 2); yy++) for (let xx = Math.max(0, x - 2); xx <= Math.min(W - 1, x + 2); xx++)
+        for (let q = head[yy * W + xx]; q >= 0; q = NX[q]){
+          if (!R[q]) continue;   // fallen trees are checked by nearLog
+          const need = (r + R[q]) / 2, dx = X[q] - px, dy = Y[q] - py;
+          if (dx * dx + dy * dy < need * need) return false;
+        }
+      return true;
+    };
     for (let pass = 0; pass < PASSES; pass++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++){
       const i = y * W + x, isLone = lone[i] === 1;
-      if (!isLone && !(cover[i] >= 0.12 && SOIL[tiles[i]])) continue;
+      if (!isLone && !(cover[i] >= WOODED && SOIL[tiles[i]])) continue;
       const t = isLone ? 0 : thick[i], spacing = SPACING_THIN - (SPACING_THIN - SPACING_THICK) * t;
-      const tries = isLone ? 1 : Math.min(12, Math.ceil(2.2 * (TILE / spacing) ** 2));
+      const tries = isLone ? 1 : Math.min(16, Math.ceil(2.6 * (TILE / spacing) ** 2));
       for (let j = 0; j < tries; j++){
         if (Math.floor(hash(i, j, s + 621) * PASSES) !== pass) continue;
         // Lone trees keep near the middle of their tile; forest trunks go anywhere in it.
         const spread = isLone ? 0.5 : 1, px = Math.floor(x * TILE + TILE * (0.5 + (hash(i, j, s + 623) - 0.5) * spread)), py = Math.floor(y * TILE + TILE * (0.5 + (hash(i, j, s + 627) - 0.5) * spread));
         const kind = species(x, y, px, py, i), z = size(kind, t, isLone, px, py), r = Math.max(spacing, TR.species[kind].crown[z] * 0.5);
-        let ok = true;
-        for (let yy = Math.max(0, y - 2); yy <= Math.min(H - 1, y + 2) && ok; yy++) for (let xx = Math.max(0, x - 2); xx <= Math.min(W - 1, x + 2) && ok; xx++)
-          for (let q = head[yy * W + xx]; q >= 0; q = NX[q]){
-            const need = (r + R[q]) / 2, dx = X[q] - px, dy = Y[q] - py;
-            if (dx * dx + dy * dy < need * need){ ok = false; break; }
-          }
-        if (!ok) continue;
-        if (n === X.length) grow();
-        X[n] = px; Y[n] = py; R[n] = r; K[n] = KINDS.indexOf(kind); Z[n] = z; V[n] = Math.floor(hash(px, py, s + 631) * 256); NX[n] = head[i]; head[i] = n;
-        n++;
+        if (!spaced(px, py, r) || nearLog(px, py) < 5) continue;
+        const v = Math.floor(hash(px, py, s + 631) * 256);
+        if (!isLone && hash(px, py, s + 633) < 0.02 + 0.05 * (1 - t)) add(px, py, r, 'stump_broken', z === 2 ? 1 : 0, v);
+        else add(px, py, r, kind, z, v);
+      }
+    }
+    // Cut stumps where Woodlands felled trees (along the trails and in the logging camps),
+    // now anywhere in their tile, sometimes two, clear of trunks and fallen trees.
+    for (const i of oldStumps){
+      const x = i % W, y = (i / W) | 0;
+      for (let j = 0; j < 2; j++){
+        if (hash(x, y, s + 651 + j) > (j ? 0.3 : 0.8)) continue;
+        const px = Math.floor(x * TILE + TILE * (0.1 + hash(x, y, s + 653 + j) * 0.8)), py = Math.floor(y * TILE + TILE * (0.1 + hash(x, y, s + 657 + j) * 0.8));
+        if (!spaced(px, py, 14) || nearLog(px, py) < 6) continue;
+        add(px, py, 14, 'stump_cut', hash(x, y, s + 659 + j) < 0.5 ? 0 : 1, Math.floor(hash(px, py, s + 661) * 256));
       }
     }
 
-    // 4. Terrain under the trees: old tree tiles, and the brush between them (the saplings
-    // stand in for it now), become forest floor (grass out in the open); then every trunk of
-    // a medium or large tree blocks its tile.
-    const D = key => (G.WOODLANDS_DETAIL || []).indexOf(key) + 1;
-    const LEAVES = D('LEAVES'), TWIGS = D('TWIGS'), BRANCH = D('BRANCH'), PEBBLES = D('PEBBLES');
-    // Stumps stay only at the logging camps; the lines of them Woodlands leaves along trails
-    // go back to forest floor.
-    const camps = art.places.filter(p => p.kind === 'camp');
-    for (let i = 0; i < N; i++){
-      if (tiles[i] === STUMP){
-        const x = i % W, y = (i / W) | 0;
-        if (!camps.some(c => Math.abs(c.x - x) <= 16 && Math.abs(c.y - y) <= 16)) tiles[i] = cover[i] < 0.12 ? GRASS : FLOOR;
-        continue;
-      }
-      if (tiles[i] !== TREE && !(tiles[i] === BUSH && cover[i] >= 0.12)) continue;
-      const x = i % W, y = (i / W) | 0;
-      if (cover[i] < 0.12){ tiles[i] = GRASS; continue; }
-      tiles[i] = FLOOR;
-      const h = hash(x, y, s + 641);
-      art.detail[i] = h < 0.14 ? LEAVES : h < 0.21 ? TWIGS : h < 0.24 ? BRANCH : h < 0.25 ? PEBBLES : 0;
-      art.angle[i] = Math.floor(hash(x, y, s + 643) * 256);
-    }
+    // 5. Blocking: fallen trees along their trunks, then every medium or large trunk.
     const tileOf = q => Math.floor(Y[q] / TILE) * W + Math.floor(X[q] / TILE);
-    for (let q = 0; q < n; q++) if (Z[q] >= TR.BLOCKS_FROM){ const i = tileOf(q); tiles[i] = TREE; art.detail[i] = 0; }
+    const logK = ALL.indexOf('log');
+    for (let q = 0; q < n; q++) if (K[q] === logK) TR.logTiles(X[q], Y[q], Z[q], V[q] >> 1, TILE, (tx, ty) => { const i = ty * W + tx; tiles[i] = LOG; art.detail[i] = 0; });
+    for (let q = 0; q < n; q++) if (K[q] < TR.KINDS.length && Z[q] >= TR.BLOCKS_FROM){ const i = tileOf(q); tiles[i] = TREE; art.detail[i] = 0; }
     grid.touch();
 
-    // 5. Drawing order: small trees under big ones, then north to south, then west to east.
-    const order = Array.from({ length: n }, (_, q) => q).sort((a, b) => Z[a] - Z[b] || Y[a] - Y[b] || X[a] - X[b]);
+    // 6. Drawing order: dead wood under every tree, small trees under big ones, then north to
+    // south, then west to east.
+    const layer = q => K[q] >= TR.KINDS.length ? 0 : 1;
+    const order = Array.from({ length: n }, (_, q) => q).sort((a, b) => layer(a) - layer(b) || Z[a] - Z[b] || Y[a] - Y[b] || X[a] - X[b]);
     const out = {
       count: n, x: new Int32Array(n), y: new Int32Array(n), kind: new Uint8Array(n), size: new Uint8Array(n),
-      variant: new Uint8Array(n), tile: new Int32Array(n), on: new Uint8Array(n), kinds: KINDS.slice()
+      variant: new Uint8Array(n), tile: new Int32Array(n), on: new Uint8Array(n), kinds: ALL.slice()
     };
     order.forEach((q, k) => {
       out.x[k] = X[q]; out.y[k] = Y[q]; out.kind[k] = K[q]; out.size[k] = Z[q]; out.variant[k] = V[q];
