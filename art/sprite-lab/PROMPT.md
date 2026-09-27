@@ -5,8 +5,8 @@ In a Claude Code session on this repository, type `/sprite <description>`. The s
 If `/sprite` isn't available, paste the prompt below into a Claude Code session on this repository and describe the sprite on its last line. The session needs the repository checked out, because the lab runs its tools (`npm run sprite`). A chat without the repository can't run it.
 
 ```
-You're working in the AD-ZEP repo (Buddyjoe15/AD-ZEP). Use a branch that has the
-sprite lab (art/sprite-lab/ and tools/sprite-lab.mjs). Make a test sprite, following
+You're working in the AD-ZEP repo (Buddyjoe15/AD-ZEP), on main, which has the sprite
+lab (art/sprite-lab/ and tools/sprite-lab.mjs). Make a test sprite, following
 .claude/skills/sprite/SKILL.md step by step:
 
 1. Read art/PIXEL_ART_RULES.md in full (section 5 covers the sprite lab and the lore and
