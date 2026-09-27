@@ -69,21 +69,28 @@
       const far = !near && (z < C.FAR_CHUNK_ZOOM || count > C.FAR_CHUNK_CACHE_MAX), low = !near && !far;
       const R = C.TERRAIN_RES, res = low ? C.FAR_CHUNK_SCALE : this.dpr * z > 1 && count * R * R <= C.CHUNK_CACHE_MAX ? R : 1;
       const alt = low ? 1 : res === 1 ? R : 1;   // drawn while the wanted chunk is still queued
+      // Free-standing trees (Genesis) are drawn live up close and drawn into the chunks further out.
+      const TA = G.TreeArt, trees = TA.has(S.grid), bake = trees && !(near && TA.live(S.grid, z)), live = trees && near ? new Set() : null;
       g.imageSmoothingEnabled = false; g.drawImage(TC.getOverview(), 0, 0, C.WORLD_W, C.WORLD_H); g.imageSmoothingEnabled = true;
       let chunks = 0;
       if (!far){
         g.imageSmoothingEnabled = !(G.PixelArt.enabled && z * this.dpr >= 1);   // pixel terrain stays crisp up close
         let built = 0;
         for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++){
-          let cv = null;
-          if (TC.has(cx, cy, res) || built < C.CHUNKS_BUILT_PER_FRAME){ if (!TC.has(cx, cy, res)) built++; cv = TC.chunk(cx, cy, res); }
-          else cv = TC.peek(cx, cy, alt);   // another resolution until this one is painted
+          let cv = null, baked = bake;
+          if (TC.has(cx, cy, res, bake) || built < C.CHUNKS_BUILT_PER_FRAME){ if (!TC.has(cx, cy, res, bake)) built++; cv = TC.chunk(cx, cy, res, bake); }
+          else {
+            cv = TC.peek(cx, cy, alt, bake);   // another resolution until this one is painted
+            if (!cv && trees){ baked = !bake; cv = TC.peek(cx, cy, res, baked) || TC.peek(cx, cy, alt, baked); }
+          }
           if (!cv) continue;
           g.drawImage(cv, cx * ct, cy * ct, ct, ct); chunks++;
+          if (live && !baked) live.add(cy * 4096 + cx);
         }
         g.imageSmoothingEnabled = true;
         // Pixel-art trees moving in the wind (Woodlands); lower-resolution chunks have them drawn in.
         if (near) G.WoodlandsArt.drawTrees(g, S.grid, v, T, t, z);
+        if (live && live.size) TA.drawLive(g, S.grid, v, t, (cx, cy) => live.has(cy * 4096 + cx));
       }
 
       // Resource nodes.

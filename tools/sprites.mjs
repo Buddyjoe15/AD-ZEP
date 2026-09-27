@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { PALETTE, TEAMS, ALPHABET, C, Grid, rng, painter, rotate, finish, png, sheetRGBA } from './pixelart.mjs';
 import { renderSprite, LIFT, OUTLINE } from './sprite-kit.mjs';
 import salvageCrawler from '../art/sprite-lab/specs/salvage_crawler.mjs';
+import { genesisTrees } from './genesis-trees.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const OUT = path.join(ROOT, 'art/pixel-test');
@@ -753,9 +754,12 @@ export function build(){
     meta: { name: 'woodlands_tree', frameWidth: TILE_ART, frameHeight: TILE_ART, origin: [0, 0], rows: TREE_TYPES, columns: 'variant 1 frames 0-8, variant 2 frames 0-8 (frame = lean * 3 + rustle)', animations, shadow },
     rows: TREE_TYPES.map(k => trees[k].flat())
   };
+  // Genesis: free-standing trees in three sizes (tools/genesis-trees.mjs).
+  const genesis = genesisTrees();
+  Object.assign(sheets, genesis.sheets);
   const data = {
     alphabet: ALPHABET, palette: PALETTE.map(([name, hex]) => ({ name, hex })), teamIndex: [C.team0, C.team1, C.team2], teams: TEAMS,
-    tileArt: TILE_ART, worldPxPerArtPx: WORLD_PX_PER_ART_PX, sprites, terrain, woodlands
+    tileArt: TILE_ART, worldPxPerArtPx: WORLD_PX_PER_ART_PX, sprites, terrain, woodlands, genesis: { trees: genesis.data }
   };
   return { data, sheets };
 }

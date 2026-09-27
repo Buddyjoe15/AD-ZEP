@@ -92,7 +92,7 @@
         <p class="main-copy">Commander Elias Vance. UES Aster Vale. One unfamiliar Earth, and one way forward.</p>
         <p class="main-copy">Explore a signal, mine metal, build a field generator, and survive until the drive is ready. Bring the crew home to the ship. Jump again.</p>
         <label class="ezSeed">EARTH SEED <input id="ezSeedInput" type="number" min="1" max="4294967295" step="1" value="${this.expeditionSeed}"></label>
-        <label class="ezSeed">MAP <select id="ezMapInput">${Object.entries({ grass: 'Test map (open grass)', woodlands: 'Woodlands' }).map(([k, n]) => `<option value="${k}"${this.mapChoice === k ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label class="ezSeed">MAP <select id="ezMapInput">${Object.entries({ grass: 'Test map (open grass)', woodlands: 'Woodlands', genesis: 'Genesis v0.1 (landscaping test)' }).map(([k, n]) => `<option value="${k}"${this.mapChoice === k ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
         <label class="ezSeed">LANDING SITE <select id="ezLandingMode">${Object.entries({ centre: 'Centre of the map', random: 'Random', custom: 'Choose a tile' }).map(([k, n]) => `<option value="${k}"${this.landingMode === k ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
         <div id="ezLandingXY" class="ezLandXY${this.landingMode === 'custom' ? '' : ' hidden'}">
           <label class="ezSeed">TILE X <input id="ezLandX" type="number" min="${lo}" max="${hi}" step="1" value="${this.landX}"></label>

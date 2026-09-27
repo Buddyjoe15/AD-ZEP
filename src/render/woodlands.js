@@ -11,7 +11,7 @@
     CLIFF: 'cliff', SLOPE: 'slope', STAIRS: 'steps', CAVE: 'cave', ROCKS: 'rock', MOSSROCK: 'mossy_rock',
     CRYSTAL: 'crystal', ORE: 'outcrop', VENT: 'steam_vent', MOUND: 'termite_mound', BURROW: 'burrow', PATH: 'path',
     WALL: 'wall', FLOOR: 'floor', DOOR: 'door', RUBBLE: 'rubble', LOGS: 'log_pile', SAWHORSE: 'sawhorse',
-    PAD: 'clearing', LOGWALL: 'log_wall'
+    PAD: 'clearing', LOGWALL: 'log_wall', FOREST: 'forest'
   };
   const K = {}, RGB = [];
   for (const [k, key] of Object.entries(KEYS)) K[k] = G.Defs.terrain.get(key).id;
@@ -50,7 +50,7 @@
   const FOREST_FLOOR = [40, 70, 42];
   const FLOWER_COLS = [[238,226,120],[236,238,240],[214,118,178],[140,160,238],[240,158,80]];
   function groundFor(t){
-    if (t === K.TREE || t === K.LOG || t === K.THICKET || t === K.MUSHROOM) return FOREST_FLOOR;
+    if (t === K.TREE || t === K.FOREST || t === K.LOG || t === K.THICKET || t === K.MUSHROOM) return FOREST_FLOOR;
     if (t === K.SHRUB || t === K.STUMP || t === K.LOGS || t === K.BURROW || t === K.MOUND || t === K.FLOWERS) return RGB[K.GRASS];
     if (t === K.ROCKS || t === K.MOSSROCK || t === K.CRYSTAL) return [86,98,68];
     if (t === K.ORE || t === K.VENT) return RGB[K.BARREN];
@@ -102,7 +102,7 @@
   const variant = (set, gx, gy, salt) => set.tiles[G.PixelArt.weighted(set.weights, gx, gy, salt)];
   // The pixel tile for terrain `t`, or null when the pilot has no art for it.
   function pixelTile(i, t, gx, gy){
-    if (t === K.GRASS || t === K.TREE) return variant(pix.grass, gx, gy, 11);
+    if (t === K.GRASS || t === K.TREE || t === K.FOREST) return variant(pix.grass, gx, gy, 11);
     if (t === K.THICK) return variant(pix.tall_grass, gx, gy, 23);
     if (t === K.DEEP) return variant(pix.deep_water, gx, gy, 41);
     if (t === K.WATER){
@@ -492,6 +492,7 @@
   // Tall things drawn after the ground, row by row, so nearer objects overlap farther ones.
   function drawTop(ctx, t, gx, gy, px, py, S){
     const s = seed, h0 = hash(gx, gy, s + 7), h1 = hash(gx, gy, s + 9), h2 = hash(gx, gy, s + 17);
+    if (t === K.TREE && art && art.trees) return;   // free-standing trees (Genesis) are drawn by G.TreeArt
     if (t === K.TREE && pix && !fenAt(gx, gy)){
       // Trees that lean in the current wind are drawn every frame (drawTrees); the rest are
       // drawn upright into the chunk, and rustling leaves are drawn over them when close.
@@ -583,6 +584,7 @@
       }
       bakeTrees = !!(opts && opts.trees);
       this.paintTops(ctx, grd, x0, y0, ct, S, true);
+      if (art.trees && bakeTrees) G.TreeArt.paintChunk(ctx, grd, Math.floor(x0 / ct), Math.floor(y0 / ct));
       bakeTrees = false;
     },
     // Pixel-art trees in view that move in the current weather, drawn every frame. Leaning
@@ -592,13 +594,14 @@
     // visible world rectangle and T the tile size.
     // The kind of pixel-art tree on a tile ('oak', 'pine', 'birch'), or null.
     treeKindAt(grd, gx, gy){
+      if (G.TreeArt.has(grd)) return G.TreeArt.at(grd, gx, gy);
       bind(grd);
       if (!pix || !grd.inBounds(gx, gy) || grd.tiles[gy * grd.cols + gx] !== K.TREE || fenAt(gx, gy)) return null;
       return pix.tree.types[treeKind(gy * grd.cols + gx, gx, gy)];
     },
     RUSTLE_ZOOM: 0.5,
     drawTrees(g, grd, v, T, t, z = 1){
-      if (!this.isWoodlands(grd)) return;
+      if (!this.isWoodlands(grd) || G.TreeArt.has(grd)) return;
       bind(grd);
       if (!pix) return;
       const cols = grd.cols, tiles = grd.tiles;

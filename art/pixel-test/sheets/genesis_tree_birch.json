@@ -1,0 +1,55 @@
+{
+  "name": "genesis_tree_birch",
+  "frameWidth": 92,
+  "frameHeight": 92,
+  "origin": [
+    45.5,
+    45.5
+  ],
+  "worldPxPerArtPx": 0.5,
+  "rows": [
+    "small",
+    "medium",
+    "large"
+  ],
+  "frameSizes": [
+    52,
+    72,
+    92
+  ],
+  "crownWorldPx": [
+    20,
+    30,
+    40
+  ],
+  "columns": "2 variants × 3 rustle frames, each frame centred in its cell",
+  "animations": {
+    "rustle": {
+      "frames": 3,
+      "fps": "set by the weather"
+    },
+    "lean": "crown shifted downwind by the engine"
+  },
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      [
+        6,
+        6
+      ],
+      [
+        8,
+        8
+      ],
+      [
+        12,
+        12
+      ]
+    ],
+    "by": "size",
+    "elevation": "prop"
+  },
+  "image": "genesis_tree_birch.png",
+  "sheetWidth": 552,
+  "sheetHeight": 276
+}

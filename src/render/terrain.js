@@ -8,6 +8,9 @@
 
   // Chunks are cached per resolution (canvas px per world px): 1 normally, TERRAIN_RES when
   // zoomed in past 1:1. `used` is the cache size in 1× chunks (a res-2 chunk costs 4).
+  // On maps with free-standing trees (G.TreeArt) a close chunk comes in two kinds: with the
+  // trees drawn in at rest (`bake`, for middle zoom) or without (the trees are drawn live).
+  const key = (cx, cy, res, bake) => cx + ',' + cy + ',' + res + (bake ? ',t' : '');
   G.TerrainCache = {
     grid: null, chunks: new Map(), used: 0, farChunks: new Map(), overview: null, overviewDirty: true,
     reset(grid){ this.grid = grid; this.chunks.clear(); this.used = 0; this.farChunks.clear(); this.overview = null; this.overviewDirty = true; },
@@ -18,8 +21,10 @@
       if (!rect){ this.chunks.clear(); this.used = 0; this.farChunks.clear(); this.overviewDirty = true; return; }
       for (let cy = Math.floor(rect.y / ct); cy <= Math.floor((rect.y + rect.h) / ct); cy++)
         for (let cx = Math.floor(rect.x / ct); cx <= Math.floor((rect.x + rect.w) / ct); cx++){
-          this.drop(cx + ',' + cy + ',1');
-          if (R !== 1) this.drop(cx + ',' + cy + ',' + R);
+          for (const bake of [false, true]){
+            this.drop(key(cx, cy, 1, bake));
+            if (R !== 1) this.drop(key(cx, cy, R, bake));
+          }
           this.farChunks.delete(cx + ',' + cy);
         }
       this.overviewDirty = true;
@@ -44,11 +49,11 @@
     // `res` below 1 (FAR_CHUNK_SCALE) is the lower-resolution chunk used at middle zoom. Those
     // have their own cache, counted in chunks (FAR_CHUNK_CACHE_MAX), so they never push the
     // close-up chunks out.
-    has(cx, cy, res = 1){ return res < 1 ? this.farChunks.has(cx + ',' + cy) : this.chunks.has(cx + ',' + cy + ',' + res); },
+    has(cx, cy, res = 1, bake = false){ return res < 1 ? this.farChunks.has(cx + ',' + cy) : this.chunks.has(key(cx, cy, res, bake)); },
     // Cached chunk without painting or touching the LRU order (fallback while a chunk at
     // the wanted resolution is still queued).
-    peek(cx, cy, res = 1){ return (res < 1 ? this.farChunks.get(cx + ',' + cy) : this.chunks.get(cx + ',' + cy + ',' + res)) || null; },
-    chunk(cx, cy, res = 1){
+    peek(cx, cy, res = 1, bake = false){ return (res < 1 ? this.farChunks.get(cx + ',' + cy) : this.chunks.get(key(cx, cy, res, bake))) || null; },
+    chunk(cx, cy, res = 1, bake = false){
       this.sync();
       if (res < 1){
         const key = cx + ',' + cy, hit = this.farChunks.get(key);
@@ -58,16 +63,16 @@
         while (this.farChunks.size > G.CONFIG.FAR_CHUNK_CACHE_MAX) this.farChunks.delete(this.farChunks.keys().next().value);
         return cv;
       }
-      const key = cx + ',' + cy + ',' + res;
-      const hit = this.chunks.get(key);
-      if (hit){ this.chunks.delete(key); this.chunks.set(key, hit); return hit; }   // LRU touch
-      const cv = this.paint(cx, cy, res);
-      this.chunks.set(key, cv); this.used += res * res;
+      const k = key(cx, cy, res, bake);
+      const hit = this.chunks.get(k);
+      if (hit){ this.chunks.delete(k); this.chunks.set(k, hit); return hit; }   // LRU touch
+      const cv = this.paint(cx, cy, res, bake);
+      this.chunks.set(k, cv); this.used += res * res;
       while (this.used > G.CONFIG.CHUNK_CACHE_MAX && this.chunks.size > 1) this.drop(this.chunks.keys().next().value);
       return cv;
     },
     // Paints in world px scaled by `res`, so the same art gains detail at higher res.
-    paint(cx, cy, res = 1){
+    paint(cx, cy, res = 1, bake = false){
       const C = G.CONFIG, T = C.TILE, ct = C.CHUNK_TILES, size = ct * T, grid = this.grid, low = res < 1;
       const cv = document.createElement('canvas'); cv.width = Math.round(size * res); cv.height = Math.round(size * res); cv.res = res;
       const g = cv.getContext('2d'), r = G.RNG(G.State.seed + cx * 13007 + cy * 9011);
@@ -75,7 +80,7 @@
       const P = G.PixelArt, dust = P.enabled ? P.dustIds() : null, WA = G.WoodlandsArt;
       g.imageSmoothingEnabled = !!dust && P.shrinks(g, T, P.tileArt());   // 96 px tiles average down in 1× chunks
       // A Woodlands map draws every tile in its own style, with height and ground detail.
-      if (WA.isWoodlands(grid)){ WA.paintChunk(g, grid, cx * ct, cy * ct, ct, T, { trees: !!low }); return cv; }
+      if (WA.isWoodlands(grid)){ WA.paintChunk(g, grid, cx * ct, cy * ct, ct, T, { trees: low || bake }); return cv; }
       for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
         const gx = cx * ct + lx, gy = cy * ct + ly;
         if (gx >= grid.cols || gy >= grid.rows) continue;

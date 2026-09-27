@@ -739,6 +739,68 @@ test('a woodlands game starts, plays and survives a save', () => {
   assert.equal(fnv(G.State.grid.art.level), level, 'heights rebuilt from the seed');
 });
 
+test('genesis plants free-standing trees in thick and thin clusters, off the tile centres', () => {
+  const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
+  const grid = G.MapGen.genesis(72491), art = grid.art, tr = art.trees, cols = grid.cols;
+  // Pinned: saves of this map type rebuild their terrain and trees from the seed.
+  assert.equal(art.generator, 'genesis');
+  assert.equal(fnv(grid.tiles), 439118594, 'genesis terrain unchanged');
+  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 2558658699, 'genesis trees unchanged');
+  const again = G.MapGen.genesis(72491);
+  assert.equal(fnv(again.tiles), fnv(grid.tiles), 'same seed, same map');
+  assert.equal(fnv(G.MapGen.woodlands(72491).tiles), 1031677493, 'woodlands itself is untouched');
+  assert.equal(fnv(art.level), 4273338452, 'the Woodlands landscape underneath');
+  assert.ok(tr.count > 20000, 'a forested map: ' + tr.count);
+
+  // Trunks stand anywhere in their tile, not on its centre.
+  let off = 0;
+  for (let k = 0; k < tr.count; k++) if (Math.hypot(tr.x[k] % T - T / 2, tr.y[k] % T - T / 2) > 6) off++;
+  assert.ok(off / tr.count > 0.8, 'most trunks away from the tile centre: ' + (off / tr.count).toFixed(2));
+  // Clustered: some 8 × 8 tile blocks are thick (many trees), others thin or open.
+  const blocks = new Map();
+  for (let k = 0; k < tr.count; k++){ const key = Math.floor(tr.x[k] / T / 8) * 64 + Math.floor(tr.y[k] / T / 8); blocks.set(key, (blocks.get(key) || 0) + 1); }
+  const counts = [...blocks.values()];
+  assert.ok(counts.filter(c => c >= 80).length > 40, 'thick stands');
+  assert.ok(counts.filter(c => c > 0 && c <= 12).length > 200, 'thin woodland and lone trees');
+  // Every species, every size, in drawing order (small first, then north to south).
+  for (let k = 0; k < G.TREES.KINDS.length; k++) assert.ok(tr.kind.includes(k), G.TREES.KINDS[k]);
+  for (let z = 0; z < 3; z++) assert.ok(tr.size.includes(z), 'size ' + z);
+  for (let k = 1; k < tr.count; k++) assert.ok(tr.size[k - 1] < tr.size[k] || (tr.size[k - 1] === tr.size[k] && tr.y[k - 1] <= tr.y[k]), 'drawing order at ' + k);
+
+  // Medium and large trunks block their tile, and every tree tile has one; small trees and
+  // the forest between the trunks can be walked through.
+  const blocking = new Uint8Array(grid.size), SOIL = new Set(['tree', 'forest', 'bush', 'tall_grass', 'grass', 'wildflowers', 'mushrooms', 'swamp'].map(id));
+  for (let k = 0; k < tr.count; k++){
+    const i = Math.floor(tr.y[k] / T) * cols + Math.floor(tr.x[k] / T);
+    assert.equal(tr.tile[k], i);
+    assert.ok(SOIL.has(grid.tiles[i]), `trunk ${k} on soil`);
+    if (tr.size[k] >= G.TREES.BLOCKS_FROM){ assert.equal(grid.tiles[i], id('tree')); blocking[i] = 1; }
+  }
+  for (let i = 0; i < grid.size; i++) if (grid.tiles[i] === id('tree')) assert.ok(blocking[i], 'tree tile without a trunk at ' + i);
+  assert.ok(G.Defs.terrain.get('forest').passable, 'forest floor is passable');
+  // Nothing grows on the landing pad.
+  const L = art.landing;
+  for (let k = 0; k < tr.count; k++) assert.ok(Math.hypot(tr.x[k] / T - L.x, tr.y[k] / T - L.y) > 26, 'tree on the landing pad');
+});
+
+test('a genesis game starts, plays and survives a save', () => {
+  const G = loadSim();
+  G.Scenario.newGame({ seed: 72491, map: 'genesis' });
+  const S = G.State, sh = G.Units.ship();
+  assert.equal(S.map, 'genesis');
+  assert.ok(S.grid.art.trees.count > 0);
+  for (const p of S.expedition.sites) assert.ok(S.grid.reachable(sh.gx + 3, sh.gy + sh.h, Math.floor(p.x / T), Math.floor(p.y / T)), 'signal reachable');
+  S.paused = false;
+  G.Sim.run(3);
+  const tiles = Array.from(S.grid.tiles), trees = fnv(new Uint8Array(S.grid.art.trees.x.buffer));
+  const save = G.Save.serialize();
+  assert.equal(save.map, 'genesis');
+  assert.equal(JSON.stringify(save).includes('"trees"'), false, 'trees are rebuilt from the seed, not saved');
+  G.Save.restore(save, 1);
+  assert.deepEqual(Array.from(G.State.grid.tiles), tiles);
+  assert.equal(fnv(new Uint8Array(G.State.grid.art.trees.x.buffer)), trees, 'trees rebuilt from the seed');
+});
+
 test('landing site: new games land where asked; Woodlands keeps it off water; saves keep it', () => {
   const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
   // Test map: the ship lands on the chosen tile; out-of-range requests stay 64 tiles from the edge.
