@@ -1,5 +1,8 @@
 /* Field construction by units with the `build` capability. Placement is validated, the
-   cost is paid up front, and cancelling (new orders, recall, builder death) refunds it. */
+   cost is paid up front, and cancelling (new orders, recall, builder death) refunds it.
+   A builder can hold a queue: a row of walls is one site per tile, all with the same
+   `builderId`. The builder works the site its `buildSiteId` names; the others wait their
+   turn, in the order they were queued, and the next starts when one completes. */
 (function(){
   'use strict';
   const G = GW;
@@ -45,27 +48,82 @@
       G.notify(d.name + ' queued — Utility Spider moving to build');
       return site;
     },
+    // Queues a row of one-tile structures (walls) for `builder`, one site per cell in order.
+    // Cells that can't be built on are skipped; the row stops where the resources run out.
+    // Returns the queued sites (empty if none).
+    orderRow(builder, key, cells){
+      const d = G.Defs.buildables.get(key), S = G.State, T = G.CONFIG.TILE;
+      if (!d) return [];
+      if (!this.builder(builder && builder.id)){ G.notify('Utility Spider is unavailable'); return []; }
+      if (builder.buildSiteId){ G.notify('Utility Spider is busy. Finish the job or recall first.'); return []; }
+      const sites = [];
+      let skipped = 0, short = false;
+      for (const { gx, gy } of cells){
+        if (!G.Buildings.canPlaceKey(key, gx, gy)){ skipped++; continue; }
+        const ap = this.approachPoint(gx, gy, d.w, d.h, builder);
+        if (!S.paths.reachable(builder.x, builder.y, ap.x, ap.y)){ skipped++; continue; }
+        if (!G.Economy.canAfford(d.cost)){ short = true; break; }
+        G.Economy.spend(d.cost, 'construction');
+        const site = {
+          id: 'site-' + G.newId(), type: key, team: 'blue', gx, gy, w: d.w, h: d.h,
+          x: (gx + d.w / 2) * T, y: (gy + d.h / 2) * T, buildTime: d.buildTime, remaining: d.buildTime, builderId: builder.id
+        };
+        S.constructionSites.push(site);
+        sites.push(site);
+        G.Events.emit('construction:queued', site);
+      }
+      if (!sites.length){ G.notify(short ? 'Need ' + G.Economy.describe(d.cost) : 'Cannot build there'); return []; }
+      G.Units.clearOrders(builder);
+      this.start(builder, sites[0]);
+      G.notify(`${sites.length} × ${d.name} queued${short ? ' (ran out of resources)' : skipped ? ` (${skipped} tile${skipped > 1 ? 's' : ''} blocked)` : ''} — Utility Spider moving to build`);
+      return sites;
+    },
+    // Sets `builder` to work `site`: walk to it and build.
+    start(builder, site){
+      builder.command = 'build'; builder.buildSiteId = site.id;
+      const ap = this.approachPoint(site.gx, site.gy, site.w, site.h, builder);
+      G.State.paths.request(builder, ap.x, ap.y, { priority: true });
+    },
+    // Sites queued for `builder` (its current one included), in queue order.
+    queue(builder){ return builder ? G.State.constructionSites.filter(s => s.builderId === builder.id) : []; },
+    // Moves `builder` on to its next queued site, or stands it down if there is none.
+    next(builder){
+      const site = this.queue(builder).find(s => s.id !== builder.buildSiteId);
+      builder.path = []; builder.pathIndex = 0;
+      if (site) this.start(builder, site);
+      else { builder.command = 'idle'; builder.buildSiteId = null; }
+    },
+    // Removes one site, refunding it; if it was the builder's current site, the builder moves on.
+    cancelSite(site, refund = true){
+      const S = G.State, builder = G.Units.get(site.builderId);
+      S.constructionSites = S.constructionSites.filter(s => s.id !== site.id);
+      if (refund) G.Economy.refund(G.Defs.buildables.get(site.type)?.cost || {}, 'construction cancelled');
+      G.Events.emit('construction:cancelled', site);
+      if (builder && builder.buildSiteId === site.id) this.next(builder);
+    },
     // Within one tile of the footprint's edge (covers diagonal approach tiles).
     inReach(u, site){
       const T = G.CONFIG.TILE, x0 = site.gx * T, y0 = site.gy * T, x1 = x0 + site.w * T, y1 = y0 + site.h * T;
       const dx = Math.max(x0 - u.x, 0, u.x - x1), dy = Math.max(y0 - u.y, 0, u.y - y1);
       return Math.hypot(dx, dy) <= T * REACH_TILES;
     },
+    // Cancels everything `builder` has queued, refunding it.
     cancelFor(builder, refund = true){
       if (!builder || !builder.buildSiteId) return;
-      const site = this.site(builder.buildSiteId);
+      const sites = this.queue(builder);
       builder.buildSiteId = null;
       if (builder.command === 'build') builder.command = 'idle';
-      if (!site) return;
-      if (refund) G.Economy.refund(G.Defs.buildables.get(site.type)?.cost || {}, 'construction cancelled');
-      G.State.constructionSites = G.State.constructionSites.filter(s => s.id !== site.id);
-      G.Events.emit('construction:cancelled', site);
+      for (const site of sites){
+        if (refund) G.Economy.refund(G.Defs.buildables.get(site.type)?.cost || {}, 'construction cancelled');
+        G.State.constructionSites = G.State.constructionSites.filter(s => s.id !== site.id);
+        G.Events.emit('construction:cancelled', site);
+      }
     },
     complete(site){
       const S = G.State, d = G.Defs.buildables.require(site.type);
       S.constructionSites = S.constructionSites.filter(s => s.id !== site.id);
       const builder = G.Units.get(site.builderId);
-      if (builder){ builder.command = 'idle'; builder.buildSiteId = null; builder.path = []; builder.pathIndex = 0; }
+      if (builder && builder.buildSiteId === site.id) this.next(builder);   // on to the next queued site, or idle
       // A unit may have wandered onto the footprint; nudge it off before the walls go up.
       const T = G.CONFIG.TILE;
       for (const u of S.units){
@@ -89,6 +147,7 @@
       for (const site of [...S.constructionSites]){
         const u = this.builderFor(site);
         if (u && G.Cheats.instantBuild){ G.Construction.complete(site); continue; }
+        if (!u && this.waiting(site)) continue;       // queued behind the builder's current site
         if (!u){
           // Builder lost: the site cannot finish, so refund it rather than block departure.
           S.constructionSites = S.constructionSites.filter(s => s !== site);
@@ -113,6 +172,11 @@
     builderFor(site){
       const u = G.Units.alive(site.builderId);
       return u && u.buildSiteId === site.id ? u : null;
+    },
+    // True while the site's builder is alive and working another of its queued sites.
+    waiting(site){
+      const u = G.Units.alive(site.builderId), cur = u && u.buildSiteId && G.Construction.site(u.buildSiteId);
+      return !!(cur && cur.builderId === u.id && cur !== site);
     }
   });
 })();

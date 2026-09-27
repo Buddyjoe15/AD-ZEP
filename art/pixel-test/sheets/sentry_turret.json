@@ -1,0 +1,107 @@
+{
+  "name": "sentry_turret",
+  "frameWidth": 96,
+  "frameHeight": 96,
+  "origin": [
+    0,
+    0
+  ],
+  "footprintTiles": [
+    1,
+    1
+  ],
+  "worldPxPerArtPx": 0.5,
+  "rows": "row 0 states; the head sheet has one row per facing",
+  "model": "art/sprite-lab/specs/sentry_turret.mjs",
+  "states": {
+    "foundation": {
+      "start": 0,
+      "frames": 1
+    },
+    "frame": {
+      "start": 1,
+      "frames": 1
+    },
+    "near-complete": {
+      "start": 2,
+      "frames": 1
+    },
+    "finished": {
+      "start": 3,
+      "frames": 1
+    },
+    "damaged": {
+      "start": 4,
+      "frames": 1
+    },
+    "rubble": {
+      "start": 5,
+      "frames": 1
+    }
+  },
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      8,
+      8
+    ],
+    "elevation": "structure"
+  },
+  "team": "team0..team2 (magenta ramp)",
+  "head": {
+    "facings": 16,
+    "rows": "facing, clockwise from up",
+    "pivot": "footprint centre",
+    "states": {
+      "idle": {
+        "start": 0,
+        "frames": 1
+      },
+      "firing": {
+        "start": 1,
+        "frames": 4,
+        "fps": 16
+      },
+      "flash": {
+        "start": 5,
+        "frames": 4,
+        "fps": 16
+      },
+      "damaged": {
+        "start": 9,
+        "frames": 2,
+        "fps": 3
+      },
+      "damaged-firing": {
+        "start": 11,
+        "frames": 4,
+        "fps": 16
+      },
+      "damaged-flash": {
+        "start": 15,
+        "frames": 4,
+        "fps": 16
+      }
+    },
+    "on": {
+      "finished": "idle",
+      "damaged": "damaged"
+    },
+    "turnRate": 6.283185307179586,
+    "firing": {
+      "idle": [
+        "firing",
+        "flash"
+      ],
+      "damaged": [
+        "damaged-firing",
+        "damaged-flash"
+      ]
+    },
+    "flashTime": 0.12,
+    "image": "sentry_turret_head.png"
+  },
+  "image": "sentry_turret.png",
+  "sheetWidth": 576,
+  "sheetHeight": 96
+}

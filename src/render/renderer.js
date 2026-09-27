@@ -136,7 +136,10 @@
       }
       // Structures (and, with pixel art, the rubble of recently destroyed ones).
       if (G.PixelArt.enabled) G.PixelArt.drawRubble(g, inView);
-      for (const b of S.buildings) if (inView(b.x, b.y, b.w * T)) G.Visuals.drawBuilding(g, b, z, t);
+      // Pixel-art structures draw every shadow first, so no shadow falls on a neighbour.
+      const P = G.PixelArt;
+      if (P.enabled) for (const b of S.buildings) if (inView(b.x, b.y, b.w * T) && P.buildingSprite(b.type)) P.drawBuildingShadow(g, b, t);
+      for (const b of S.buildings) if (inView(b.x, b.y, b.w * T)) G.Visuals.drawBuilding(g, b, z, t, P.enabled);
       G.Visuals.shields(g, z, t, inView);
       // Expedition signals.
       const E = S.expedition;
@@ -312,6 +315,20 @@
         // Heavy cannon shells and missiles: a thick trail and a blast at the target.
         for (const s of S.shots){
           if (!s.kind || !inView(s.x2, s.y2, 700)) continue;
+          if (s.kind === 'laser'){
+            // Laser: a cyan beam with a white core from the rifle's emitter, fading with its
+            // life, and a spark at the target.
+            const a = G.clamp(s.life / 0.18, 0, 1), from = s.from && G.Buildings.get(s.from);
+            if (from){
+              const m = G.PixelArt.muzzle(from), aim = G.Turrets.get(from).aim;
+              const o = m || { x: from.x + Math.cos(aim) * 22, y: from.y + Math.sin(aim) * 22 };   // classic art: the barrel's end
+              s.x1 = o.x; s.y1 = o.y;
+            }
+            g.strokeStyle = `rgba(54,184,239,${0.55 * a})`; g.lineWidth = 7 / z; g.beginPath(); g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); g.stroke();
+            g.strokeStyle = `rgba(230,252,255,${a})`; g.lineWidth = 2.5 / z; g.beginPath(); g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); g.stroke();
+            g.fillStyle = `rgba(174,244,255,${0.5 * a})`; g.beginPath(); g.arc(s.x2, s.y2, 14, 0, TAU); g.fill();
+            continue;
+          }
           const missile = s.kind === 'missile';
           g.strokeStyle = missile ? '#ffc27a' : '#fff0b0'; g.lineWidth = (missile ? 3 : 5) / z;
           g.beginPath(); g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); g.stroke();
@@ -320,10 +337,21 @@
         }
       }
       if (S.buildPreview){
-        const bp = S.buildPreview, d = G.Defs.buildables.get(bp.key) || { w: 1, h: 1, cost: {} };
-        const ok = G.Buildings.canPlaceKey(bp.key, bp.gx, bp.gy) && !!G.Construction.builder(S.buildMode.builderId) && G.Economy.canAfford(d.cost);
-        g.fillStyle = ok ? 'rgba(125,220,130,.30)' : 'rgba(230,90,80,.32)'; g.strokeStyle = ok ? '#8de295' : '#ee6b62'; g.lineWidth = 2 / z;
-        g.fillRect(bp.gx * T, bp.gy * T, T * d.w, T * d.h); g.strokeRect(bp.gx * T, bp.gy * T, T * d.w, T * d.h);
+        const bp = S.buildPreview, d = G.Defs.buildables.get(bp.key) || { w: 1, h: 1, cost: {} }, builder = !!G.Construction.builder(S.buildMode.builderId);
+        const cell = (gx, gy, ok) => {
+          g.fillStyle = ok ? 'rgba(125,220,130,.30)' : 'rgba(230,90,80,.32)'; g.strokeStyle = ok ? '#8de295' : '#ee6b62'; g.lineWidth = 2 / z;
+          g.fillRect(gx * T, gy * T, T * d.w, T * d.h); g.strokeRect(gx * T, gy * T, T * d.w, T * d.h);
+        };
+        if (bp.cells){
+          // A row of walls: green where it will be built, red where blocked or beyond the resources.
+          for (const c of bp.cells) cell(c.gx, c.gy, c.afford && builder);
+          const n = bp.cells.filter(c => c.afford).length, last = bp.cells[bp.cells.length - 1];
+          const cost = G.Economy.describe(Object.fromEntries(Object.entries(d.cost).map(([k, v]) => [k, v * n])));
+          g.font = `bold ${12 / z}px sans-serif`; g.textAlign = 'center';
+          const label = `${n} × ${d.name}${n ? ' · ' + cost : ''}`, lx = (last.gx + 0.5) * T, ly = last.gy * T - 8 / z, w = g.measureText(label).width + 12 / z;
+          g.fillStyle = 'rgba(10,16,12,.8)'; g.fillRect(lx - w / 2, ly - 14 / z, w, 18 / z);
+          g.fillStyle = n ? '#dff5c8' : '#ffb3a8'; g.fillText(label, lx, ly);
+        } else cell(bp.gx, bp.gy, G.Buildings.canPlaceKey(bp.key, bp.gx, bp.gy) && builder && G.Economy.canAfford(d.cost));
       }
       if (S.formationPreview){
         const fp = S.formationPreview;

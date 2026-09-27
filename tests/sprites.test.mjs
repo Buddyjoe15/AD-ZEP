@@ -130,3 +130,67 @@ test('sprite lab: the example spec renders top-down at 96 × 96 and passes every
   const byCargo = { ...varied, variants: { ...varied.variants, at: [0, 1] } };
   assert.ok(check(byCargo, RV).some(c => c.name === 'Variants' && c.level === 'pass'), 'cargo fill levels: the engine picks one');
 });
+
+test('Sentry Turret: modelled base states and a head layer in 16 facings, turned about the footprint centre', () => {
+  const tu = data.sprites.sentry_turret, H = tu.head, N = tu.frameWidth;
+  assert.equal(N, 96, 'a 1 × 1 structure is 96 × 96 art px');
+  for (const s of ['foundation', 'frame', 'near-complete', 'finished', 'damaged', 'rubble']) assert.ok(tu.states[s], s);
+  assert.equal(tu.frames[0].length, Object.values(tu.states).reduce((n, s) => n + s.frames, 0));
+  assert.equal(H.facings, 16); assert.equal(H.frames.length, 16);
+  assert.deepEqual(H.on, { finished: 'idle', damaged: 'damaged' });
+  assert.deepEqual(H.firing, { idle: ['firing', 'flash'], damaged: ['damaged-firing', 'damaged-flash'] });
+  for (const [fire, flash] of Object.values(H.firing)) assert.equal(H.states[fire].frames, H.states[flash].frames, 'a flash frame for every firing frame');
+  const dmg = H.states['damaged-firing'];
+  assert.equal(new Set(H.frames[0].slice(dmg.start, dmg.start + dmg.frames)).size, dmg.frames, 'the damaged gun spins and feeds too');
+  assert.equal(new Set(H.frames[0].slice(H.states.firing.start, H.states.firing.start + H.states.firing.frames)).size, H.states.firing.frames, 'the barrels and belts move every firing frame');
+  const cols = Object.values(H.states).reduce((n, s) => n + s.frames, 0);
+  for (const row of H.frames){ assert.equal(row.length, cols); for (const str of row) assert.equal(str.length, N * N); }
+  // Each facing is the model turned, not a copy: every facing differs, and the one pointing
+  // down is the up facing turned 180° (nearly: each is rasterised on its own).
+  assert.equal(new Set(H.frames.map(r => r[0])).size, 16);
+  const up = decode(H.frames[0][0], N), down = decode(H.frames[8][0], N), turned = rot90(rot90(up));
+  let differ = 0, solid = 0;
+  for (let i = 0; i < up.p.length; i++){ if (!!down.p[i] !== !!turned.p[i]) differ++; if (up.p[i]) solid++; }
+  assert.ok(differ < solid * 0.04, `down facing silhouette is the up facing turned (${differ} of ${solid} px differ)`);
+});
+
+test('walls: 16 joined pieces per state that reach the tile edge exactly on the sides they join; gates in three lengths, both ways, with an open state', () => {
+  for (const name of ['wood_wall', 'defensive_wall', 'reinforced_wall']){
+    const sp = data.sprites[name], N = sp.frameWidth;
+    for (const state of ['finished', 'damaged']){
+      const st = sp.states[state];
+      assert.equal(st.frames, 16, `${name} ${state}`); assert.ok(st.connect);
+      for (let mask = 0; mask < 16; mask++){
+        const g = decode(sp.frames[0][st.start + mask], N), mid = N / 2;
+        const edges = { 1: g.get(mid, 0), 2: g.get(N - 1, mid), 4: g.get(mid, N - 1), 8: g.get(0, mid) };
+        for (const [bit, v] of Object.entries(edges)) assert.equal(!!v, !!(mask & bit), `${name} ${state} mask ${mask} side ${bit}`);
+      }
+    }
+    for (const state of ['foundation', 'frame', 'near-complete', 'rubble']) assert.ok(sp.states[state] && !sp.states[state].connect, `${name} ${state}`);
+  }
+  for (const [name, w, h] of [['gate', 2, 1], ['gate_3', 3, 1], ['gate_4', 4, 1], ['gate_v', 1, 2], ['gate_3_v', 1, 3], ['gate_4_v', 1, 4]]){
+    const sp = data.sprites[name];
+    assert.deepEqual([sp.frameWidth, sp.frameHeight], [w * 96, h * 96], name);
+    assert.ok(sp.states.open && sp.states.finished && sp.states.damaged, name);
+    assert.notEqual(sp.frames[0][sp.states.open.start], sp.frames[0][sp.states.finished.start], name + ' looks different open');
+  }
+  // A vertical gate is the horizontal one turned, not squashed: same silhouette area, near enough.
+  const area = s => [...s].filter(ch => ch !== ALPHABET[0]).length;
+  const hz = data.sprites.gate_3, vt = data.sprites.gate_3_v, a = area(hz.frames[0][hz.states.finished.start]), b = area(vt.frames[0][vt.states.finished.start]);
+  assert.ok(Math.abs(a - b) < a * 0.05, `turned gate keeps its size (${a} vs ${b} px)`);
+});
+
+test('Laser Turret: a diamond base and a head in 16 facings whose charging frames light one more coil each', () => {
+  const sp = data.sprites.laser_turret, H = sp.head;
+  assert.equal(sp.frameWidth, 96);
+  assert.equal(H.facings, 16);
+  assert.equal(H.chargeTime, 2.5);
+  assert.deepEqual(H.firing, { idle: ['charging', 'flash'], damaged: ['damaged-charging', 'damaged-flash'] });
+  const ch = H.states.charging, row = H.frames[0];
+  assert.equal(ch.frames, 6);
+  // Each charging frame has more lit (cyan) pixels than the one before.
+  const cyan = new Set(['cyan1', 'cyan2', 'white'].map(n => ALPHABET[PALETTE.findIndex(([k]) => k === n) + 1]));
+  const lit = s => [...s].filter(c => cyan.has(c)).length;
+  for (let i = 1; i < ch.frames; i++) assert.ok(lit(row[ch.start + i]) > lit(row[ch.start + i - 1]), 'coil ' + i);
+  assert.ok(lit(row[H.states.idle.start]) < lit(row[ch.start]), 'idle has no coil lit');
+});

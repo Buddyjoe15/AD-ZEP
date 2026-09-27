@@ -28,8 +28,8 @@
       fn(g, u, z, t, def);
       g.restore();
     },
-    drawBuilding(g, b, z, t){
-      if (G.PixelArt.buildingSprite(b.type)) return G.PixelArt.drawBuilding(g, b, z, t);
+    drawBuilding(g, b, z, t, noShadow){
+      if (G.PixelArt.buildingSprite(b.type)) return G.PixelArt.drawBuilding(g, b, z, t, noShadow);
       const def = G.Defs.buildables.get(b.type);
       const fn = this.buildings[b.type] || (def && def.symbol ? this.buildings.symbol : this.buildings.generic);
       fn(g, b, z, t, def);
@@ -138,19 +138,25 @@
     if (colors.rivet){ g.fillStyle = colors.rivet; for (const [ox, oy] of [[8, 8], [T - 10, 8], [8, T - 10], [T - 10, T - 10]]) g.fillRect(px + ox, py + oy, 3, 3); }
     if (b.hp < b.maxHp) bar(g, b.x, py + 2, 38, b.hp / b.maxHp);
   };
+  V.registerBuilding('wood_wall', wall({ base: '#6b4a2c', edge: '#2b1d12', block: '#8a6440' }));
   V.registerBuilding('defensive_wall', wall({ base: '#626963', edge: '#272d29', block: '#7b837c' }));
   V.registerBuilding('reinforced_wall', wall({ base: '#3e4a52', edge: '#161c20', block: '#5b6a73', rivet: '#b9c6cc' }));
 
-  // Gate: two leaves that slide apart while it is open.
-  V.registerBuilding('gate', (g, b, z) => {
-    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T, w = b.w * T, h = b.h * T, open = G.Gates.isOpen(b);
-    g.fillStyle = '#3b423d'; g.fillRect(px, py + 4, w, h - 8);
-    g.fillStyle = '#262c28'; g.fillRect(px, py + 2, 8, h - 4); g.fillRect(px + w - 8, py + 2, 8, h - 4);
+  // Gates: two leaves that slide apart while open, along the gate's long side (any length,
+  // horizontal or vertical: drawn in the gate's own frame, turned for a vertical one).
+  const gate = (g, b, z) => {
+    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T, open = G.Gates.isOpen(b), vert = b.h > b.w;
+    const w = (vert ? b.h : b.w) * T, h = T;
+    g.save(); g.translate(b.x, b.y); if (vert) g.rotate(Math.PI / 2); g.translate(-w / 2, -h / 2);
+    g.fillStyle = '#3b423d'; g.fillRect(0, 4, w, h - 8);
+    g.fillStyle = '#262c28'; g.fillRect(0, 2, 8, h - 4); g.fillRect(w - 8, 2, 8, h - 4);
     const leaf = open ? 8 : (w - 16) / 2;
-    g.fillStyle = open ? '#5f6b62' : '#8f9c8a'; g.fillRect(px + 8, py + 8, leaf, h - 16); g.fillRect(px + w - 8 - leaf, py + 8, leaf, h - 16);
-    g.fillStyle = open ? '#6fe08e' : '#e85e55'; g.fillRect(b.x - 3, py + 3, 6, 4);
-    if (b.hp < b.maxHp) bar(g, b.x, py - 6, w * 0.8, b.hp / b.maxHp);
-  });
+    g.fillStyle = open ? '#5f6b62' : '#8f9c8a'; g.fillRect(8, 8, leaf, h - 16); g.fillRect(w - 8 - leaf, 8, leaf, h - 16);
+    g.fillStyle = open ? '#6fe08e' : '#e85e55'; g.fillRect(w / 2 - 3, 3, 6, 4);
+    g.restore();
+    if (b.hp < b.maxHp) bar(g, b.x, py - 6, b.w * T * 0.8, b.hp / b.maxHp);
+  };
+  for (const key of ['gate', 'gate_3', 'gate_4', 'gate_v', 'gate_3_v', 'gate_4_v']) V.registerBuilding(key, gate);
 
   // Turrets: a base, and a head that turns toward what it last aimed at.
   const turret = (style) => (g, b, z, t, def) => {
@@ -208,6 +214,7 @@
   });
 
   V.registerBuilding('sentry_turret', turret({ ring: '#4e6470', head: '#7fa3b5', barrel: '#1b2226', barrels: [0], width: 4, length: 20 }));
+  V.registerBuilding('laser_turret', turret({ ring: '#3d5560', head: '#b3bdb5', barrel: '#36b8ef', barrels: [0], width: 5, length: 22 }));
   V.registerBuilding('heavy_turret', turret({ ring: '#46525a', head: '#6f8594', barrel: '#151b1e', barrels: [0], width: 10, length: 20 }));
   V.registerBuilding('aa_turret', turret({ ring: '#4a6a80', head: '#8fb8d8', barrel: '#1b2226', barrels: [-4, 4], width: 3, length: 22 }));
   V.registerBuilding('missile_battery', turret({ ring: '#6a4a3a', head: '#d9906a', barrel: '#2a1d16', missiles: true }));

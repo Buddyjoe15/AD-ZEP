@@ -567,6 +567,193 @@ test('pixel-art sprites: eight facings, engine shadows, structure states, dust t
   }
 });
 
+test('pixel-art Sentry Turret: its head layer turns toward the aim at its turn rate, fires, and drops when destroyed', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    const r = await page.evaluate(() => {
+      const G = GW, S = G.State, h = G.Units.hero(), T = G.CONFIG.TILE, P = G.PixelArt;
+      S.paused = true;
+      const b = G.Buildings.add('sentry_turret', Math.floor(h.x / T) + 2, Math.floor(h.y / T) + 2, { team: 'blue' });
+      const sp = P.data.sprites.sentry_turret, H = sp.head, s = G.Turrets.get(b);
+      G.centerCamera(b.x, b.y, 1); G.Renderer.draw();
+      const start = P.aims.get(b.id).a;                       // up, as built
+      s.aim = 0;                                               // the simulation aims east
+      const drawn = [0.05, 0.1, 0.15, 0.3].map(t => P.headAim(b, H, S.time + t));
+      // Just fired: the firing frames play over the idle head.
+      s.targetId = 'x'; s.cool = G.Defs.buildables.get('sentry_turret').behaviors[0].reload - 0.01;
+      let stamped = null; const orig = P.stampFrame; P.stampFrame = function(g, spr, str){ if (spr === sp) stamped = str; return orig.apply(this, arguments); };
+      P.drawBuilding(document.createElement('canvas').getContext('2d'), b, 1, S.time + 0.3);
+      P.stampFrame = orig;
+      const facingEast = H.facings / 4, at = t => Math.floor(t * H.states.firing.fps) % H.states.firing.frames;
+      const firing = stamped === H.frames[facingEast][H.states.flash.start + at(S.time + 0.3)];
+      // Between rounds, while it still has a target, the barrels spin and the belts feed.
+      s.cool = 0.2; stamped = null; P.stampFrame = function(g, spr, str){ if (spr === sp) stamped = str; return orig.apply(this, arguments); };
+      const spun = [0.3, 0.37, 0.44].map(dt => { P.drawBuilding(document.createElement('canvas').getContext('2d'), b, 1, S.time + dt); return H.frames[facingEast].lastIndexOf(stamped) - H.states.firing.start; });   // firing frame 0 is the idle frame too
+      // Below half health it plays the damaged firing loop instead.
+      b.hp = b.maxHp * 0.3; const df = H.states['damaged-firing'];
+      P.stampFrame = function(g, spr, str){ if (spr === sp) stamped = str; return orig.apply(this, arguments); };
+      const damagedSpin = [0.3, 0.37, 0.44].map(dt => { P.drawBuilding(document.createElement('canvas').getContext('2d'), b, 1, S.time + dt); return H.frames[facingEast].lastIndexOf(stamped) - df.start; });
+      P.stampFrame = orig;
+      b.hp = 0; S.paused = false;
+      return new Promise(res => setTimeout(() => res({ sprite: P.buildingSprite('sentry_turret'), facings: H.facings, start, drawn, firing, spun, damagedSpin, damagedFrames: df.frames, spinFrames: H.states.firing.frames, removed: !P.aims.has(b.id), rubble: P.rubble.some(x => x.type === 'sentry_turret') }), 300));
+    });
+    assert.equal(r.sprite, 'sentry_turret');
+    assert.equal(r.facings, 16);
+    assert.ok(Math.abs(r.start + Math.PI / 2) < 1e-9, 'built aiming up');
+    assert.ok(r.drawn[0] > r.start && r.drawn[0] < r.drawn[1] && r.drawn[1] < r.drawn[2], 'the head eases round, not snapping');
+    assert.ok(Math.abs(r.drawn[3]) < 1e-9, 'and settles on the aim');
+    assert.ok(r.firing, 'the flash frame plays facing the target just after a round');
+    assert.equal(new Set(r.spun).size, 3, 'between rounds the firing frames loop: barrels spin, belts feed');
+    assert.ok(r.spun.every(f => f >= 0 && f < r.spinFrames), 'and they are firing frames, not flash frames');
+    assert.equal(new Set(r.damagedSpin).size, 3, 'a damaged turret spins and feeds too');
+    assert.ok(r.damagedSpin.every(f => f >= 0 && f < r.damagedFrames), 'with its damaged firing frames');
+    assert.ok(r.removed && r.rubble, 'a destroyed turret drops its head and leaves rubble');
+    await page.screenshot({ path: path.join(OUT, 'pixel-art-sentry-turret.png') });
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('pixel-art walls join their neighbours and gate ends (never diagonally); gates show open; the build menu rotates gates', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    const r = await page.evaluate(() => {
+      const G = GW, S = G.State, h = G.Units.hero(), T = G.CONFIG.TILE, P = G.PixelArt;
+      S.paused = true;
+      const x0 = Math.floor(h.x / T) - 6, y0 = Math.floor(h.y / T) + 6;
+      const add = (k, x, y) => G.Buildings.add(k, x0 + x, y0 + y, { team: 'blue' });
+      // A run: wood, metal, a 1×3 gate, reinforced; a wall beside the gate's long side; a corner;
+      // a lone wall; a pair touching only at a corner.
+      const a = add('wood_wall', 0, 0), b = add('defensive_wall', 1, 0), gate = add('gate_3', 2, 0), c = add('reinforced_wall', 5, 0);
+      const side = add('defensive_wall', 3, 1), down = add('wood_wall', 0, 1);
+      const lone = add('defensive_wall', 8, 4), d1 = add('wood_wall', 10, 4), d2 = add('wood_wall', 11, 5);
+      const vg = add('gate_v', 0, 2), below = add('wood_wall', 0, 4);
+      const mask = w => P.joins(w);
+      G.centerCamera((x0 + 3) * T, (y0 + 2) * T, 1); G.Renderer.draw();
+      const sp = P.data.sprites.defensive_wall;
+      const col = P.buildingCol(b, sp, 0);
+      // Open the gate by bringing Vance to it.
+      h.x = gate.x; h.y = gate.y - 1.5 * T; h.path = []; G.rebuildSpatial(); G.Gates.update();
+      const open = P.buildingState(gate, P.data.sprites.gate_3);
+      return { a: mask(a), b: mask(b), c: mask(c), side: mask(side), down: mask(down), lone: mask(lone), d1: mask(d1), d2: mask(d2), below: mask(below), col, finished: sp.states.finished.start, open };
+    });
+    assert.equal(r.a, 2 | 4, 'wood wall joins the metal wall east and the wood wall south');
+    assert.equal(r.b, 2 | 8, 'metal wall joins the wood wall west and the gate end east');
+    assert.equal(r.c, 8, 'reinforced wall joins the gate end west');
+    assert.equal(r.side, 0, 'a wall beside a gate\'s long side doesn\'t join it');
+    assert.equal(r.down, 1 | 4, 'joins the wall north and the vertical gate end south');
+    assert.equal(r.below, 1, 'and the vertical gate end north');
+    assert.equal(r.lone, 0);
+    assert.equal(r.d1, 0, 'no diagonal joins'); assert.equal(r.d2, 0);
+    assert.equal(r.col, r.finished + (2 | 8), 'the sheet column is the finished piece for its mask');
+    assert.equal(r.open, 'open', 'an open gate shows its open state');
+    await page.screenshot({ path: path.join(OUT, 'pixel-art-walls.png') });
+    // Build menu: the Wood Wall and gates are listed, vertical twins are not; Rotate switches.
+    await page.evaluate(() => { GW.State.paused = true; GW.BuildUI.enter(GW.Units.crew().find(u => u.type === 'utility_spider')); });
+    const listed = await page.$$eval('[data-build-pick]', els => els.map(e => e.dataset.buildPick));
+    assert.ok(['wood_wall', 'defensive_wall', 'reinforced_wall', 'gate', 'gate_3', 'gate_4'].every(k => listed.includes(k)), listed.join());
+    assert.ok(!listed.some(k => k.endsWith('_v')), 'vertical twins are reached by rotating');
+    await page.click('[data-build-pick="gate_4"]');
+    await page.click('#rotateBuildBtn');
+    assert.equal(await page.evaluate(() => GW.State.buildMode.key), 'gate_4_v');
+    await page.keyboard.press('r');
+    assert.equal(await page.evaluate(() => GW.State.buildMode.key), 'gate_4');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('building walls: press and drag builds a row in the direction dragged, previewed with its count and cost', { skip, timeout: 60000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    // An open 8 × 8 patch south of the Spider, and the Spider in build mode with a wall picked.
+    const at = await page.evaluate(() => {
+      const G = GW, S = G.State, T = 48, u = S.units.find(u => u.type === 'utility_spider');
+      S.resources.metal = 2000; S.resources.steel = 200;
+      const free = (x, y) => { for (let j = 0; j < 8; j++) for (let i = 0; i < 8; i++) if (!G.Buildings.canPlace(x + i, y + j, 1, 1)) return false; return true; };
+      let spot = null;
+      for (let r = 3; r < 20 && !spot; r++) for (let dx = -r; dx <= r && !spot; dx++){ const x = Math.floor(u.x / T) + dx, y = Math.floor(u.y / T) + r; if (free(x, y)) spot = { gx: x, gy: y }; }
+      G.centerCamera((spot.gx + 4) * T, (spot.gy + 4) * T, 1);
+      G.BuildUI.enter(u); G.BuildUI.choose('wood_wall');
+      return spot;
+    });
+    const cellCentre = async (gx, gy) => screen(page, (gx + 0.5) * 48, (gy + 0.5) * 48);
+    // Drag east 4 tiles (and a little south): a row of 5 east-west.
+    let a = await cellCentre(at.gx, at.gy), b = await cellCentre(at.gx + 4, at.gy + 1);
+    await page.mouse.move(a.x, a.y); await page.mouse.down();
+    await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 3 }); await page.mouse.move(b.x, b.y, { steps: 3 });
+    const pv = await page.evaluate(() => GW.State.buildPreview && GW.State.buildPreview.cells.map(c => [c.gx, c.gy, c.afford]));
+    assert.equal(pv.length, 5, 'five cells previewed');
+    assert.ok(pv.every(([x, y, ok], i) => x === at.gx + i && y === at.gy && ok), JSON.stringify(pv));
+    await page.screenshot({ path: path.join(OUT, 'wall-row-preview.png') });
+    await page.mouse.up();
+    let sites = await page.evaluate(() => GW.State.constructionSites.map(s => [s.type, s.gx, s.gy]));
+    assert.equal(sites.length, 5, 'a row of five queued');
+    assert.ok(sites.every(([t, x, y], i) => t === 'wood_wall' && x === at.gx + i && y === at.gy));
+    // Cancel it, then drag north-south with a metal wall: the row follows the drag.
+    await page.evaluate(() => { const u = GW.State.units.find(u => u.type === 'utility_spider'); GW.Orders.move([u], u.x, u.y); GW.BuildUI.enter(u); GW.BuildUI.choose('defensive_wall'); });
+    a = await cellCentre(at.gx + 6, at.gy + 6); b = await cellCentre(at.gx + 7, at.gy + 1);
+    await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up();
+    sites = await page.evaluate(() => GW.State.constructionSites.map(s => [s.type, s.gx, s.gy]));
+    assert.equal(sites.length, 6);
+    assert.ok(sites.every(([t, x, y], i) => t === 'defensive_wall' && x === at.gx + 6 && y === at.gy + 6 - i), JSON.stringify(sites));
+    // A tap still builds one section.
+    await page.evaluate(() => { const u = GW.State.units.find(u => u.type === 'utility_spider'); GW.Orders.move([u], u.x, u.y); GW.BuildUI.enter(u); GW.BuildUI.choose('reinforced_wall'); });
+    a = await cellCentre(at.gx + 2, at.gy + 4);
+    await page.mouse.click(a.x, a.y);
+    assert.equal(await page.evaluate(() => GW.State.constructionSites.length), 1);
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('pixel-art Laser Turret: its coils show the real charge, then the shot', { skip, timeout: 60000 }, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
+    const r = await page.evaluate(() => {
+      const G = GW, S = G.State, h = G.Units.hero(), T = G.CONFIG.TILE, P = G.PixelArt;
+      S.paused = true;
+      const b = G.Buildings.add('laser_turret', Math.floor(h.x / T) + 3, Math.floor(h.y / T) + 3, { team: 'blue' });
+      const sp = P.data.sprites.laser_turret, H = sp.head, s = G.Turrets.get(b), cfg = G.Defs.buildables.get('laser_turret').behaviors[0];
+      let stamped = null; const orig = P.stampFrame;
+      P.stampFrame = function(g, spr, str){ if (spr === sp) stamped = str; return orig.apply(this, arguments); };
+      const col = () => { P.drawBuilding(document.createElement('canvas').getContext('2d'), b, 1, S.time); return H.frames[4].indexOf(stamped); };   // aim 0: east, facing 4
+      s.aim = 0; P.aims.set(b.id, { a: 0, t: S.time });
+      const idle = col();
+      s.targetId = 'x'; s.cool = 0; s.charged = 1.3;
+      const charging = col();
+      s.charged = 2.45;
+      const full = col();
+      s.charged = 0; s.cool = cfg.reload - 0.01;
+      const shot = col();
+      P.stampFrame = orig;
+      // The beam starts at the emitter of the rifle as drawn: aim 10° is drawn in the east
+      // facing, so the muzzle is due east of the pivot.
+      P.aims.set(b.id, { a: 10 * Math.PI / 180, t: S.time });
+      const m = P.muzzle(b), muzzle = [Math.round(m.x - b.x), Math.round(m.y - b.y)];
+      return { idle, charging, full, shot, muzzle, H: { idle: H.states.idle.start, ch: H.states.charging.start, n: H.states.charging.frames, flash: H.states.flash.start } };
+    });
+    assert.equal(r.idle, r.H.idle, 'no target: idle, coils dark');
+    assert.equal(r.charging, r.H.ch + Math.floor(1.3 / 2.5 * r.H.n), 'half charged: half the coils');
+    assert.equal(r.full, r.H.ch + r.H.n - 1, 'nearly charged: every coil');
+    assert.equal(r.shot, r.H.flash, 'just fired: the shot frame');
+    assert.deepEqual(r.muzzle, [21, 0], 'the beam leaves the emitter of the rifle as drawn');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
 test('Ore Processor window lists its three products and queues them; the top bar shows resources as they arrive', { skip, timeout: 60000 }, async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const browser = await launch();

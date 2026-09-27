@@ -216,6 +216,44 @@ test('construction completes, blocks the tile and refunds when cancelled', () =>
   assert.equal(G.Economy.get('metal'), 100);
 });
 
+test('a row of walls: one Spider builds each in turn, skipping blocked tiles; cancelling refunds the rest; a save mid-row carries on', () => {
+  const G = newGame();
+  const S = G.State, spider = find(G, 'utility_spider'), p = field(G, 12, 14);
+  S.resources.metal = 1000;
+  // Five cells east of p, with a wall already on the third.
+  const cells = [0, 1, 2, 3, 4].map(i => ({ gx: p.x + i, gy: p.y }));
+  G.Buildings.add('defensive_wall', p.x + 2, p.y);
+  const sites = G.Construction.orderRow(spider, 'wood_wall', cells);
+  assert.equal(sites.length, 4, 'the blocked tile is skipped');
+  assert.equal(G.Economy.get('metal'), 1000 - 4 * 25, 'paid for four');
+  assert.equal(spider.buildSiteId, sites[0].id, 'works the first');
+  G.Sim.run(0.5);
+  assert.equal(S.constructionSites.length, 4, 'the queued sites wait their turn rather than being refunded');
+  // Save mid-row after the first is built, restore, and the rest still get built.
+  let t = 0;
+  while (S.buildings.filter(b => b.type === 'wood_wall' && !b.testZone).length < 1 && t < 30){ G.Sim.run(0.5); t += 0.5; }
+  const saved = JSON.parse(JSON.stringify(G.Save.serialize()));
+  G.Save.restore(saved, 1);
+  G.State.paused = false;                                     // loading pauses the game
+  G.Sim.run(40);
+  const built = G.State.buildings.filter(b => b.type === 'wood_wall' && !b.testZone).map(b => b.gx - p.x).sort((a, b) => a - b);
+  assert.equal(built.join(), '0,1,3,4', 'all four built');
+  assert.equal(G.State.constructionSites.length, 0);
+  const sp2 = find(G, 'utility_spider');
+  assert.equal(sp2.buildSiteId, null); assert.equal(sp2.command, 'idle');
+  // A new order cancels the whole queue and refunds it.
+  G.State.resources.metal = 1000;
+  const row = G.Construction.orderRow(sp2, 'defensive_wall', [0, 1, 2].map(i => ({ gx: p.x + i, gy: p.y + 2 })));
+  assert.equal(row.length, 3);
+  assert.equal(G.Economy.get('metal'), 1000 - 3 * 60);
+  G.Orders.move([sp2], sp2.x + 100, sp2.y);
+  assert.equal(G.Economy.get('metal'), 1000);
+  assert.equal(G.State.constructionSites.length, 0);
+  // The row stops where the metal runs out.
+  G.State.resources.metal = 130;
+  assert.equal(G.Construction.orderRow(sp2, 'defensive_wall', [0, 1, 2].map(i => ({ gx: p.x + i, gy: p.y + 3 }))).length, 2);
+});
+
 test('built chests are containers, not solid buildings', () => {
   const G = newGame();
   const spider = find(G, 'utility_spider'), p = openTileNear(G, 3, 5), n = G.State.containers.length;
@@ -879,7 +917,7 @@ test('map editor: paint terrain around structures, erase objects, and keep it al
   assert.equal(S.terrainEdits.length, edits, 'the covered stroke was dropped');
   // Erase: a structure, a resource node, a signal.
   const wall = G.Buildings.add('defensive_wall', ux + 8, uy);
-  assert.equal(G.MapEdit.removeAt(wall.x, wall.y), 'Defensive Wall');
+  assert.equal(G.MapEdit.removeAt(wall.x, wall.y), 'Metal Wall');
   assert.ok(!S.buildings.includes(wall));
   assert.equal(grid.passable(ux + 8, uy), true);
   const node = S.resourceNodes.find(n => n.type === 'scrap_mine');
@@ -1020,8 +1058,8 @@ test('power: the Warp Drive gives 25, Solar Arrays scale with the Earth, and a s
   assert.ok(wind && wind.gy + wind.h <= ship.gy, 'wind turbine north of the ship');
   assert.equal(P.output(wind), 6, 'steady breeze on the first Earth');
   assert.equal(P.grid.supply, 39);
-  const sensors = S.buildings.filter(b => b.type === 'defensive_sensor');
-  assert.equal(P.grid.demand, 5 * mines.filter(b => G.Gather.extracting(b)).length + 3 * sensors.length, 'extractors and the always-on sensor');
+  const sensors = S.buildings.filter(b => b.type === 'defensive_sensor'), lasers = S.buildings.filter(b => b.type === 'laser_turret');
+  assert.equal(P.grid.demand, 5 * mines.filter(b => G.Gather.extracting(b)).length + 3 * sensors.length + 6 * lasers.length, 'extractors and the always-on sensor and laser turret');
   // Producing draws power.
   S.resources.metal = 10000;
   assert.ok(G.Fabrication.enqueue(fab, 'security_drone'));
@@ -1112,6 +1150,66 @@ test('walls: Reinforced Walls take less damage; both block movement like the old
   const dPlain = hit(plain), dStrong = hit(strong);
   assert.ok(dPlain > 0, 'wall damaged: ' + dPlain);
   assert.ok(Math.abs(dStrong - dPlain * 0.65) < 1e-6, `reinforced takes 35% less (${dStrong} vs ${dPlain})`);
+});
+
+test('Laser Turret: charges 2.5 s with a target in range before each shot, and loses the charge when the target is gone', () => {
+  const G = newGame();
+  const S = G.State, T = 48, p = field(G, 18, 16), D = G.Defs.buildables.get('laser_turret');
+  const cfg = D.behaviors.find(x => x.type === 'turret');
+  assert.equal(cfg.charge, 2.5); assert.equal(D.power.demand, 6);
+  for (const u of G.Units.crew()) u.maxHp = u.hp = 1e9;
+  const b = G.Buildings.add('laser_turret', p.x, p.y, { team: 'blue' });
+  const foe = G.Units.spawn('hostile_machine', b.x + 5 * T, b.y);
+  foe.speed = 0; foe.damage = 0; foe.maxHp = foe.hp = 1000;
+  G.rebuildSpatial();
+  const s = G.Turrets.get(b);
+  G.Sim.run(2);
+  assert.equal(foe.hp, 1000, 'no shot while charging');
+  assert.ok(s.charged > 1.5 && s.charged < 2.5, 'charging: ' + s.charged);
+  assert.ok(Math.abs(s.aim) < 0.05, 'aimed at the target while it charges');
+  G.Sim.run(0.7);
+  assert.ok(foe.hp < 1000, 'fired once charged');
+  assert.ok(S.shots.some(x => x.kind === 'laser') || foe.hp < 1000);
+  // Losing the target drops the charge.
+  G.Sim.run(1.5);
+  foe.hp = 0; G.Sim.run(0.5);
+  assert.equal(s.charged, 0, 'charge lost with no target');
+  // It traverses at half a turn a second and holds a charged shot until the rifle is on
+  // target: charged and facing east, a target appears due west.
+  const west = G.Units.spawn('hostile_machine', b.x - 5 * T, b.y);
+  west.speed = 0; west.damage = 0; west.maxHp = west.hp = 1000;
+  s.aim = 0; s.charged = cfg.charge; s.cool = 0; G.rebuildSpatial();
+  G.Sim.run(0.5);
+  assert.equal(west.hp, 1000, 'no shot while turning round');
+  assert.ok(Math.abs(Math.abs(s.aim) - Math.PI / 2) < 0.1, 'a quarter turn in half a second: ' + s.aim);
+  G.Sim.run(0.7);
+  assert.ok(west.hp < 1000, 'fires once on target');
+  assert.ok(Math.abs(Math.abs(s.aim) - Math.PI) < 0.01, 'facing west when it fired');
+});
+
+test('gates: 1×3 and 1×4, horizontal and vertical twins; a vertical gate lets friendly units through a north-south wall', () => {
+  const G = newGame();
+  const S = G.State, T = 48, D = G.Defs.buildables;
+  for (const [key, w, h] of [['gate', 2, 1], ['gate_v', 1, 2], ['gate_3', 3, 1], ['gate_3_v', 1, 3], ['gate_4', 4, 1], ['gate_4_v', 1, 4]]){
+    const d = D.get(key);
+    assert.equal(d.w + 'x' + d.h, w + 'x' + h, key);
+    assert.ok(d.gate && !d.blocksMovement, key + ' is a gate');
+    assert.equal(D.get(d.rotateTo).rotateTo, key, key + ' rotates to its twin and back');
+  }
+  assert.equal(D.all().filter(d => d.wall).map(d => d.key).join(), 'wood_wall,defensive_wall,reinforced_wall');
+  // A north-south wall with a vertical 1×3 gate in it.
+  const p = field(G, 20, 20);
+  for (let y = p.y - 7; y <= p.y + 9; y++) if (y < p.y || y > p.y + 2) G.Buildings.add('reinforced_wall', p.x, y);
+  const gate = G.Buildings.add('gate_3_v', p.x, p.y);
+  for (let y = p.y; y < p.y + 3; y++) assert.equal(S.grid.passable(p.x, y), true);
+  const sp = find(G, 'utility_spider');
+  G.Units.clearOrders(sp); sp.x = gate.x - 4 * T; sp.y = gate.y;
+  G.rebuildSpatial();
+  G.Orders.move([sp], gate.x + 4 * T, gate.y);
+  G.Sim.run(6);
+  assert.ok(sp.x > gate.x + T, 'spider passed east through the vertical gate: x ' + sp.x + ' gate ' + gate.x);
+  const raider = G.Units.spawn('hostile_machine', gate.x + 20 * T, gate.y);
+  assert.equal(G.Gates.blocksWorld(raider, gate.x, gate.y), true, 'enemies never pass');
 });
 
 test('gate: friendly units pass when it opens; enemies never do, and it shuts while they are near', () => {

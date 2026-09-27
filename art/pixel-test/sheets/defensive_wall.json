@@ -1,0 +1,56 @@
+{
+  "name": "defensive_wall",
+  "frameWidth": 96,
+  "frameHeight": 96,
+  "origin": [
+    0,
+    0
+  ],
+  "footprintTiles": [
+    1,
+    1
+  ],
+  "worldPxPerArtPx": 0.5,
+  "rows": "single row",
+  "model": "art/sprite-lab/specs/metal_wall.mjs",
+  "states": {
+    "foundation": {
+      "start": 0,
+      "frames": 1
+    },
+    "frame": {
+      "start": 1,
+      "frames": 1
+    },
+    "near-complete": {
+      "start": 2,
+      "frames": 1
+    },
+    "finished": {
+      "start": 3,
+      "frames": 16,
+      "connect": true
+    },
+    "damaged": {
+      "start": 19,
+      "frames": 16,
+      "connect": true
+    },
+    "rubble": {
+      "start": 35,
+      "frames": 1
+    }
+  },
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      8,
+      8
+    ],
+    "elevation": "structure"
+  },
+  "team": "team0..team2 (magenta ramp)",
+  "image": "defensive_wall.png",
+  "sheetWidth": 3456,
+  "sheetHeight": 96
+}

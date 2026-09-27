@@ -1,5 +1,5 @@
-/* Pixel-art presentation (art/pixel-test, data in pixel-data.js). Units, the Repair Station
-   and grass/clearing terrain get top-down pixel art; everything without pixel art keeps its
+/* Pixel-art presentation (art/pixel-test, data in pixel-data.js). Units, the Repair Station,
+   the Sentry Turret (with a head layer that turns to track its target) and grass/clearing terrain get top-down pixel art; everything without pixel art keeps its
    Canvas art. Each sprite records its own world px per art px (units and structures are
    drawn at 2 art px per world px, terrain at 1). Units pick the nearest of eight authored facings instead of being rotated, and
    shadows are drawn here, never baked into sprites: each sprite's silhouette, offset by its
@@ -28,7 +28,11 @@
     enabled: !!D && param !== 'classic',
     // Unit `visual` → sprite; buildable key → structure sprite.
     UNITS: { utility: 'spider', salvage: 'salvage_crawler', rifle: 'drone', scout: 'drone', hero: 'vance' },
-    BUILDINGS: { repair: 'repair_station' },
+    BUILDINGS: {
+      repair: 'repair_station', sentry_turret: 'sentry_turret', laser_turret: 'laser_turret',
+      wood_wall: 'wood_wall', defensive_wall: 'defensive_wall', reinforced_wall: 'reinforced_wall',
+      gate: 'gate', gate_3: 'gate_3', gate_4: 'gate_4', gate_v: 'gate_v', gate_3_v: 'gate_3_v', gate_4_v: 'gate_4_v'
+    },
     // Terrain drawn with the dust plain tiles (the test map is all grass).
     DUST: new Set(['grass', 'clearing']),
     SHADOW_ALPHA,
@@ -89,11 +93,51 @@
     },
 
     // ---- Structures (main canvas, world space) ----
-    stationState(b, t){
-      const st = D.sprites.repair_station.states;
-      if (b.hp < b.maxHp * 0.5) return st.damaged.start;
-      if (this.repairing(b)) return st.working.start + Math.floor(t * st.working.fps) % st.working.frames;
-      return st.finished.start;
+    // State of a built structure: open while a gate is open, damaged below half health,
+    // working while its behaviour is active (a Repair Station with a damaged friendly unit in
+    // reach), else finished.
+    buildingState(b, sp){
+      const st = sp.states;
+      if (st.open && G.Gates.isOpen(b)) return 'open';
+      if (st.damaged && b.hp < b.maxHp * 0.5) return 'damaged';
+      if (st.working && this.repairing(b)) return 'working';
+      return 'finished';
+    },
+    stationState(b, t){ const sp = D.sprites.repair_station; return this.frameOf(sp.states[this.buildingState(b, sp)], t); },
+    frameOf(a, t){ return a.start + (a.fps ? Math.floor(t * a.fps) % a.frames : 0); },
+    // Sheet column for built structure b: a connecting state (walls) picks its piece by which
+    // sides join, others play their frames.
+    buildingCol(b, sp, t){
+      const a = sp.states[this.buildingState(b, sp)];
+      return a.connect ? a.start + this.joins(b) : this.frameOf(a, t);
+    },
+    // Wall joins: a wall joins, on each side, a wall of its team on the next tile, or the end
+    // of a gate of its team (a horizontal gate's east or west end, a vertical gate's north or
+    // south end), never diagonally. Bits: 1 north, 2 east, 4 south, 8 west. Rebuilt whenever
+    // structures change; presentation only.
+    joinMasks: new Map(), joinVersion: -1,
+    joins(b){
+      if (this.joinVersion !== G.Buildings.version){ this.joinVersion = G.Buildings.version; this.rebuildJoins(); }
+      return this.joinMasks.get(b.id) || 0;
+    },
+    rebuildJoins(){
+      const tiles = new Map(), key = (x, y) => y * 65536 + x, masks = this.joinMasks;
+      masks.clear();
+      for (const b of G.State.buildings){
+        const d = G.Defs.buildables.get(b.type);
+        if (d && (d.wall || d.gate)) for (let y = b.gy; y < b.gy + b.h; y++) for (let x = b.gx; x < b.gx + b.w; x++) tiles.set(key(x, y), b);
+      }
+      for (const b of G.State.buildings){
+        if (!G.Defs.buildables.get(b.type)?.wall) continue;
+        let mask = 0;
+        for (const [bit, dx, dy] of [[1, 0, -1], [2, 1, 0], [4, 0, 1], [8, -1, 0]]){
+          const n = tiles.get(key(b.gx + dx, b.gy + dy));
+          if (!n || n.team !== b.team) continue;
+          const nd = G.Defs.buildables.get(n.type);
+          if (nd.wall || (nd.gate && (dx ? n.w > n.h : n.h > n.w))) mask |= bit;
+        }
+        masks.set(b.id, mask);
+      }
     },
     // True while a Repair Station has a damaged friendly unit in reach (read-only).
     repairing(b){
@@ -106,19 +150,77 @@
     },
     // Stamps one structure frame at grid position (gx, gy), with its engine shadow.
     stamp(g, name, col, gx, gy, team){
-      const sp = D.sprites[name], T = G.CONFIG.TILE, k = this.worldPerArt(sp), str = sp.frames[0][col];
+      const sp = D.sprites[name];
+      this.stampFrame(g, sp, sp.frames[0][col], gx, gy, team);
+    },
+    // Stamps frame string `str` of sprite `sp` over the footprint at (gx, gy): its engine
+    // shadow, then the sprite; `part` 'shadow' or 'body' stamps just one.
+    stampFrame(g, sp, str, gx, gy, team, part){
+      const T = G.CONFIG.TILE, k = this.worldPerArt(sp);
       const w = sp.frameWidth * k, h = sp.frameHeight * k, x = gx * T, y = gy * T, smooth = g.imageSmoothingEnabled;
       g.imageSmoothingEnabled = false;
-      g.globalAlpha = SHADOW_ALPHA;
-      g.drawImage(this.canvas(str, sp.frameWidth, sp.frameHeight, null, true), x + sp.shadow.offset[0] * k, y + sp.shadow.offset[1] * k, w, h);
-      g.globalAlpha = 1;
-      g.drawImage(this.canvas(str, sp.frameWidth, sp.frameHeight, team || 'blue'), x, y, w, h);
+      if (part !== 'body'){
+        g.globalAlpha = SHADOW_ALPHA;
+        g.drawImage(this.canvas(str, sp.frameWidth, sp.frameHeight, null, true), x + sp.shadow.offset[0] * k, y + sp.shadow.offset[1] * k, w, h);
+        g.globalAlpha = 1;
+      }
+      if (part !== 'shadow') g.drawImage(this.canvas(str, sp.frameWidth, sp.frameHeight, team || 'blue'), x, y, w, h);
       g.imageSmoothingEnabled = smooth;
     },
-    drawBuilding(g, b, z, t){
-      const name = this.BUILDINGS[b.type];
-      this.stamp(g, name, this.stationState(b, t), b.gx, b.gy, b.team);
+    // Built structures draw in two passes, all shadows first, so a structure's shadow never
+    // falls on its neighbour (the joins of a wall stay clean).
+    drawBuildingShadow(g, b, t){
+      const sp = D.sprites[this.BUILDINGS[b.type]];
+      this.stampFrame(g, sp, sp.frames[0][this.buildingCol(b, sp, t)], b.gx, b.gy, b.team, 'shadow');
+    },
+    drawBuilding(g, b, z, t, noShadow){
+      const name = this.BUILDINGS[b.type], sp = D.sprites[name], state = this.buildingState(b, sp);
+      this.stampFrame(g, sp, sp.frames[0][this.buildingCol(b, sp, t)], b.gx, b.gy, b.team, noShadow ? 'body' : undefined);
+      if (sp.head && sp.head.on[state]) this.drawHead(g, b, sp, sp.head.on[state], t);
       if (b.hp < b.maxHp) G.Visuals.bar(g, b.x, b.gy * G.CONFIG.TILE - 7, b.w * G.CONFIG.TILE * 0.8, b.hp / b.maxHp);
+    },
+    // A turret's head layer: the facing nearest the aim it is drawn at, which eases toward the
+    // aim the simulation last set (G.Turrets) at the head's turn rate. While the turret has a
+    // target it loops the firing frames for its resting state (`head.firing`: idle → firing,
+    // damaged → damaged-firing; barrels spinning, belts feeding), and for `flashTime` after
+    // each round the matching flash frame (muzzle flash and recoil). A turret that charges
+    // its shots (the Laser Turret) shows the charging frame for its charge so far instead. Its shadow falls on the
+    // base under it.
+    aims: new Map(),       // building id → { a: drawn aim (radians, 0 = +x), t: last draw time }
+    headAim(b, H, t){
+      const want = G.Turrets.get(b).aim;
+      let d = this.aims.get(b.id);
+      if (!d){ this.aims.set(b.id, d = { a: want, t }); return want; }
+      const dt = Math.min(0.25, Math.max(0, t - d.t)), step = (H.turnRate || Math.PI * 2) * dt;
+      const diff = ((want - d.a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+      d.a = Math.abs(diff) <= step ? want : d.a + Math.sign(diff) * step; d.t = t;
+      return d.a;
+    },
+    // Where a turret's shot leaves its barrel: the muzzle of the head as it is drawn (the
+    // facing nearest its drawn aim), so a beam comes straight out of the rifle. Null for
+    // turrets without pixel art or a muzzle.
+    muzzle(b){
+      const name = this.enabled && this.BUILDINGS[b.type], H = name && D.sprites[name].head, d = H && H.muzzle && this.aims.get(b.id);
+      if (!d) return null;
+      const step = Math.PI * 2 / H.facings, a = Math.round((d.a + Math.PI / 2) / step) * step - Math.PI / 2;
+      return { x: b.x + Math.cos(a) * H.muzzle, y: b.y + Math.sin(a) * H.muzzle };
+    },
+    drawHead(g, b, sp, hs, t){
+      const H = sp.head, s = G.Turrets.get(b), [fireName, flashName] = (H.firing && H.firing[hs]) || [], fire = H.states[fireName], flash = H.states[flashName];
+      let f = this.frameOf(H.states[hs], t);
+      if (fire && s.targetId != null && !s.noAmmo){
+        const cfg = (G.Defs.buildables.get(b.type)?.behaviors || []).find(x => x.type === 'turret'), since = cfg ? cfg.reload - s.cool : Infinity;
+        if (flash && since >= 0 && since < (H.flashTime || 0.12)){
+          // Just fired: a charging head plays its flash frames through; others show the
+          // flash frame matching their firing loop.
+          f = cfg.charge ? flash.start + Math.min(flash.frames - 1, Math.floor(since / (H.flashTime || 0.12) * flash.frames)) : this.frameOf(fire, t) + flash.start - fire.start;
+        } else if (cfg && cfg.charge){
+          // Charging: the frame for the charge so far (idle until it starts).
+          if (s.charged > 0) f = fire.start + Math.min(fire.frames - 1, Math.floor(s.charged / cfg.charge * fire.frames));
+        } else f = this.frameOf(fire, t);
+      }
+      const facing = ((Math.round((this.headAim(b, H, t) + Math.PI / 2) / (Math.PI * 2 / H.facings)) % H.facings) + H.facings) % H.facings;
+      this.stampFrame(g, sp, H.frames[facing][f], b.gx, b.gy, b.team);
     },
     // Construction site: foundation, frame, then near-complete as the build progresses.
     drawSite(g, site, pct){
@@ -202,5 +304,6 @@
   const clearAt = s => { P.rubble = P.rubble.filter(r => r.gx + 2 <= s.gx || s.gx + s.w <= r.gx || r.gy + 2 <= s.gy || s.gy + s.h <= r.gy); };
   G.Events.on('building:placed', clearAt);
   G.Events.on('construction:queued', clearAt);
-  G.Events.on('world:created', () => { P.rubble = []; });
+  G.Events.on('world:created', () => { P.rubble = []; P.aims.clear(); });
+  G.Events.on('building:removed', b => P.aims.delete(b.id));
 })();
