@@ -202,7 +202,7 @@ $('animTitle').textContent = (unit ? 'Every frame, facing down-right' : 'Every s
 if (H){
   $('headSec').hidden = false;
   $('headTitle').textContent = `${H.facings} directions, turning on the ring`;
-  $('headNote').textContent = `The head is its own layer, drawn over the ${Object.keys(H.on).join(' and ')} base in the facing nearest its aim, easing round at ${H.turnRate ? Math.round(H.turnRate / TAU * 10) / 10 + ' turns' : 'a set rate'} a second, as the game draws it. Above: it tracks a hostile Spider circling it and fires at it: the barrels spin and the belts feed while it is on target, with the muzzle flash after each round. Below: every facing.`;
+  $('headNote').textContent = `The head is its own layer, drawn over the ${Object.keys(H.on).join(' and ')} base in the facing nearest its aim, easing round at ${H.turnRate ? Math.round(H.turnRate / TAU * 10) / 10 + ' turns' : 'a set rate'} a second, as the game draws it. Above: it tracks a hostile Spider circling it and fires at it${H.chargeTime ? `, charging for ${H.chargeTime} s before each shot` : ', animating while it is on target, with the flash after each round'}. Below: every facing.`;
 }
 if (V){
   $('variantCtl').hidden = false; $('variantSec').hidden = false; $('variantLabel').textContent = V.label;
@@ -377,18 +377,23 @@ Promise.all([load(D.sheet), load(D.ref.sheet), ...D.ground.grass.tiles.map(load)
     const step = (H.turnRate || TAU) * dt;
     TR.aim = S.motion ? (Math.abs(d) <= step ? want : TR.aim + Math.sign(d) * step) : want;
     d = ((want - TR.aim + Math.PI) % TAU + TAU) % TAU - Math.PI;
-    if (Math.abs(d) < 0.2 && tt - TR.shot > 0.5) TR.shot = tt;
-    // On target it loops `firing`; for a moment after each round, the matching `flash` frame.
-    const since = tt - TR.shot, fire = H.states.firing, onTarget = Math.abs(d) < 0.6, firing = fire && onTarget && since < 0.12;
-    const spinF = fire && S.motion ? Math.floor(tt * fire.fps) % fire.frames : 0;
-    const head = fire && onTarget ? { state: firing && H.states.flash ? 'flash' : 'firing', frame: spinF } : { state: H.on[base], frame: 0 };
+    // Rounds come every half second, or every chargeTime for a head that charges its shots.
+    const [fireName, flashName] = (H.firing && H.firing[H.on[base]]) || ['firing', 'flash'], every = H.chargeTime || 0.5;
+    if (Math.abs(d) < 0.2 && tt - TR.shot > every) TR.shot = tt;
+    // On target it loops its firing frames (or, for a charging head, shows the frame for the
+    // charge so far); for flashTime after each round, the flash frames.
+    const since = tt - TR.shot, fire = H.states[fireName], flash = H.states[flashName], onTarget = Math.abs(d) < 0.6;
+    const flashing = fire && flash && onTarget && since < (H.flashTime || 0.12);
+    const fireF = !fire || !S.motion ? 0 : H.chargeTime ? Math.min(fire.frames - 1, Math.floor(since / H.chargeTime * fire.frames)) : Math.floor(tt * fire.fps) % fire.frames;
+    const flashF = flash && H.chargeTime ? Math.min(flash.frames - 1, Math.floor(since * flash.fps)) : fireF % (flash ? flash.frames : 1);
+    const head = fire && onTarget ? (flashing ? { state: flashName, frame: flashF } : { state: fireName, frame: fireF }) : { state: H.on[base], frame: 0 };
     const heading = ang + Math.PI / 2, erow = Math.round((heading + Math.PI / 2) / (Math.PI / 4));
     const spiderRow = ((erow % 8) + 8) % 8;
     draw(g, 'ref', 'shadow', spiderRow, col(RM, 'walk', t), ex, ey);
     draw(g, 'new', 'shadow', 0, M.states[base].start, cx, cy);
     draw(g, 'ref', 'body', spiderRow, col(RM, 'walk', t), ex, ey, 'red');
     drawBuilt(g, 'body', base, M.states[base].start, cx, cy, t, TR.aim, head);
-    if (firing && since < 0.09){
+    if (flashing && since < 0.09){
       g.strokeStyle = '#f2c66a'; g.lineWidth = 2; g.beginPath();
       g.moveTo(cx + Math.cos(TR.aim) * 44, cy + Math.sin(TR.aim) * 44); g.lineTo(ex, ey); g.stroke();
     }
