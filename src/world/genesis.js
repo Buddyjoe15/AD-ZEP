@@ -230,11 +230,62 @@
     return out;
   }
 
+  // Stepping stones: a few narrow places on the rivers and creek, with level, walkable banks on
+  // both sides and well away from bridges, falls and each other, get a line of rocks across
+  // (terrain 'stepping_stones', passable but slow). grid.art.fords lists the rocks (world px
+  // centre, radius) and which way the water flows past them, for the renderer.
+  function fords(grid, s){
+    const W = grid.cols, H = grid.rows, TILE = G.CONFIG.TILE, tiles = grid.tiles, lvl = grid.art.level, id = k => G.Defs.terrain.get(k).id;
+    const WATER = id('water'), DEEP = id('deep_water'), STONES = id('stepping_stones'), BRIDGE = id('bridge'), FALLS = id('waterfall');
+    const wet = i => (tiles[i] === WATER || tiles[i] === DEEP) && grid.art.dir[i] !== 5;
+    const bank = (i, l) => grid.solidTerrain[tiles[i]] === 0 && tiles[i] !== BRIDGE && lvl[i] === l && !wet(i);
+    const clearOf = (x, y, r, ts) => { for (let yy = Math.max(0, y - r); yy <= Math.min(H - 1, y + r); yy++) for (let xx = Math.max(0, x - r); xx <= Math.min(W - 1, x + r); xx++) if (ts.includes(tiles[yy * W + xx])) return false; return true; };
+    const cands = [];
+    for (const [dx, dy, fx, fy] of [[1, 0, 0, 1], [0, 1, -1, 0]])   // across a river flowing south, then one flowing west
+      for (let y = 8; y < H - 8; y++) for (let x = 8; x < W - 8; x++){
+        const i0 = y * W + x;
+        if (wet(i0) || !wet((y + dy) * W + x + dx)) continue;
+        const l = lvl[(y + dy) * W + x + dx];
+        if (!bank(i0, l)) continue;
+        let n = 1;
+        while (n < 9 && wet((y + dy * n) * W + x + dx * n) && lvl[(y + dy * n) * W + x + dx * n] === l) n++;
+        const end = (y + dy * n) * W + x + dx * n;
+        if (n - 1 < 3 || n - 1 > 7 || !bank(end, l)) continue;
+        cands.push({ x, y, dx, dy, n: n - 1, fx, fy, key: hash(x, y, s + 811) });
+      }
+    cands.sort((a, b) => a.key - b.key);
+    const L = grid.art.landing, chosen = [];
+    for (const c of cands){
+      if (chosen.length >= 6) break;
+      const mx = c.x + c.dx * (c.n + 1) / 2, my = c.y + c.dy * (c.n + 1) / 2;
+      if (chosen.some(o => Math.hypot(o.mx - mx, o.my - my) < 45) || Math.hypot(mx - L.x, my - L.y) < 30) continue;
+      if (!clearOf(Math.round(mx), Math.round(my), 14, [BRIDGE, FALLS])) continue;
+      chosen.push({ ...c, mx, my });
+    }
+    const out = { x: [], y: [], r: [], fx: [], fy: [] };
+    for (const c of chosen) for (let k = 1; k <= c.n; k++){
+      const tx = c.x + c.dx * k, ty = c.y + c.dy * k;
+      tiles[ty * W + tx] = STONES;
+      // Two rocks per tile along the crossing, nudged off the line a little.
+      for (let j = 0; j < 2; j++){
+        const along = (k - 1 + (j + 0.5) / 2) * TILE + TILE / 2 + (hash(tx, ty, s + 819 + j) - 0.5) * 8, off = (hash(tx, ty, s + 813 + j) - 0.5) * 16;
+        out.x.push(Math.round((c.x + 0.5) * TILE + c.dx * along + c.fx * off)); out.y.push(Math.round((c.y + 0.5) * TILE + c.dy * along + c.fy * off));
+        out.r.push(7 + Math.round(hash(tx, ty, s + 817 + j) * 4)); out.fx.push(c.fx); out.fy.push(c.fy);
+      }
+    }
+    grid.touch();
+    return {
+      count: out.x.length, x: Int32Array.from(out.x), y: Int32Array.from(out.y), r: Uint8Array.from(out.r), fx: Int8Array.from(out.fx), fy: Int8Array.from(out.fy),
+      crossings: chosen.map(c => ({ x: c.x, y: c.y, dx: c.dx, dy: c.dy, n: c.n }))   // from bank tile (x, y), n stone tiles along (dx, dy)
+    };
+  }
+
   function genesis(seed, opts = {}){
     const grid = G.MapGen.woodlands(seed, opts);
     grid.art.generator = 'genesis';
     grid.art.version = VERSION;
     grid.art.trees = plant(grid, (seed | 0) ^ 0x5eed);
+    grid.art.fords = fords(grid, (seed | 0) ^ 0xf0d);
     return grid;
   }
 

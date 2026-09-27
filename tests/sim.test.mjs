@@ -744,7 +744,7 @@ test('genesis plants free-standing trees in thick and thin clusters, off the til
   const grid = G.MapGen.genesis(72491), art = grid.art, tr = art.trees, cols = grid.cols;
   // Pinned: saves of this map type rebuild their terrain and trees from the seed.
   assert.equal(art.generator, 'genesis');
-  assert.equal(fnv(grid.tiles), 1232051540, 'genesis terrain unchanged');
+  assert.equal(fnv(grid.tiles), 21958580, 'genesis terrain unchanged');
   assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 1354685051, 'genesis trees unchanged');
   const again = G.MapGen.genesis(72491);
   assert.equal(fnv(again.tiles), fnv(grid.tiles), 'same seed, same map');
@@ -796,6 +796,24 @@ test('genesis plants free-standing trees in thick and thin clusters, off the til
   // Nothing grows on the landing pad.
   const L = art.landing;
   for (let k = 0; k < tr.count; k++) assert.ok(Math.hypot(tr.x[k] / T - L.x, tr.y[k] / T - L.y) > 26, 'tree on the landing pad');
+});
+
+test('genesis lays stepping stones across narrow rivers, walkable bank to bank', () => {
+  const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
+  const grid = G.MapGen.genesis(72491), f = grid.art.fords, cols = grid.cols;
+  assert.ok(f.crossings.length >= 3, 'a few crossings: ' + f.crossings.length);
+  assert.ok(G.Defs.terrain.get('stepping_stones').passable);
+  // Stones only ever stand where the Woodlands landscape underneath has river.
+  const base = G.MapGen.woodlands(72491);
+  for (let i = 0; i < grid.size; i++) if (grid.tiles[i] === id('stepping_stones')) assert.ok([id('water'), id('deep_water')].includes(base.tiles[i]), 'stones in the river at ' + i);
+  // Every rock is drawn over a stone tile, and each crossing joins two walkable banks.
+  for (let k = 0; k < f.count; k++) assert.equal(grid.tiles[Math.floor(f.y[k] / T) * cols + Math.floor(f.x[k] / T)], id('stepping_stones'));
+  for (const c of f.crossings){
+    for (let k = 1; k <= c.n; k++) assert.equal(grid.get(c.x + c.dx * k, c.y + c.dy * k), id('stepping_stones'));
+    const ex = c.x + c.dx * (c.n + 1), ey = c.y + c.dy * (c.n + 1);
+    assert.ok(grid.terrainPassable(c.x, c.y) && grid.terrainPassable(ex, ey), 'walkable banks at both ends');
+    assert.ok(grid.reachable(c.x, c.y, ex, ey), 'one bank reaches the other');
+  }
 });
 
 test('a genesis game starts, plays and survives a save', () => {

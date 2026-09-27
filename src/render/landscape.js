@@ -22,7 +22,8 @@
   const C = {
     dust0: '#5e4f3d', dust1: '#6f5e48', dust2: '#7f6c53', dust3: '#8e7a5e', dust4: '#9e896b', dust5: '#b09c7e',
     char0: '#231f1c', char1: '#433a33', grass0: '#3f5a3a', grass1: '#4d6946', grass3: '#739158', leaf1: '#28502d',
-    water0: '#1f4a5c', water1: '#2e6578', water2: '#4f8c9e', water3: '#9fcfd8', white: '#ffffff'
+    water0: '#1f4a5c', water1: '#2e6578', water2: '#4f8c9e', water3: '#9fcfd8', white: '#ffffff',
+    steel0: '#1f2c34', steel1: '#34495a', steel2: '#557184', plate0: '#7f8b86', plate1: '#b3bdb5'
   };
   // Palette colours as indices (P) into opaque 32-bit pixels (PX, as ImageData stores them).
   const P = {}, PX = new Uint32Array(Object.keys(C).length);
@@ -80,14 +81,26 @@
   function ids(){
     if (K) return K;
     const id = k => G.Defs.terrain.get(k).id;
-    K = { WATER: id('water'), DEEP: id('deep_water'), FALLS: id('waterfall'), CLIFF: id('cliff'), CAVE: id('cave'), SLOPE: id('slope'), STAIRS: id('steps'), BRIDGE: id('bridge'), PATH: id('path') };
+    K = { WATER: id('water'), DEEP: id('deep_water'), FALLS: id('waterfall'), CLIFF: id('cliff'), CAVE: id('cave'), SLOPE: id('slope'), STAIRS: id('steps'), BRIDGE: id('bridge'), PATH: id('path'), STONES: id('stepping_stones') };
     return K;
   }
   function fields(grd){
     const a = grd.art;
     if (a.land) return a.land;
     const n = grd.size;
-    a.land = { E: new Float32Array(n), W: new Float32Array(n), D: new Float32Array(n), noFace: new Uint8Array(n), near: new Uint8Array(n), P: new Float32Array(n) };
+    a.land = { E: new Float32Array(n), W: new Float32Array(n), D: new Float32Array(n), noFace: new Uint8Array(n), near: new Uint8Array(n), P: new Float32Array(n), stones: new Map() };
+    // Stepping stones (grid.art.fords) listed by every tile they or their wake reach.
+    const f = a.fords, t = T();
+    if (f) for (let s = 0; s < f.count; s++){
+      const reach = f.r[s] * 4;
+      for (let y = Math.floor((f.y[s] - reach) / t); y <= Math.floor((f.y[s] + reach) / t); y++) for (let x = Math.floor((f.x[s] - reach) / t); x <= Math.floor((f.x[s] + reach) / t); x++){
+        if (!grd.inBounds(x, y)) continue;
+        const i = y * grd.cols + x;
+        let list = a.land.stones.get(i);
+        if (!list) a.land.stones.set(i, list = []);
+        list.push(s);
+      }
+    }
     update(grd, 0, 0, grd.cols, grd.rows);
     return a.land;
   }
@@ -98,11 +111,11 @@
     const lv = (x, y) => inb(x, y) ? lvl[y * cols + x] : -1;
     for (let y = Math.max(0, y0 - 1); y < Math.min(rows, y0 + h + 1); y++) for (let x = Math.max(0, x0 - 1); x < Math.min(cols, x0 + w + 1); x++){
       const i = y * cols + x, t = tiles[i], l = lvl[i];
-      const wet = t === k.WATER || t === k.DEEP || t === k.FALLS;
+      const wet = t === k.WATER || t === k.DEEP || t === k.FALLS || t === k.STONES;
       L.W[i] = wet ? 1 : 0;
       L.P[i] = t === k.PATH ? 1 : 0;
       L.D[i] = t === k.DEEP ? 1 : 0;
-      L.noFace[i] = t === k.SLOPE || t === k.STAIRS ? 1 : 0;
+      L.noFace[i] = t === k.SLOPE ? 1 : t === k.STAIRS ? 2 : 0;   // a grassy ramp or carved steps instead of rock
       let e = l;
       if (t === k.CLIFF || t === k.CAVE){
         const low = Math.min(...[[0, 1], [-1, 1], [1, 1]].map(([dx, dy]) => { const v = lv(x + dx, y + dy); return v < 0 ? l : v; }));
@@ -162,7 +175,7 @@
       const x = gx + dx, y = gy + dy;
       if (!grd.inBounds(x, y)) return false;
       const j = y * cols + x;
-      if (L.W[j] !== 1 || L.D[j] !== d0 || L.near[j] & 2) return false;
+      if (L.W[j] !== 1 || L.D[j] !== d0 || L.near[j] & 2 || L.stones.has(j)) return false;
     }
     return true;
   }
@@ -243,7 +256,10 @@
             }
           }
         }
-        const lvlI = lvl[i], Wi = L.W[i], Di = L.D[i];
+        const lvlI = lvl[i], Wi = L.W[i], Di = L.D[i], fd = grd.art.fords;
+        // Stepping stones here: only those still standing in their crossing (not painted over).
+        let stones = L.stones.get(i) || null;
+        if (stones){ stones = stones.filter(q => grd.tiles[Math.floor(fd.y[q] / t) * cols + Math.floor(fd.x[q] / t)] === k.STONES); if (!stones.length) stones = null; }
         for (let cx = px0; cx < px1; cx++){
           const wx = ox + (cx + 0.5) * step, ax = Math.floor(wx * 2), axm = ax & (NS - 1), c = cx - px0 + 1, cb = c * nRows;
           if (wet){ across(L.W, wx / t - 0.5, j0, colW); across(L.D, wx / t - 0.5, j0, colD); }
@@ -267,10 +283,44 @@
             const ay = rowAY[r], aym = ay & (NS - 1), n = NOISE[aym * NS + axm], dith = BAYER[(ay & 3) * 4 + (ax & 3)];
             let col = -1, alpha = 255;
             const ft = cy - rimY;
-            const face = cliffs && ft < Fc && rimL > lp && !L.noFace[Math.min(rows - 1, Math.max(0, Math.floor((oy + (rimY + 0.5) * step) / t))) * cols + gx];
+            const face = cliffs && ft < Fc && rimL > lp;
+            // A slope or carved steps sit on either side of the rim (the rim wobbles across the tile
+            // edge), so check both.
+            let ramp = 0;
+            if (face){ const ry = oy + rimY * step, a1 = Math.min(rows - 1, Math.max(0, Math.floor((ry - 3) / t))), b1 = Math.min(rows - 1, Math.max(0, Math.floor((ry + 3) / t))); ramp = Math.max(L.noFace[a1 * cols + gx], L.noFace[b1 * cols + gx]); }
             let w = Wi;
             if (wet){ const q = rowJ[r], a0 = colW[q]; w = a0 + (colW[q + 1] - a0) * rowF[r] + (NOISE[((ay + 31) & (NS - 1)) * NS + ((ax + 57) & (NS - 1))] - 0.5) * 0.14; }
-            if (face){
+            // Stepping stones: wet rock lit from the top left, a ring of foam, a bow wave upstream
+            // and a wake trailing downstream.
+            if (stones && w >= 0.42 && !face){
+              const wy = oy + (cy + 0.5) * step;
+              let best = 1e9, bq = -1, wake = 0;
+              for (const q of stones){
+                const dx = wx - fd.x[q], dy = wy - fd.y[q], rr = fd.r[q], dd = Math.sqrt(dx * dx + dy * dy) - rr;
+                if (dd < best){ best = dd; bq = q; }
+                const along = dx * fd.fx[q] + dy * fd.fy[q], perp = Math.abs(dx * fd.fy[q] - dy * fd.fx[q]);
+                if (along > 0 && along < rr * 3.5 && perp < rr * (0.95 - along / (rr * 5))) wake = Math.max(wake, 1 - along / (rr * 3.5));
+              }
+              if (best < 0){
+                const dx = wx - fd.x[bq], dy = wy - fd.y[bq], rr = fd.r[bq], lit = -(dx + dy) / (rr * 1.4);
+                const tone = 0.5 + lit * 0.45 + (n - 0.5) * 0.3 + dith * 0.12;
+                if (best > -1.2) col = P.steel1;                                   // its dark wet edge
+                else if (lit > 0.1 && n > 0.8) col = P.leaf1;                      // moss on top
+                else col = tone > 0.78 ? P.plate1 : tone > 0.52 ? P.plate0 : tone > 0.3 ? P.steel2 : P.steel1;
+              } else if (w >= 0.5 && best < 1.8){
+                const up = (wx - fd.x[bq]) * fd.fx[bq] + (wy - fd.y[bq]) * fd.fy[bq] < 0;
+                col = up && dith < 0.7 ? P.white : P.water3;                        // a thin foam ring, brightest upstream
+              } else if (w >= 0.5 && wake > 0 && dith < wake * 0.5) col = wake > 0.7 && n > 0.6 ? P.white : P.water3;
+            }
+            if (col >= 0){ /* stone or foam */ }
+            else if (face && ramp){
+              // Where a slope or carved steps cross the rim: a grassy ramp, darker toward its foot,
+              // or steps cut into the rock, in the same band a rock face would take.
+              const f = ft / Fc;
+              if (ramp === 2) col = (Math.floor(ft / (7 * res)) & 1) ? (f > 0.5 ? P.dust1 : P.dust2) : (ft % (7 * res) < res ? P.dust4 : P.dust3);
+              else col = f < 0.08 ? P.grass3 : n + dith * 0.3 - f * 0.45 > 0.45 ? P.grass1 : P.grass0;
+            }
+            else if (face){
               const f = ft / Fc;
               if (w >= 0.5){
                 // Falling water: streaks down the face, foam at the foot.
@@ -404,7 +454,26 @@
       const L = fields(grd), t = T(), cols = grd.cols, k = ids(), dir = grd.art.dir, tiles = grd.tiles;
       const x0 = Math.max(0, Math.floor(v.x0 / t) - 1), x1 = Math.min(cols - 1, Math.ceil(v.x1 / t) + 1);
       const y0 = Math.max(0, Math.floor(v.y0 / t) - 1), y1 = Math.min(grd.rows - 1, Math.ceil(v.y1 / t) + 1);
-      const h = G.hashRandom3;
+      const h = G.hashRandom3, fd = grd.art.fords;
+      // Stepping stones: ripples spreading downstream in chevrons, spray where the water hits
+      // them and a little mist.
+      if (fd) for (let q = 0; q < fd.count; q++){
+        const x = fd.x[q], y = fd.y[q], rr = fd.r[q], fx = fd.fx[q], fy = fd.fy[q];
+        if (x < v.x0 - 60 || x > v.x1 + 60 || y < v.y0 - 60 || y > v.y1 + 60) continue;
+        if (tiles[Math.floor(y / t) * cols + Math.floor(x / t)] !== k.STONES) continue;
+        g.strokeStyle = C.water3; g.lineWidth = 1.5;
+        for (let s = 0; s < 2; s++){
+          const f = (ts * 0.8 + s / 2 + h(q, s, 31)) % 1, along = rr + f * rr * 3, half = rr * 0.7 + f * 6, back = 3 + f * 3;
+          const cx = x + fx * along, cy = y + fy * along;
+          g.globalAlpha = 0.7 * (1 - f);
+          g.beginPath();
+          g.moveTo(cx + fy * half - fx * back, cy - fx * half - fy * back); g.lineTo(cx, cy); g.lineTo(cx - fy * half - fx * back, cy + fx * half - fy * back);
+          g.stroke();
+        }
+        g.globalAlpha = 1;
+        spray(g, x - fx * rr, y - fy * rr, ts, q * 7 + 3, 3, rr, 7);
+        if (q % 2 === 0) mist(g, x, y, ts, q * 7 + 5, 1, rr * 2, 14, 4);
+      }
       for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++){
         const i = gy * cols + gx, tl = tiles[i];
         if (tl === k.FALLS){

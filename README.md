@@ -54,6 +54,12 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
 
 ## What changed in v0.7
 
+- **Trails, natural cliffs, spray and mist, and stepping stones (Genesis maps).**
+  - **Trails** are drawn along contours like the water: packed dirt with pebbles and a worn middle, fraying into grass at the edges, so a stair-stepped trail becomes a smooth band.
+  - **Cliff faces** are natural fractured rock (slabs of different sizes and tones, broken cracks, water stains, moss, grass hanging over the lip, a ragged foot and scree below). Grassy slopes and carved steps now run in the same band as the rock, as a grassy ramp or a flight of steps, instead of flat squares.
+  - **Spray and mist** roll off the foot of every waterfall, with a low haze over the plunge pool.
+  - **Stepping stones (new terrain, `stepping_stones`):** a few narrow places on the rivers and the creek have a line of rocks across, with level, walkable banks on both sides. Units can cross them, slowly (speed ×0.7). Water foams around each rock, trails a wake downstream and ripples away in chevrons, with a little spray and mist. Also in the Map Editor's terrain list.
+  - Saves are unchanged (still schema 9): terrain edits can use the new terrain id 39.
 - **Water, shores, cliffs and waterfalls along contours (Genesis maps).** Water and ground height are now drawn along smooth lines between tile centres instead of tile by tile, so an edge that steps one tile becomes a 45° diagonal, corners are cut at an angle, and shorelines and cliff rims wobble a little like real ones.
   - **Water** shades by depth: pale shallows along the edge, open water, and dark where a channel runs deep (no more deep-water squares), with drifting ripples, a broken foam line at the edge and a wet mud bank and damp grass on the shore. Glints of sunlight wink on open water up close.
   - **Cliffs** hang their rock face one tile down from the rim, over the cliff tiles that block, and diagonal rims give slanted faces. Faces toward the viewer (south) show stone courses, cracks, moss and a dark foot with a shadow on the ground; north, east and west drops show a lit lip and a shadow line. Caves open in the face, and grassy slopes and carved steps stay faceless.

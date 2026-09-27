@@ -11,7 +11,7 @@
     CLIFF: 'cliff', SLOPE: 'slope', STAIRS: 'steps', CAVE: 'cave', ROCKS: 'rock', MOSSROCK: 'mossy_rock',
     CRYSTAL: 'crystal', ORE: 'outcrop', VENT: 'steam_vent', MOUND: 'termite_mound', BURROW: 'burrow', PATH: 'path',
     WALL: 'wall', FLOOR: 'floor', DOOR: 'door', RUBBLE: 'rubble', LOGS: 'log_pile', SAWHORSE: 'sawhorse',
-    PAD: 'clearing', LOGWALL: 'log_wall', FOREST: 'forest'
+    PAD: 'clearing', LOGWALL: 'log_wall', FOREST: 'forest', STONES: 'stepping_stones'
   };
   const K = {}, RGB = [];
   for (const [k, key] of Object.entries(KEYS)) K[k] = G.Defs.terrain.get(key).id;
@@ -131,7 +131,7 @@
 
   // Genesis: water and cliffs are drawn along contours over plain ground (G.Landscape), and
   // small features stand on grass rather than a flat square of colour.
-  const CONTOUR = new Set([K.WATER, K.DEEP, K.FALLS, K.CLIFF, K.CAVE, K.PATH]);
+  const CONTOUR = new Set([K.WATER, K.DEEP, K.FALLS, K.CLIFF, K.CAVE, K.PATH, K.SLOPE, K.STAIRS, K.STONES]);
   const ON_GRASS = new Set([K.REEDS, K.ROCKS, K.MOSSROCK, K.MUSHROOM, K.FLOWERS, K.BURROW, K.SHRUB, K.STUMP, K.LOGS, K.MOUND, K.VENT, K.ORE, K.CRYSTAL]);
   const genesis = () => !!(art && art.generator === 'genesis');
   function grassBase(ctx, gx, gy, px, py, S){

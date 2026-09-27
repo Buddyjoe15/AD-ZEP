@@ -19,7 +19,9 @@
     ['deep_water', 'Deep water'], ['waterfall', 'Waterfall'], ['cliff', 'Cliff'], ['slope', 'Grassy slope'], ['steps', 'Carved steps'],
     ['cave', 'Cave mouth'], ['mossy_rock', 'Mossy boulders'], ['crystal', 'Crystals'], ['outcrop', 'Mineral outcrop'],
     ['steam_vent', 'Steam vent'], ['termite_mound', 'Termite mound'], ['burrow', 'Animal burrow'], ['alien_flora', 'Alien vegetation'],
-    ['barren', 'Barren ground'], ['rubble', 'Rubble'], ['log_pile', 'Log pile'], ['sawhorse', 'Sawhorse'], ['log_wall', 'Log wall']
+    ['barren', 'Barren ground'], ['rubble', 'Rubble'], ['log_pile', 'Log pile'], ['sawhorse', 'Sawhorse'], ['log_wall', 'Log wall'],
+    // Genesis terrain.
+    ['stepping_stones', 'Stepping stones']
   ];
   const mapName = key => (G.MapGen.types[key] && G.MapGen.types[key].name) || key;
 
