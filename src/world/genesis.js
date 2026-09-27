@@ -305,9 +305,8 @@
       if (!clearOf(Math.round(mx), Math.round(my), 14, [BRIDGE, FALLS])) continue;
       chosen.push({ ...c, mx, my });
     }
-    // Each crossing is rows of rocks across the flow: two abreast mid-stream, widening to five or
-    // six where it meets the land, and carried a tile and a half onto each bank as flat slabs
-    // on a worn dirt apron (path), so it is grounded at both ends.
+    // Each crossing is rows of small rocks across the flow: two abreast mid-stream, widening to
+    // five or six at the banks, where a worn dirt apron (path) meets it.
     const PATH = id('path'), GROUNDABLE = new Set(['grass', 'tall_grass', 'wildflowers', 'forest', 'bush', 'reeds', 'mushrooms', 'clearing', 'swamp'].map(id));
     const out = { x: [], y: [], r: [], fx: [], fy: [], land: [], c: [] };
     chosen.forEach((c, ci) => {
@@ -319,20 +318,27 @@
       const px = c.dy ? 1 : 0, py = c.dx ? 1 : 0;           // across the crossing
       const w0 = 0.5, w1 = c.n + 0.5, mid = (w0 + w1) / 2, half = (w1 - w0) / 2 + 1.5;
       const ox = (c.x + 0.5) * TILE, oy = (c.y + 0.5) * TILE;
+      // Rocks in six sizes, mostly small: pebble-sized stones round a few bigger ones.
+      const SIZES = [2, 3, 4, 5, 6, 7], WEIGHTS = [30, 25, 18, 12, 9, 6];
       let row = 0;
-      for (let sT = -1.4; sT <= c.n + 2.4; row++){
-        const u = Math.min(1, Math.abs(sT - mid) / half), onLand = sT < w0 || sT > w1;
-        const count = Math.round(2 + 4 * u ** 1.4), gap = onLand ? 11 : 12;
-        sT += (onLand ? 11 : 14) / TILE;
+      for (let sT = w0 + 0.05; sT <= w1 - 0.05; row++){
+        const u = Math.min(1, Math.abs(sT - mid) / (half - 1.5)), count = Math.round(2 + 4 * u ** 1.4);
+        const step = 6 + 3 * u;   // rows closer together mid-stream, where they are narrow
+        sT += step / TILE;
         for (let j = 0; j < count; j++){
           const hr = q => hash(ci * 997 + row, j, s + q);
-          if (onLand && hr(821) < 0.3) continue;              // slabs thin out into the grass
-          const along = sT * TILE + (hr(823) - 0.5) * 5, off = (j - (count - 1) / 2) * gap + (hr(827) - 0.5) * 5;
-          const rx = Math.round(ox + c.dx * along + px * off), ry = Math.round(oy + c.dy * along + py * off), ti = Math.floor(ry / TILE) * W + Math.floor(rx / TILE);
-          if (onLand && (grid.solidTerrain[tiles[ti]] !== 0 || tiles[ti] === BRIDGE)) continue;   // slabs only on open ground
-          out.x.push(rx); out.y.push(ry);
-          out.r.push(onLand ? 4 + Math.round(hr(829) * 2.5) : 4 + Math.round((1 - u) * 1.5 + hr(829) * 1.5));
-          out.fx.push(c.fx); out.fy.push(c.fy); out.land.push(onLand ? 1 : 0); out.c.push(ci);
+          const along = (sT - step / TILE) * TILE + (hr(823) - 0.5) * 3, off = (j - (count - 1) / 2) * 8 + (hr(827) - 0.5) * 4;
+          const rx = Math.round(ox + c.dx * along + px * off), ry = Math.round(oy + c.dy * along + py * off);
+          let pick = hr(829) * 100, z = 0;
+          while (z < SIZES.length - 1 && pick >= WEIGHTS[z]){ pick -= WEIGHTS[z]; z++; }
+          if (u < 0.35 && z < 2) z += 1;   // mid-stream, where only two stand abreast, no pebbles: the way stays unbroken
+          out.x.push(rx); out.y.push(ry); out.r.push(SIZES[z]);
+          out.fx.push(c.fx); out.fy.push(c.fy); out.land.push(0); out.c.push(ci);
+          // A pebble or two tucked beside the bigger stones.
+          if (z >= 3 && hr(831) < 0.6){
+            const [qx, qy] = [rx + Math.round((hr(833) - 0.5) * 12), ry + Math.round((hr(837) - 0.5) * 12)];
+            out.x.push(qx); out.y.push(qy); out.r.push(2); out.fx.push(c.fx); out.fy.push(c.fy); out.land.push(0); out.c.push(ci);
+          }
         }
       }
     });

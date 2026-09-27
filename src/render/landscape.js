@@ -318,11 +318,11 @@
                   col = best > -0.9 ? P.char1 : n > 0.82 ? P.grass1 : tone > 0.72 ? P.dust5 : tone > 0.48 ? P.dust4 : tone > 0.25 ? P.plate0 : P.dust3;
                 } else {
                   const tone = 0.5 + lit * 0.45 + (n - 0.5) * 0.3 + dith * 0.12;
-                  if (best > -1.2) col = P.steel1;                                 // its dark wet edge
+                  if (best > -Math.min(1.2, rr * 0.3)) col = P.steel1;             // its dark wet edge
                   else if (lit > 0.1 && n > 0.8) col = P.leaf1;                    // moss on top
                   else col = tone > 0.78 ? P.plate1 : tone > 0.52 ? P.plate0 : tone > 0.3 ? P.steel2 : P.steel1;
                 }
-              } else if (w >= 0.5 && !fd.land[bq] && best < 1.8){
+              } else if (w >= 0.5 && !fd.land[bq] && best < Math.min(1.8, fd.r[bq] * 0.3 + 0.6)){
                 const up = (wx - fd.x[bq]) * fd.fx[bq] + (wy - fd.y[bq]) * fd.fy[bq] < 0;
                 col = up && dith < 0.7 ? P.white : P.water3;                      // a thin foam ring, brightest upstream
               } else if (w >= 0.5 && wake > 0 && dith < wake * 0.5) col = wake > 0.7 && n > 0.6 ? P.white : P.water3;
@@ -490,7 +490,7 @@
       // Stepping stones: ripples spreading downstream in chevrons, spray where the water hits
       // them and a little mist.
       if (fd) for (let q = 0; q < fd.count; q++){
-        if (fd.land[q]) continue;
+        if (fd.land[q] || fd.r[q] < 4) continue;   // ripples and spray round the bigger stones only
         const x = fd.x[q], y = fd.y[q], rr = fd.r[q], fx = fd.fx[q], fy = fd.fy[q];
         if (x < v.x0 - 60 || x > v.x1 + 60 || y < v.y0 - 60 || y > v.y1 + 60) continue;
         if (tiles[fd.crossings[fd.c[q]].mid] !== k.STONES) continue;

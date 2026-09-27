@@ -817,9 +817,12 @@ test('genesis lays stepping stones across narrow rivers, walkable bank to bank',
   for (let c = 0; c < f.crossings.length; c++){
     const rows = new Map();
     for (let k = 0; k < f.count; k++) if (f.c[k] === c){ const cr = f.crossings[c], s = Math.round(((f.x[k] / T - cr.x - 0.5) * cr.dx + (f.y[k] / T - cr.y - 0.5) * cr.dy) * T / 4); rows.set(s, (rows.get(s) || 0) + 1); }
-    assert.ok(f.land.some((l, k) => l && f.c[k] === c), 'slabs on the banks');
+    assert.ok(!f.land.some((l, k) => l && f.c[k] === c), 'no stones on the land');
   }
   assert.ok(f.count > f.crossings.length * 20, 'many rocks per crossing, not a few big ones');
+  const sizes = new Set(f.r), small = [...f.r].filter(r => r <= 4).length;
+  assert.ok(sizes.size >= 6, 'six sizes: ' + [...sizes]);
+  assert.ok(small > f.count * 0.6, 'mostly small');
   for (const c of f.crossings){
     for (let k = 1; k <= c.n; k++) assert.equal(grid.get(c.x + c.dx * k, c.y + c.dy * k), id('stepping_stones'));
     const ex = c.x + c.dx * (c.n + 1), ey = c.y + c.dy * (c.n + 1);
