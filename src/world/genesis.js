@@ -47,6 +47,27 @@
     for (const k of ['swamp', 'bog']) FEN[id(k)] = 1;
     const L = art.landing;
 
+    // 0. More woodland: Woodlands leaves wide stretches of open grass with hardly a tree. Out
+    // in the open, new woods grow where a broad noise field says (about a third of the open
+    // land, in large irregular stands), and small copses dot the rest; never on or beside a
+    // trail, near a village, camp or the landing site, or by water.
+    {
+      const OPEN = new Set(['grass', 'tall_grass', 'bush'].map(id)), PATHS = new Set(['path', 'steps', 'bridge'].map(id));
+      const towns = (art.places || []).filter(p => p.kind === 'settlement' || p.kind === 'camp');
+      const clearOf = (x, y) => {
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++){ const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H) return false; const t = tiles[yy * W + xx]; if (PATHS.has(t) || WET[t]) return false; }
+        return true;
+      };
+      const grow = [];
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++){
+        const i = y * W + x;
+        if (!OPEN.has(tiles[i]) || Math.hypot(x - L.x, y - L.y) < 40 || towns.some(p => Math.hypot(x - p.x, y - p.y) < (p.kind === 'camp' ? 9 : 24))) continue;
+        const wood = fbm(x / 38, y / 38, s + 591, 3), copse = fbm(x / 7, y / 7, s + 593, 2);
+        if ((wood > 0.56 || copse > 0.72) && clearOf(x, y)) grow.push(i);
+      }
+      for (const i of grow) tiles[i] = TREE;
+    }
+
     // 1. Forest cover: the share of tree tiles within 2 tiles, from a summed-area table.
     const W1 = W + 1, sat = new Int32Array(W1 * (H + 1));
     for (let y = 0; y < H; y++){
@@ -236,9 +257,9 @@
         else if (tl === FLOWERS){ const colour = Math.floor(vnoise(x / 6, y / 6, s + 917) * 6) % 6; for (let j = 0; j < 2; j++){ const [px, py] = at(x, y, j, 36); add(px, py, 0, 'flowers', 0, colour); } }
         else if (tl === MUSH){ const [px, py] = at(x, y, 0, 30); add(px, py, 0, 'mushrooms', 0, v8(x, y, 0)); }
         else if (tl === ROCK || tl === MOSS){
-          const mossy = tl === MOSS ? 2 : 0, [px, py] = at(x, y, 0, 12);
-          add(px, py, 0, 'boulder', h1 < 0.2 ? 3 : h1 < 0.6 ? 1 : 2, mossy + (v8(x, y, 1) & 1));   // now and then a big one
-          if (hash(x, y, s + 919) < 0.35){ const [qx, qy] = at(x, y, 2, 30); add(qx, qy, 0, 'boulder', 0, mossy + (v8(x, y, 3) & 1)); }
+          const mossy = tl === MOSS ? 4 : 0, [px, py] = at(x, y, 0, 12);
+          add(px, py, 0, 'boulder', h1 < 0.2 ? 3 : h1 < 0.6 ? 1 : 2, mossy + (v8(x, y, 1) & 3));   // now and then a big one
+          if (hash(x, y, s + 919) < 0.35){ const [qx, qy] = at(x, y, 2, 30); add(qx, qy, 0, 'boulder', 0, mossy + (v8(x, y, 3) & 3)); }
         }
         else if (tl === REEDS){ for (let j = 0; j < 2; j++){ const [px, py] = at(x, y, j, 32); add(px, py, 0, 'reeds', 0, v8(x, y, j)); } }
         else if (tl === FLOOR && h1 < 0.1){ const [px, py] = at(x, y, 0, 36); add(px, py, 0, 'fern', hash(x, y, s + 921) < 0.6 ? 0 : 1, v8(x, y, 0)); }
@@ -375,9 +396,8 @@
 
 
   // One-level banks: Woodlands mixes grassy slopes and short pieces of cliff along the same
-  // edge, which reads as grass growing down a rock face. A piece of cliff between slopes
-  // becomes slope too, and a lone slope in a run of cliff becomes cliff, so each stretch of
-  // bank is one or the other.
+  // edge, which reads as grass growing down a rock face. First each stretch of bank is made
+  // one or the other, then long slopes become cliff with ramps cut through it (below).
   function banks(grid){
     const W = grid.cols, H = grid.rows, tiles = grid.tiles, lvl = grid.art.level, id = k => G.Defs.terrain.get(k).id;
     const CLIFF = id('cliff'), SLOPE = id('slope');
@@ -398,6 +418,70 @@
         else if (t === SLOPE && nS === 0 && nC >= 2) flip.push([i, CLIFF]);
       }
       for (const [i, t] of flip) tiles[i] = t;
+    }
+    // Then, as in Factorio, the cliff runs on unbroken and ramps are gaps cut in it: each run
+    // of slope keeps a ramp three tiles wide every RAMP_EVERY tiles along it (at least one,
+    // in its middle, so every way up it gave stays), and the rest becomes cliff. Slope beside
+    // a trail or carved steps stays, so trails keep their way through.
+    const RAMP_EVERY = 16, PATH = id('path'), STAIRS = id('steps'), cut = [];
+    const seen = new Uint8Array(W * H), D8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+    const bfs = (start, cells) => {
+      const dist = new Map([[start, 0]]), q = [start];
+      for (let h = 0; h < q.length; h++){ const i = q[h], x = i % W, y = (i / W) | 0; for (const [dx, dy] of D8){ const j = (y + dy) * W + x + dx; if (cells.has(j) && !dist.has(j)){ dist.set(j, dist.get(i) + 1); q.push(j); } } }
+      return dist;
+    };
+    for (let s0 = 0; s0 < W * H; s0++){
+      if (tiles[s0] !== SLOPE || seen[s0]) continue;
+      const cells = new Set(), q = [s0]; seen[s0] = 1;
+      for (let h = 0; h < q.length; h++){ const i = q[h], x = i % W, y = (i / W) | 0; cells.add(i); for (const [dx, dy] of D8){ const j = (y + dy) * W + x + dx; if (x + dx >= 0 && y + dy >= 0 && x + dx < W && y + dy < H && !seen[j] && tiles[j] === SLOPE){ seen[j] = 1; q.push(j); } } }
+      // Distance along the run from one end.
+      let d0 = bfs(s0, cells), end = s0;
+      for (const [i, d] of d0) if (d > d0.get(end)) end = i;
+      const along = bfs(end, cells), len = Math.max(...along.values()) + 1;
+      if (len <= 4) continue;
+      const n = Math.max(1, Math.round(len / RAMP_EVERY)), centres = Array.from({ length: n }, (_, k) => Math.round((k + 0.5) * len / n - 0.5));
+      for (const i of cells){
+        const d = along.get(i), x = i % W, y = (i / W) | 0;
+        if (centres.some(c => Math.abs(d - c) <= 1)) continue;
+        let trail = false;
+        for (const [dx, dy] of D8){ const t = tiles[(y + dy) * W + x + dx]; if (t === PATH || t === STAIRS) trail = true; }
+        if (!trail){ tiles[i] = CLIFF; cut.push(i); }
+      }
+    }
+    // Nothing that could be walked to before may be cut off: where a cut left ground out of
+    // reach, the cliff beside it opens again (the whole stretch between reached and unreached).
+    const walk = t => !grid.solidTerrain[t];
+    const reach = () => {
+      const r = new Uint8Array(W * H), L = grid.art.landing, q = [L.y * W + L.x]; r[q[0]] = 1;
+      for (let h = 0; h < q.length; h++){ const i = q[h], x = i % W, y = (i / W) | 0; for (const [dx, dy] of D8.slice(0, 4)){ const xx = x + dx, yy = y + dy, j = yy * W + xx; if (xx >= 0 && yy >= 0 && xx < W && yy < H && !r[j] && walk(tiles[j])){ r[j] = 1; q.push(j); } } }
+      return r;
+    };
+    const before = new Uint8Array(W * H);
+    { for (const i of cut) tiles[i] = SLOPE; const r = reach(); before.set(r); for (const i of cut) tiles[i] = CLIFF; }
+    const isCut = new Uint8Array(W * H); for (const i of cut) isCut[i] = 1;
+    for (let pass = 0; pass < 40; pass++){
+      const r = reach();
+      let lost = -1;
+      for (let i = 0; i < W * H && lost < 0; i++) if (before[i] && !r[i] && walk(tiles[i])) lost = i;
+      if (lost < 0) break;
+      // From that lost area, the shortest way through cut cliff to ground in reach: opened as a
+      // ramp three tiles wide.
+      const from = new Int32Array(W * H).fill(-2), q = [lost]; from[lost] = -1;
+      let hit = -1;
+      for (let h = 0; h < q.length && hit < 0; h++){
+        const i = q[h], x = i % W, y = (i / W) | 0;
+        for (const [dx, dy] of D8.slice(0, 4)){
+          const xx = x + dx, yy = y + dy, j = yy * W + xx;
+          if (xx < 0 || yy < 0 || xx >= W || yy >= H || from[j] !== -2) continue;
+          if (r[j]){ from[j] = i; hit = j; break; }
+          if ((walk(tiles[j]) && !r[j]) || (isCut[j] && tiles[j] === CLIFF)){ from[j] = i; q.push(j); }
+        }
+      }
+      if (hit < 0) break;
+      for (let i = from[hit]; i >= 0; i = from[i]) if (isCut[i] && tiles[i] === CLIFF){
+        tiles[i] = SLOPE;
+        for (const [dx, dy] of D8){ const j = i + dy * W + dx; if (isCut[j]) tiles[j] = SLOPE; }
+      }
     }
     grid.touch();
   }

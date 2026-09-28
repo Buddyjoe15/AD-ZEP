@@ -617,6 +617,7 @@
       // Genesis: water, shores, cliffs, waterfalls and trails along contours, then the ground
       // detail on top (tracks and footprints show on the trails).
       if (gen){
+        G.Ground.paintChunk(ctx, grd, x0, y0, ct);   // grass, undergrowth, brush and flowers
         G.Landscape.paintChunk(ctx, grd, x0, y0, ct);
         for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
           const gx = x0 + lx, gy = y0 + ly;

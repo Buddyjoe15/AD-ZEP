@@ -860,8 +860,8 @@ test('genesis plants free-standing trees in thick and thin clusters, off the til
   const grid = G.MapGen.genesis(72491), art = grid.art, tr = art.trees, cols = grid.cols;
   // Pinned: saves of this map type rebuild their terrain and trees from the seed.
   assert.equal(art.generator, 'genesis');
-  assert.equal(fnv(grid.tiles), 3607719926, 'genesis terrain unchanged');
-  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 3467667148, 'genesis trees unchanged');
+  assert.equal(fnv(grid.tiles), 535749720, 'genesis terrain unchanged');
+  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 2226709629, 'genesis trees unchanged');
   const again = G.MapGen.genesis(72491);
   assert.equal(fnv(again.tiles), fnv(grid.tiles), 'same seed, same map');
   assert.equal(fnv(G.MapGen.woodlands(72491).tiles), 1031677493, 'woodlands itself is untouched');
@@ -878,7 +878,7 @@ test('genesis plants free-standing trees in thick and thin clusters, off the til
   for (let k = 0; k < tr.count; k++){ const key = Math.floor(tr.x[k] / T / 8) * 64 + Math.floor(tr.y[k] / T / 8); blocks.set(key, (blocks.get(key) || 0) + 1); }
   const counts = [...blocks.values()];
   assert.ok(counts.filter(c => c >= 80).length > 40, 'thick stands');
-  assert.ok(counts.filter(c => c > 0 && c <= 12).length > 200, 'thin woodland and lone trees');
+  assert.ok(counts.filter(c => c > 0 && c <= 12).length > 80, 'thin woodland and lone trees');   // (fewer since open ground grows its own woods and copses)
   // Every species and kind of dead wood, every size, in drawing order (dead wood, then small
   // trees first, then north to south).
   const ALL = G.TREES.ALL, KN = G.TREES.KINDS.length, layer = k => tr.kind[k] >= KN ? 0 : 1, is = (k, name) => ALL[tr.kind[k]] === name;

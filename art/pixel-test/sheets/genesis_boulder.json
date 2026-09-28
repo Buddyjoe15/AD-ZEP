@@ -19,7 +19,7 @@
     108,
     148
   ],
-  "columns": "4 variants",
+  "columns": "8 variants",
   "shadow": {
     "drawnBy": "engine",
     "offset": [
@@ -29,6 +29,6 @@
     "elevation": "ground prop"
   },
   "image": "genesis_boulder.png",
-  "sheetWidth": 592,
+  "sheetWidth": 1184,
   "sheetHeight": 592
 }

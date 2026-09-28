@@ -300,6 +300,7 @@
       const S = G.State, t = performance.now();
       this.renderEconomy();
       this.renderClock();
+      G.HoverInfo.render();
       G.InventoryUI.refreshSearch();
       if (t - this.lastSlow < 250) return;
       this.lastSlow = t;

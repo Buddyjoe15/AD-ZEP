@@ -817,3 +817,14 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
 .panel-drag-head h3{margin:0;flex:1}
 .rpg .panel-drag-head .panel-close{flex:0 0 auto;min-width:30px;min-height:30px;padding:0;font-size:18px;line-height:1;border-radius:6px;cursor:pointer}
 #inventoryPanel.dragging{opacity:.92;box-shadow:0 8px 28px #000b}
+
+/* Hover info (src/ui/hover.js): what is under the mouse, just above the selection panel. */
+.hover-info{position:absolute;left:max(6px,env(safe-area-inset-left));bottom:120px;z-index:21;max-width:280px;min-width:150px;padding:6px 9px;
+  font-size:11px;line-height:1.35;pointer-events:none;background:#101713e6;border:1px solid #536054;border-radius:6px;color:#dfe6d8}
+.hover-info.hidden{display:none}
+.hover-info small{display:block;font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:#a8b5a9}
+.hover-info b{display:block;font-size:12px;margin-bottom:2px}
+.hover-info div{color:#c3ccbd}
+.hover-info em{display:block;margin-top:3px;font-size:8px;font-style:normal;color:#76836f}
+.hover-info.friend{border-color:#4f7fa8}
+.hover-info.foe{border-color:#a8574f}

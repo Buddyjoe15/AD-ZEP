@@ -42,9 +42,9 @@ export const PROP_SHADOW = {
   lamp: [6, 6], sign: [4, 4], bench: [3, 3], barrel: [3, 3], crate: [3, 3], well: [4, 4], fence: [2, 2], hay: [4, 4], cart: [4, 4]
 };
 const STUMP_VARIANTS = 3, LOG_VARIANTS = 2;
-// Variants per landscaping prop: flower patches come in six colours; boulders 2 and 3 are mossy.
+// Variants per landscaping prop: flower patches come in six colours; boulders 4 to 7 are mossy.
 export const PROP_VARIANTS = {
-  bush: 3, flowers: 6, boulder: 4, reeds: 3, mushrooms: 3, fern: 3, tallgrass: 3, thicket: 3, mound: 2, vent: 2, crystal: 3, ore: 3, alien: 3,
+  bush: 3, flowers: 6, boulder: 8, reeds: 3, mushrooms: 3, fern: 3, tallgrass: 3, thicket: 3, mound: 2, vent: 2, crystal: 3, ore: 3, alien: 3,
   logpile: 2, sawhorse: 1, burrow: 2, rubble: 3, tuft: 3, weeds: 3, pebbles: 3, leaves: 3, twigs: 3, bones: 2, puddle: 3,
   // Benches, fences and carts: 0 runs east–west, 1 north–south. Signs point 0 west or 1 east.
   lamp: 2, sign: 2, bench: 2, barrel: 3, crate: 2, well: 1, fence: 2, hay: 2, cart: 2
@@ -217,6 +217,48 @@ function variantFrames(kind, z, v){
 function roots(b, r, R, n){
   for (let i = 0; i < n; i++){ const a = (i / n) * TAU + r() * 0.6, [ex, ey] = polar(a, R * (1.2 + r() * 0.35)); b.taper(0, 0, ex, ey, R * 0.95, 1.6, 'dust1'); }
 }
+// A real-looking rock seen from above at (cx, cy), about R world px across its long axis: an
+// irregular outline (7–10 corners at uneven distances, stretched and turned), broken into
+// facets that meet at a ridge nudged towards the upper left, each facet shaded by which way
+// it faces (lit to the upper left, in shade to the lower right), with a flat top, cracks
+// running from the ridge, pits, and moss or lichen on some. `stone` picks the colours:
+// 'granite' (grey), 'slate' (blue-grey), 'sand' (brown) or 'ore' (rusty with bright seams).
+const STONE = {
+  granite: ['steel1', 'steel2', 'plate0', 'plate1', 'plate2'],
+  slate: ['steel0', 'steel1', 'steel2', 'plate0', 'plate1'],
+  sand: ['dust1', 'dust2', 'dust3', 'dust4', 'dust5'],
+  ore: ['rust0', 'rust1', 'rust2', 'dust4', 'dust5']
+};
+function rock(b, r, cx, cy, R, { stone = 'granite', moss = 0, lichen = 0.3 } = {}){
+  const n = 7 + Math.floor(r() * 4), rot = r() * TAU, stretch = 0.62 + r() * 0.38, pts = [];
+  for (let i = 0; i < n; i++){
+    const a = (i + (r() - 0.5) * 0.6) / n * TAU, d = R * (0.68 + r() * 0.4);
+    const x = Math.cos(a) * d, y = Math.sin(a) * d * stretch;
+    pts.push([cx + x * Math.cos(rot) - y * Math.sin(rot), cy + x * Math.sin(rot) + y * Math.cos(rot)]);
+  }
+  pts.sort((p, q) => Math.atan2(p[1] - cy, p[0] - cx) - Math.atan2(q[1] - cy, q[0] - cx));
+  const rx = cx - R * (0.12 + r() * 0.12), ry = cy - R * (0.12 + r() * 0.12), top = R * (0.18 + r() * 0.2);
+  const inside = (x, y) => { let c = false; for (let i = 0, j = n - 1; i < n; j = i++){ const [xi, yi] = pts[i], [xj, yj] = pts[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+  const ramp = STONE[stone], seed = r() * 1000, tones = pts.map(() => (r() - 0.5) * 0.35);
+  const cracks = Array.from({ length: 1 + Math.floor(r() * 3) }, () => { const p = pts[Math.floor(r() * n)]; return [p[0] * 0.9 + rx * 0.1, p[1] * 0.9 + ry * 0.1]; });
+  b.paint(cx - R * 1.2, cy - R * 1.2, cx + R * 1.2, cy + R * 1.2, (x, y) => {
+    if (!inside(x, y)) return null;
+    // Which facet: the wedge of the outline this point is in, seen from the ridge.
+    const ang = Math.atan2(y - ry, x - rx);
+    let k = 0, best = 9;
+    for (let i = 0; i < n; i++){ const e0 = pts[i], e1 = pts[(i + 1) % n], mid = Math.atan2((e0[1] + e1[1]) / 2 - ry, (e0[0] + e1[0]) / 2 - rx), dd = Math.abs(Math.atan2(Math.sin(ang - mid), Math.cos(ang - mid))); if (dd < best){ best = dd; k = i; } }
+    const e0 = pts[k], e1 = pts[(k + 1) % n], ox = (e0[0] + e1[0]) / 2 - rx, oy = (e0[1] + e1[1]) / 2 - ry, ol = Math.hypot(ox, oy) || 1;
+    const dr = Math.hypot(x - rx, y - ry);
+    let v = 0.5 - (ox + oy) / ol * 0.42 + tones[k] + Math.max(0, 1 - dr / (top * 2.2)) * 0.14;   // facing the upper left = lit; lighter near the ridge
+    const grain = Math.sin((x * 0.7 + y * 0.4) + seed) * Math.sin((x * 0.3 - y * 0.8) + seed * 1.3);
+    v += grain * 0.07;
+    if (cracks.some(([qx, qy]) => { const vx = qx - rx, vy = qy - ry, l2 = vx * vx + vy * vy, t = Math.max(0, Math.min(1, ((x - rx) * vx + (y - ry) * vy) / l2)); return t > 0.25 && Math.hypot(x - rx - t * vx, y - ry - t * vy) < 0.35; })) return ramp[0];
+    const mp = Math.sin(x * 0.38 + seed) * Math.sin(y * 0.45 + seed * 0.7) + Math.sin(x * 0.9 - y * 0.7 + seed) * 0.25;
+    if (moss && (y - ry) + (x - rx) > -R * 0.2 && mp > 1 - moss * 1.1) return mp > 1.05 - moss * 0.6 ? 'grass1' : 'leaf1';
+    if (lichen && Math.sin(x * 0.55 + seed * 2) * Math.sin(y * 0.5 - seed) + Math.sin(x * 1.3 + y * 1.1) * 0.2 > 1.12 - lichen * 0.3) return stone === 'sand' ? 'dust5' : 'plate1';
+    return ramp[Math.max(0, Math.min(4, Math.round(v * 4.2)))];
+  });
+}
 const PROP_DRAW = {
   // Sawn flat: a pale cut face with growth rings inside a dark bark ring.
   stump_cut(b, r, { r: R }){
@@ -297,15 +339,13 @@ Object.assign(PROP_DRAW, {
     }
   },
   // A boulder: a lumpy stone, lit top left, with a crack; mossy ones carry moss on top.
+  // Boulders: a main stone and often a smaller one or two beside it, in granite, slate or
+  // sandstone; variants 4 and up are mossy.
   boulder(b, r, { r: R }, a, v){
-    const lumps = 3 + Math.floor(r() * 2);
-    b.disc(0, 0, R * 0.8, 'plate0');
-    for (let i = 0; i < lumps; i++){ const [x, y] = polar(r() * TAU, R * 0.3); b.disc(x, y, R * (0.55 + r() * 0.15), 'plate0'); }
-    // The shaded side: a crescent to the lower right, beyond a circle nudged up and left.
-    b.paint(-R, -R, R, R, (x, y) => Math.hypot(x, y) < R * 0.95 && Math.hypot(x + R * 0.2, y + R * 0.2) > R * 0.85 && x + y > 0 ? 'steel2' : null);
-    for (let i = 0; i < 4; i++){ const [x, y] = polar(Math.PI * 1.25 + (r() - 0.5) * 1.2, R * (0.2 + r() * 0.3)); b.disc(x, y, R * (0.1 + r() * 0.08), 'plate1'); }
-    const [cx, cy] = polar(r() * TAU, R * 0.5); b.line(cx * 0.2, cy * 0.2, cx, cy, 0.5, 'steel1');
-    if (v >= 2) for (let i = 0; i < 5; i++){ const [x, y] = polar(Math.PI * 1.25 + (r() - 0.5) * 1.6, r() * R * 0.5); b.disc(x, y, R * (0.12 + r() * 0.1), r() < 0.6 ? 'leaf1' : 'grass1'); }
+    const stone = ['granite', 'slate', 'granite', 'sand'][v & 3], moss = v >= 4 ? 0.7 : 0.05;
+    rock(b, r, 0, 0, R * 0.82, { stone, moss });
+    if (r() < 0.7){ const [x, y] = polar(r() * TAU, R * 0.72); rock(b, r, x, y, R * (0.28 + r() * 0.16), { stone, moss }); }
+    if (R > 12 && r() < 0.6){ const [x, y] = polar(r() * TAU, R * 0.8); rock(b, r, x, y, R * (0.18 + r() * 0.12), { stone, moss }); }
   },
   // Reeds: a dense clump of upright blades seen from above (short strokes, lighter tips),
   // leaning out a little, with brown cattail heads among them.
@@ -381,12 +421,11 @@ Object.assign(PROP_DRAW, {
     }
     b.disc(0, 0, R * 0.2, 'cyan2');
   },
-  // A mineral outcrop: rusty, broken rock with bright seams.
+  // A mineral outcrop: rusty, broken rocks with bright seams.
   ore(b, r, { r: R }){
-    for (let i = 0; i < 4; i++){ const [x, y] = polar(r() * TAU, R * 0.35); b.disc(x, y, R * (0.45 + r() * 0.15), 'rust1'); }
-    b.paint(-R, -R, R, R, (x, y) => Math.hypot(x, y) < R * 0.9 && x + y > R * 0.3 ? 'rust0' : null);
-    for (let i = 0; i < 4; i++){ const [x, y] = polar(r() * TAU, R * 0.5); b.line(x * 0.3, y * 0.3, x, y, 0.6, r() < 0.5 ? 'amber1' : 'gold1'); }
-    b.disc(-R * 0.3, -R * 0.3, R * 0.2, 'rust2');
+    rock(b, r, -R * 0.15, 0, R * 0.62, { stone: 'ore', lichen: 0 });
+    const [x, y] = polar(r() * TAU, R * 0.5); rock(b, r, x, y, R * 0.38, { stone: 'ore', lichen: 0 });
+    for (let i = 0; i < 4; i++){ const [x, y] = polar(r() * TAU, R * 0.45); b.line(x * 0.3, y * 0.3, x, y, 0.6, r() < 0.5 ? 'amber1' : 'gold1'); }
   },
   // Alien plants: dark stems with glowing bulbs.
   alien(b, r, { r: R }){
@@ -419,15 +458,15 @@ Object.assign(PROP_DRAW, {
   },
   // Rubble: broken stone and brick among the grass.
   rubble(b, r, { r: R }){
-    for (let i = 0, n = Math.round(R * 0.9); i < n; i++){
-      const [x, y] = polar(r() * TAU, r() * R * 0.8), w = 1 + r() * 2.2;
-      b.disc(x, y, w, r() < 0.3 ? 'rust1' : r() < 0.6 ? 'plate0' : 'dust3');
-      b.disc(x - w * 0.3, y - w * 0.3, w * 0.4, 'plate1');
+    for (let i = 0, n = Math.round(R * 0.55); i < n; i++){
+      const [x, y] = polar(r() * TAU, r() * R * 0.75), w = 1.2 + r() * 2.4;
+      if (r() < 0.3) b.paint(x - w, y - w, x + w, y + w, (px, py) => Math.abs(px - x) < w && Math.abs(py - y) < w * 0.55 ? (py < y - w * 0.3 ? 'rust2' : 'rust1') : null);   // a brick
+      else rock(b, r, x, y, w, { stone: r() < 0.6 ? 'granite' : 'sand', lichen: 0 });
     }
   },
   tuft(b, r, { r: R }){ for (let i = 0; i < 9; i++){ const [ex, ey] = polar(-Math.PI / 2 + (r() - 0.5) * 2.4, R * (0.6 + r() * 0.4)); b.line(0, 1, ex, ey + 1, 0.6, r() < 0.4 ? 'grass3' : 'grass2'); } },
   weeds(b, r, { r: R }){ for (let i = 0; i < 5; i++){ const [ex, ey] = polar(r() * TAU, R * 0.8); b.line(0, 0, ex, ey, 0.6, 'leaf2'); b.disc(ex, ey, 1, 'grass3'); } },
-  pebbles(b, r, { r: R }){ for (let i = 0; i < 5; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.8), w = 0.8 + r() * 1.2; b.disc(x, y, w, r() < 0.5 ? 'plate0' : 'dust3'); b.disc(x - w * 0.3, y - w * 0.3, w * 0.4, 'plate1'); } },
+  pebbles(b, r, { r: R }){ for (let i = 0; i < 6; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.8), w = 0.9 + r() * 1.3; rock(b, r, x, y, w, { stone: ['granite', 'sand', 'slate'][Math.floor(r() * 3)], lichen: 0 }); } },
   leaves(b, r, { r: R }){ for (let i = 0; i < 9; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.8), [lx, ly] = polar(r() * TAU, 1.2); b.taper(x - lx, y - ly, x + lx, y + ly, 1.3, 0.5, ['amber1', 'rust2', 'gold0', 'amber0'][i % 4]); } },
   twigs(b, r, { r: R }){ for (let i = 0; i < 3; i++){ const [x, y] = polar(r() * TAU, r() * R * 0.4), [lx, ly] = polar(r() * TAU, R * (0.5 + r() * 0.4)); b.line(x - lx, y - ly, x + lx, y + ly, 0.8, 'dust1'); b.line(x, y, x + ly * 0.4, y - lx * 0.4, 0.6, 'dust1'); } },
   bones(b, r, { r: R }){ for (let i = 0; i < 2; i++){ const [lx, ly] = polar(r() * TAU, R * 0.7), ox = (r() - 0.5) * 3, oy = (r() - 0.5) * 3; b.line(ox - lx, oy - ly, ox + lx, oy + ly, 1, 'plate2'); b.disc(ox - lx, oy - ly, 1, 'plate2'); b.disc(ox + lx, oy + ly, 1, 'plate2'); } },
