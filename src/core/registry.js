@@ -110,10 +110,16 @@
       for (const k of (b.fabricator && b.fabricator.recipes) || []) if (!D.recipes.has(k)) problems.push(`buildable ${b.key}: unknown recipe ${k}`);
       if (!(b.armor >= 0 && b.armor < 1)) problems.push(`buildable ${b.key}: armor must be 0–1`);
       if (b.gate && b.blocksMovement) problems.push(`buildable ${b.key}: a gate must not block movement (it blocks by itself)`);
+      if (b.rotateTo){
+        const r = D.buildables.has(b.rotateTo) && D.buildables.get(b.rotateTo);
+        if (!r || r.rotateTo !== b.key || r.w !== b.h || r.h !== b.w) problems.push(`buildable ${b.key}: rotateTo ${b.rotateTo} must name its turned twin, pointing back`);
+      }
       for (const t of b.behaviors.filter(x => x.type === 'turret')){
         if (!(t.range > 0 && t.damage > 0 && t.reload > 0) || !['ground', 'air', 'any'].includes(t.targets)) problems.push(`buildable ${b.key}: turret needs range, damage, reload and targets`);
         if (t.ammo && !D.resources.has(t.ammo)) problems.push(`buildable ${b.key}: unknown ammo ${t.ammo}`);
         if (!(t.accuracy > 0 && t.accuracy <= 1)) problems.push(`buildable ${b.key}: turret accuracy must be 0–1`);
+        if (t.charge !== undefined && !(t.charge > 0)) problems.push(`buildable ${b.key}: turret charge must be positive`);
+        if (t.turn !== undefined && !(t.turn > 0)) problems.push(`buildable ${b.key}: turret turn rate must be positive`);
       }
     }
     for (const b of D.buildables.all()) if (D.units.has(b.key)) problems.push(`buildable ${b.key}: key also used by a unit`);

@@ -1,0 +1,58 @@
+{
+  "name": "gate_3_v",
+  "frameWidth": 96,
+  "frameHeight": 288,
+  "origin": [
+    0,
+    0
+  ],
+  "footprintTiles": [
+    1,
+    3
+  ],
+  "worldPxPerArtPx": 0.5,
+  "rows": "single row",
+  "model": "art/sprite-lab/specs/gate_3_v.mjs",
+  "states": {
+    "foundation": {
+      "start": 0,
+      "frames": 1
+    },
+    "frame": {
+      "start": 1,
+      "frames": 1
+    },
+    "near-complete": {
+      "start": 2,
+      "frames": 1
+    },
+    "finished": {
+      "start": 3,
+      "frames": 1
+    },
+    "open": {
+      "start": 4,
+      "frames": 1
+    },
+    "damaged": {
+      "start": 5,
+      "frames": 1
+    },
+    "rubble": {
+      "start": 6,
+      "frames": 1
+    }
+  },
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      8,
+      8
+    ],
+    "elevation": "structure"
+  },
+  "team": "team0..team2 (magenta ramp)",
+  "image": "gate_3_v.png",
+  "sheetWidth": 672,
+  "sheetHeight": 288
+}

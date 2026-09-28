@@ -1,0 +1,109 @@
+{
+  "name": "laser_turret",
+  "frameWidth": 96,
+  "frameHeight": 96,
+  "origin": [
+    0,
+    0
+  ],
+  "footprintTiles": [
+    1,
+    1
+  ],
+  "worldPxPerArtPx": 0.5,
+  "rows": "row 0 states; the head sheet has one row per facing",
+  "model": "art/sprite-lab/specs/laser_turret.mjs",
+  "states": {
+    "foundation": {
+      "start": 0,
+      "frames": 1
+    },
+    "frame": {
+      "start": 1,
+      "frames": 1
+    },
+    "near-complete": {
+      "start": 2,
+      "frames": 1
+    },
+    "finished": {
+      "start": 3,
+      "frames": 1
+    },
+    "damaged": {
+      "start": 4,
+      "frames": 1
+    },
+    "rubble": {
+      "start": 5,
+      "frames": 1
+    }
+  },
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      8,
+      8
+    ],
+    "elevation": "structure"
+  },
+  "team": "team0..team2 (magenta ramp)",
+  "head": {
+    "facings": 16,
+    "rows": "facing, clockwise from up",
+    "pivot": "footprint centre",
+    "states": {
+      "idle": {
+        "start": 0,
+        "frames": 1
+      },
+      "charging": {
+        "start": 1,
+        "frames": 6,
+        "fps": 2.4
+      },
+      "flash": {
+        "start": 7,
+        "frames": 2,
+        "fps": 8
+      },
+      "damaged": {
+        "start": 9,
+        "frames": 2,
+        "fps": 3
+      },
+      "damaged-charging": {
+        "start": 11,
+        "frames": 6,
+        "fps": 2.4
+      },
+      "damaged-flash": {
+        "start": 17,
+        "frames": 2,
+        "fps": 8
+      }
+    },
+    "on": {
+      "finished": "idle",
+      "damaged": "damaged"
+    },
+    "turnRate": 3.141592653589793,
+    "firing": {
+      "idle": [
+        "charging",
+        "flash"
+      ],
+      "damaged": [
+        "damaged-charging",
+        "damaged-flash"
+      ]
+    },
+    "chargeTime": 2.5,
+    "flashTime": 0.25,
+    "muzzle": 21,
+    "image": "laser_turret_head.png"
+  },
+  "image": "laser_turret.png",
+  "sheetWidth": 576,
+  "sheetHeight": 96
+}

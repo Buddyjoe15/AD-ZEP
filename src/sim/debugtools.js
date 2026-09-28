@@ -153,9 +153,7 @@
       const S = G.State, t = T(), gx = Math.floor(wx / t), gy = Math.floor(wy / t), near = (o, r) => Math.hypot(o.x - wx, o.y - wy) < r;
       const site = S.constructionSites.find(s => gx >= s.gx && gx < s.gx + s.w && gy >= s.gy && gy < s.gy + s.h);
       if (site){
-        const builder = G.Units.get(site.builderId);
-        if (builder && builder.buildSiteId === site.id) G.Construction.cancelFor(builder, true);
-        else { S.constructionSites = S.constructionSites.filter(s => s !== site); G.Economy.refund(G.Defs.buildables.get(site.type)?.cost || {}, 'construction removed'); }
+        G.Construction.cancelSite(site, true);   // a builder working it moves on to its next queued site
         return 'Construction site';
       }
       const b = G.Buildings.at(gx, gy);

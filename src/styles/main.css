@@ -777,6 +777,8 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
 }
 .catalog-art.catalog-wall{background:repeating-linear-gradient(90deg,#666 0 8px,#7b817b 8px 13px);border:2px solid #333;color:#eef0ed}
 .catalog-art.catalog-wall.reinforced{background:repeating-linear-gradient(90deg,#3e4a52 0 8px,#5b6a73 8px 13px);border-color:#1c2328}
+.catalog-art.catalog-wall.wood{background:repeating-linear-gradient(90deg,#6b4a2c 0 7px,#8a6440 7px 12px);border-color:#2b1d12}
+.catalog-rotate{margin-left:6px;padding:2px 8px;font:inherit;font-size:12px;border:1px solid #6a7a70;border-radius:4px;background:#26302b;color:#e6ece8;cursor:pointer}
 @media (orientation:landscape) and (max-height:420px){
   #economyBar{gap:2px}.resource-pill{height:23px;min-width:58px;padding:2px 5px;font-size:8px}.resource-pill b{font-size:8px}.resource-pill .resource-icon{font-size:10px}
   #squadBar{top:31px}

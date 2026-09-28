@@ -181,7 +181,7 @@ export function renderSprite(model, { w, h, ox, oy, res, heading = 0, ss = 2, ou
     if (mat.pattern){ const v = mat.pattern(p, n); if (typeof v === 'number') delta = v; else if (v) mat = v; }
     const top = mat.ramp.length - 1;
     let step;
-    if (mat.emissive) step = top;
+    if (mat.emissive) step = Math.max(0, top + Math.min(0, delta));   // a pattern may dim a lamp (-1, -2), never shade it
     else {
       // A neighbour occludes when it stands in front of where this sample's own surface would
       // be at that spot, so steep faces don't shade themselves.

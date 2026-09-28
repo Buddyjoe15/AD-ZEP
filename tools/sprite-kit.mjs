@@ -4,13 +4,17 @@
 import { C } from './pixelart.mjs';
 import { noise3, along, mix } from './render3d.mjs';
 export * from './render3d.mjs';
+import { renderSprite } from './render3d.mjs';
 
 export const LIFT = 0;            // straight top-down: height doesn't move a point on screen
 export const RES = 2;             // art px per world px: a 48 world px tile is 96 × 96 art px
 export const TILE = 48;           // world px per tile
 export const FACINGS = ['up', 'up-right', 'right', 'down-right', 'down', 'down-left', 'left', 'up-left'];
 export const ENGINE_ANIMS = ['idle', 'walk', 'work', 'fly'];
-export const ENGINE_STATES = ['foundation', 'frame', 'near-complete', 'finished', 'working', 'damaged', 'rubble'];
+export const ENGINE_STATES = ['foundation', 'frame', 'near-complete', 'finished', 'working', 'open', 'damaged', 'rubble'];
+// Connecting structures (walls): a state with `connect: true` has 16 frames, one per neighbour
+// mask, the bits naming the sides a wall or a gate's end joins it: 1 north, 2 east, 4 south, 8 west.
+export const CONNECT = { N: 1, E: 2, S: 4, W: 8 };
 export const OUTLINE = C.outline;
 
 // Colour ramps, dark to light, as palette indices. Longer ramps give smoother shading; every
@@ -95,3 +99,16 @@ export const unitFrame = (size = 'standard') => ({ ...UNIT_FRAMES[size] });
 export const structureFrame = (fw, fh) => ({ w: fw * TILE * RES, h: fh * TILE * RES, ox: fw * TILE, oy: fh * TILE });
 // Engine shadow offsets by elevation, in world px (the metadata stores art px).
 export const SHADOW = { ground: [2, 4], hover: [6, 8], air: [8, 10], structure: [4, 4], prop: [4, 4] };
+
+// Renders one structure frame F from `model`, turned by `heading` (a vertical gate is the
+// horizontal model turned 90°). With `bleed` (art px) it renders a wider area and crops it,
+// so parts that run on past the frame edge, like a wall's arms into its neighbours, keep the
+// shading and outline they have mid-wall, and neighbouring frames meet without a seam.
+export function renderStructure(model, F, { heading = 0, bleed = 0 } = {}){
+  const b = bleed, W = F.w + 2 * b, H = F.h + 2 * b;
+  const { px } = renderSprite(model, { w: W, h: H, ox: F.ox + b, oy: F.oy + b, res: RES, heading, lift: LIFT, outline: OUTLINE });
+  if (!b) return { px };
+  const out = new px.constructor(F.w * F.h);
+  for (let y = 0; y < F.h; y++) for (let x = 0; x < F.w; x++) out[y * F.w + x] = px[(y + b) * W + x + b];
+  return { px: out };
+}

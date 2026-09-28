@@ -91,7 +91,8 @@
     // structures larger than 2×2 go in the bottom row beside the mine instead.
     testingZone(){
       const S = G.State, sh = G.Units.ship(), T = G.CONFIG.TILE, north = new Set(R().testNorth || []);
-      const small = d => d.w <= 2 && d.h <= 2 && !north.has(d.key), large = d => !small(d) && !north.has(d.key);
+      // Turned twins (vertical gates, `listed: false`) are left out: one of each structure.
+      const small = d => d.w <= 2 && d.h <= 2 && !north.has(d.key) && d.listed !== false, large = d => !small(d) && !north.has(d.key) && d.listed !== false;
       const entries = [
         // (Not the cave nest, which would wake beside the ship, nor the recordings, found in caves.)
         ...G.Defs.buildables.all().filter(d => !d.placeOnNode && small(d) && d.key !== 'cave_nest').map(d => ({ kind: 'building', key: d.key })),
