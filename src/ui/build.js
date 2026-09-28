@@ -56,10 +56,12 @@
       return this.previewAt(wx, wy);
     },
     // The cells of a row from `a` toward `b`: along whichever axis b is further along.
+    // (Sections are a footprint apart.)
     rowCells(a, b){
-      const dx = b.gx - a.gx, dy = b.gy - a.gy, across = Math.abs(dx) >= Math.abs(dy);
-      const n = Math.min(Math.max(Math.abs(dx), Math.abs(dy)), MAX_ROW - 1), step = Math.sign(across ? dx : dy);
-      return Array.from({ length: n + 1 }, (_, i) => across ? { gx: a.gx + i * step, gy: a.gy } : { gx: a.gx, gy: a.gy + i * step });
+      const d = G.Defs.buildables.get(this.mode.key), fw = d ? d.w : 1, fh = d ? d.h : 1;
+      const dx = b.gx - a.gx, dy = b.gy - a.gy, across = Math.abs(dx) / fw >= Math.abs(dy) / fh;
+      const n = Math.min(Math.round(across ? Math.abs(dx) / fw : Math.abs(dy) / fh), MAX_ROW - 1), step = Math.sign(across ? dx : dy);
+      return Array.from({ length: n + 1 }, (_, i) => across ? { gx: a.gx + i * step * fw, gy: a.gy } : { gx: a.gx, gy: a.gy + i * step * fh });
     },
     previewAt(wx, wy){
       if (!this.placing()) return null;

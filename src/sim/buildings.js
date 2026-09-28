@@ -96,7 +96,9 @@
         if (n) return { gx: n.gx - Math.floor(d.w / 2), gy: n.gy - Math.floor(d.h / 2), node: n };
         return { gx: Math.floor(wx / T) - Math.floor(d.w / 2), gy: Math.floor(wy / T) - Math.floor(d.h / 2), node: null };
       }
-      return { gx: Math.floor(wx / T), gy: Math.floor(wy / T), node: null };
+      // Centred on the point (a 1 × 1 footprint on the tile under it).
+      const w = d ? d.w : 1, h = d ? d.h : 1;
+      return { gx: Math.floor(wx / T - (w - 1) / 2), gy: Math.floor(wy / T - (h - 1) / 2), node: null };
     },
     // Nearest structure an attacker of another team may target within `r` (edge distance).
     // Testing-zone fixtures are never targeted.

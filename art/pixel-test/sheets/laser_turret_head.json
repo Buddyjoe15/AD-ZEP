@@ -6,7 +6,7 @@
     96,
     96
   ],
-  "worldPxPerArtPx": 0.25,
+  "worldPxPerArtPx": 0.5,
   "facings": 16,
   "rows": "facing, clockwise from up",
   "pivot": "footprint centre",

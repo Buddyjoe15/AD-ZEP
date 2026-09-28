@@ -7,10 +7,10 @@
     0
   ],
   "footprintTiles": [
-    1,
-    1
+    2,
+    2
   ],
-  "worldPxPerArtPx": 0.25,
+  "worldPxPerArtPx": 0.5,
   "rows": "row 0 states; the head sheet has one row per facing",
   "model": "art/sprite-lab/specs/sentry_turret.mjs",
   "states": {

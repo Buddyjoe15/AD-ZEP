@@ -7,10 +7,10 @@
     0
   ],
   "footprintTiles": [
-    2,
-    2
+    4,
+    4
   ],
-  "worldPxPerArtPx": 0.25,
+  "worldPxPerArtPx": 0.5,
   "rows": "single row",
   "states": {
     "foundation": {

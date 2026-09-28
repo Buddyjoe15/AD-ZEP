@@ -115,7 +115,7 @@
     // Trees, stumps and fallen trees within r of (x, y), measured to their nearest point.
     within(x, y, r, fn){
       if (!ensure()) return;
-      const T = G.CONFIG.TILE, W = cur.W, grid = G.State.grid, reach = r + 60;
+      const T = G.CONFIG.TILE, W = cur.W, grid = G.State.grid, reach = r + 120;   // (a fallen tree reaches ~110 px from its centre)
       const x0 = Math.floor((x - reach) / T), x1 = Math.floor((x + reach) / T), y0 = Math.floor((y - reach) / T), y1 = Math.floor((y + reach) / T);
       for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++){
         if (!grid.inBounds(xx, yy)) continue;
@@ -130,11 +130,11 @@
     // nearest within its own size (a crown's radius, a stump's, a fallen tree's width).
     at(x, y){
       let best = -1, bd = Infinity;
-      this.within(x, y, 30, k => {
+      this.within(x, y, 60, k => {
         const tr = cur.tr, kind = kindNow(k);
         if (G.TREES.props[kind]?.decor) return;   // small ground detail isn't a target
         const p = this.nearestPoint(k, x, y), d = Math.hypot(p.x - x, p.y - y);
-        const pd = G.TREES.props[kind], r = kind === 'log' ? pd.sizes[tr.size[k]].width + 6 : kind.startsWith('stump') ? 12 : pd ? pd.sizes[tr.size[k]].r + 4 : Math.max(10, G.TREES.species[kind].crown[tr.size[k]] * 0.4);
+        const pd = G.TREES.props[kind], r = kind === 'log' ? pd.sizes[tr.size[k]].width + 6 : kind.startsWith('stump') ? 20 : pd ? pd.sizes[tr.size[k]].r + 4 : Math.max(10, G.TREES.species[kind].crown[tr.size[k]] * 0.4);
         if (d <= r && d < bd){ bd = d; best = k; }
       });
       return best;

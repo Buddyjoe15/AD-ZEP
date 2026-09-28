@@ -32,7 +32,7 @@
           G.Containers.create((c.recording.x + 0.5) * T, (c.recording.y + 0.5) * T, [G.Items.create(key)],
             { type: 'black_box', name: 'Black Box Recorder', gx: c.recording.x, gy: c.recording.y, capacity: 1 });
         }
-        if (c.nest && G.Buildings.canPlace(c.nest.x, c.nest.y, 2, 2)){
+        if (c.nest && G.Buildings.canPlaceKey('cave_nest', c.nest.x, c.nest.y)){
           // Its guards wait round it, on the side towards the way in.
           const b = G.Buildings.add('cave_nest', c.nest.x, c.nest.y), dx = c.x - c.nest.x, dy = c.y - c.nest.y, d = Math.hypot(dx, dy) || 1;
           G.Spawner.configure(b, { rally: { x: b.x + dx / d * T * 2, y: b.y + dy / d * T * 2 } });

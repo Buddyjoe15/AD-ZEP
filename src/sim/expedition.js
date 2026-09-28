@@ -71,15 +71,17 @@
       E.waveAt = rules.firstWave;
       G.Caves.populate();
     },
-    // Tile near (wx, wy) where a deposit can take a 3×3 Mine Building: the whole block is
-    // open, reachable ground away from other deposits.
+    // Tile near (wx, wy) where a deposit can take a Mine Building (the extractor's footprint,
+    // placed as the build menu centres it on the deposit): the whole block is open, reachable
+    // ground away from other deposits.
     mineSite(wx, wy, region){
       const S = G.State, T = G.CONFIG.TILE, cx = Math.floor(wx / T), cy = Math.floor(wy / T);
+      const ex = G.Defs.buildables.all().find(d => d.placeOnNode === 'deposit'), fw = ex ? ex.w : 3, fh = ex ? ex.h : 3, ox = Math.floor(fw / 2), oy = Math.floor(fh / 2);
       const ok = (x, y) => {
-        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){
+        for (let dy = -oy; dy < fh - oy; dy++) for (let dx = -ox; dx < fw - ox; dx++){
           if (!S.grid.passable(x + dx, y + dy) || (region && S.grid.regionAt(x + dx, y + dy) !== region)) return false;
         }
-        return !S.resourceNodes.some(n => Math.abs((n.gx ?? Math.floor(n.x / T)) - x) < 5 && Math.abs((n.gy ?? Math.floor(n.y / T)) - y) < 5);
+        return !S.resourceNodes.some(n => Math.abs((n.gx ?? Math.floor(n.x / T)) - x) < fw + 2 && Math.abs((n.gy ?? Math.floor(n.y / T)) - y) < fh + 2);
       };
       for (let r = 0; r <= 14; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++){
         if (Math.max(Math.abs(dx), Math.abs(dy)) === r && ok(cx + dx, cy + dy)) return { x: cx + dx, y: cy + dy };
@@ -87,21 +89,29 @@
       return null;
     },
     // One of every buildable and item, left of the ship, for testing, plus a metal deposit
-    // with a working Mine Building beneath the grid. The grid has 3-tile cells, so
-    // structures larger than 2×2 go in the bottom row beside the mine instead.
+    // with a working Mine Building beneath the grid. The grid has 6-tile cells, so
+    // structures larger than 4×4 go in the bottom row beside the mine instead.
     testingZone(){
-      const S = G.State, sh = G.Units.ship(), T = G.CONFIG.TILE, north = new Set(R().testNorth || []);
+      const S = G.State, sh = G.Units.ship(), T = G.CONFIG.TILE, north = new Set(R().testNorth || []), CELL = 6;   // grid cells, tiles
       // Turned twins (vertical gates, `listed: false`) are left out: one of each structure.
-      const small = d => d.w <= 2 && d.h <= 2 && !north.has(d.key) && d.listed !== false, large = d => !small(d) && !north.has(d.key) && d.listed !== false;
+      const small = d => d.w <= CELL - 2 && d.h <= CELL - 2 && !north.has(d.key) && d.listed !== false, large = d => !small(d) && !north.has(d.key) && d.listed !== false;
       const entries = [
         // (Not the cave nest, which would wake beside the ship, nor the recordings, found in caves.)
         ...G.Defs.buildables.all().filter(d => !d.placeOnNode && small(d) && d.key !== 'cave_nest').map(d => ({ kind: 'building', key: d.key })),
         ...G.Defs.items.keys().filter(key => G.Defs.items.get(key).kind !== 'recording').map(key => ({ kind: 'item', key }))
       ];
-      const cols = 4, x0 = sh.gx - 16, y0 = sh.gy + 1, rows = Math.ceil(entries.length / cols);
-      if (G.MapGen.types[S.map].clearLanding) this.editTerrain(x0 - 1, y0 - 2, cols * 3 + 1, rows * 3 + 6);
+      const cols = 4, x0 = sh.gx - cols * CELL - 4, y0 = sh.gy + 1, rows = Math.ceil(entries.length / cols);
+      // The mine and the large structures go in rows under the grid, wrapping at its width.
+      const mine = G.Defs.buildables.all().find(d => d.placeOnNode === 'deposit'), below = [];
+      let lx = x0 + (mine ? mine.w + 2 : 0), ly = y0 + rows * CELL, rowH = mine ? mine.h : 0;
+      for (const d of G.Defs.buildables.all().filter(d => !d.placeOnNode && large(d))){
+        if (lx > x0 && lx + d.w > x0 + cols * CELL){ lx = x0; ly += rowH + 2; rowH = 0; }
+        below.push({ key: d.key, gx: lx, gy: ly });
+        lx += d.w + 2; rowH = Math.max(rowH, d.h);
+      }
+      if (G.MapGen.types[S.map].clearLanding) this.editTerrain(x0 - 1, y0 - 2, cols * CELL + 1, ly + rowH + 2 - (y0 - 2));
       entries.forEach((e, i) => {
-        const gx = x0 + (i % cols) * 3, gy = y0 + Math.floor(i / cols) * 3, x = (gx + 0.5) * T, y = (gy + 0.5) * T;
+        const gx = x0 + (i % cols) * CELL, gy = y0 + Math.floor(i / cols) * CELL, x = (gx + 0.5) * T, y = (gy + 0.5) * T;
         if (e.kind === 'item'){ G.Containers.groundItem(x, y, G.Items.create(e.key), { gx, gy, testZone: true }); return; }
         const d = G.Defs.buildables.get(e.key);
         if (d.container){ G.Containers.create(x, y, [], { opened: true, built: true, gx, gy, capacity: d.container.capacity, name: 'Test ' + d.name, testZone: true }); return; }
@@ -110,14 +120,12 @@
       for (const d of G.Defs.buildables.all().filter(d => d.placeOnNode === 'deposit')){
         const node = G.Defs.nodes.all().find(n => n.kind === 'deposit' && n.building === d.key);
         if (!node) continue;
-        const gx = x0, gy = y0 + rows * 3;
+        const gx = x0, gy = y0 + rows * CELL;
         G.Gather.addNode(node.key, (gx + Math.floor(d.w / 2) + 0.5) * T, (gy + Math.floor(d.h / 2) + 0.5) * T);
         G.Buildings.add(d.key, gx, gy, { id: 'test-' + G.newId(), extra: { testZone: true } });
         break;
       }
-      G.Defs.buildables.all().filter(d => !d.placeOnNode && large(d)).forEach((d, i) => {
-        G.Buildings.add(d.key, x0 + 4 * (i + 1), y0 + rows * 3, { id: 'test-' + G.newId(), extra: { testZone: true } });
-      });
+      for (const e of below) G.Buildings.add(e.key, e.gx, e.gy, { id: 'test-' + G.newId(), extra: { testZone: true } });
       // Power structures stand in a row just north of the ship.
       let nx = sh.gx;
       for (const key of north){

@@ -115,8 +115,9 @@
       const hit = u => { u.hp -= cfg.damage; G.Events.emit('combat:hit', { attacker: b, target: u, damage: cfg.damage }); };
       hit(t);
       if (cfg.splash){
+        // Anyone whose body the blast reaches (units are large next to the blast).
         const hash = S.teamSpatial[t.team];
-        for (const u of hash ? hash.query(t.x, t.y, cfg.splash) : []) if (u !== t && u.hp > 0 && this.canHit(cfg, u) && G.dist2(u, t) <= cfg.splash * cfg.splash) hit(u);
+        for (const u of hash ? hash.query(t.x, t.y, cfg.splash + 40) : []) if (u !== t && u.hp > 0 && this.canHit(cfg, u) && G.dist2(u, t) <= (cfg.splash + (u.radius || 0)) ** 2) hit(u);
         if (!flying(t)) G.Trees.blast(t.x, t.y, cfg.splash, cfg.damage);   // blasts on the ground also hit trees
       }
       S.shots.push({ x1: b.x, y1: b.y, x2: t.x, y2: t.y, life: cfg.shot ? 0.18 : 0.09, team: b.team, kind: cfg.shot || null, from: b.id });

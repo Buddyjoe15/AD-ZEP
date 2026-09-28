@@ -129,8 +129,8 @@ test('genesis trees: five species in three sizes drawn to the crowns the generat
           // rustled leaves (clumps a world px across, just outside the edge).
           let far = 0; const c = (n - 1) / 2;
           for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (g.get(x, y) > 1) far = Math.max(far, Math.hypot(x - c, y - c) + 0.5);
-          const d = far * 2 / (GT.k || 2);   // diameter in world px
-          assert.ok(d <= GT.crown[kind][z] + 3 && d >= GT.crown[kind][z] * 0.75, `${kind} ${z} crown ${d} for ${GT.crown[kind][z]}`);
+          const d = far * 2 / (GT.k || 2) * (GT.scale?.[kind] || 1);   // diameter in world px (drawn at GT.scale)
+          assert.ok(d <= GT.crown[kind][z] + 3 * (GT.scale?.[kind] || 1) && d >= GT.crown[kind][z] * 0.75, `${kind} ${z} crown ${d} for ${GT.crown[kind][z]}`);
         }
         assert.ok(unrle(frames[0]).includes(ALPHABET[1]), 'outlined');
         for (let f = 1; f < frames.length; f++) assert.notEqual(frames[f], frames[0], kind + ' leaves move');
@@ -138,7 +138,8 @@ test('genesis trees: five species in three sizes drawn to the crowns the generat
     });
   }
   assert.equal(GT.k, 4, 'tree and landscaping art at 4 art px per world px');
-  assert.deepEqual(GT.shadow.map(o => o[0] / 2), [3, 4, 6], 'taller trees throw their shadow further (world px)');
+  assert.deepEqual(GT.shadow.map(o => o[0] / 2), [6, 8, 12], 'taller trees throw their shadow further (world px, at twice the size)');
+  for (const kind of ['spruce', 'pine', 'birch', 'maple', 'snag', 'stump_cut', 'stump_broken', 'log']) assert.equal(GT.scale[kind], 2, kind + ' drawn at twice the size');
   // Dead wood: the sizes the generator plants, stumps in variants, fallen trees at every angle.
   assert.deepEqual(Object.keys(GT.props), Object.keys(G.TREES.props));
   assert.equal(GT.logAngles, G.TREES.LOG_ANGLES);

@@ -3,7 +3,8 @@
    are regenerated from the seed with the rest of the terrain; only the damage done to them is
    saved (src/sim/trees.js).
    `crown` is the crown diameter in world px for each size (small, medium, large); the art in
-   tools/genesis-trees.mjs is drawn to the same sizes (a test checks they match). In the wind,
+   tools/genesis-trees.mjs is drawn at half these sizes and shown at twice (its data's `scale`),
+   and a test checks the sizes match. In the wind,
    `sway` scales how often and how far a tree leans (stiff conifers less, light birches more)
    and `rustle` how many of them rustle and how fast; a snag has no leaves to rustle. */
 GW.TREES = {
@@ -14,11 +15,11 @@ GW.TREES = {
   // How far a crown leans per wind step, in world px, by size: saplings bend most.
   LEAN_PX: [2, 1.5, 1],
   species: {
-    spruce: { name: 'Spruce', crown: [18, 28, 38], sway: 0.6, rustle: 0.5 },
-    pine:   { name: 'Pine',   crown: [22, 34, 46], sway: 0.8, rustle: 0.7 },
-    birch:  { name: 'Birch',  crown: [20, 30, 40], sway: 1.2, rustle: 1.4 },
-    maple:  { name: 'Maple',  crown: [24, 40, 56], sway: 0.9, rustle: 1 },
-    snag:   { name: 'Dead snag', crown: [18, 26, 36], sway: 0.5, rustle: 0 }
+    spruce: { name: 'Spruce', crown: [36, 56, 76], sway: 0.6, rustle: 0.5 },
+    pine:   { name: 'Pine',   crown: [44, 68, 92], sway: 0.8, rustle: 0.7 },
+    birch:  { name: 'Birch',  crown: [40, 60, 80], sway: 1.2, rustle: 1.4 },
+    maple:  { name: 'Maple',  crown: [48, 80, 112], sway: 0.9, rustle: 1 },
+    snag:   { name: 'Dead snag', crown: [36, 52, 72], sway: 0.5, rustle: 0 }
   }
 };
 GW.TREES.KINDS = Object.keys(GW.TREES.species);
@@ -43,9 +44,9 @@ GW.TREES.species.maple.tough = 1.2;
 // stumps can be walked over. A fallen tree lies at one of LOG_ANGLES directions (0 = its
 // crown end pointing east, then clockwise), so it can fall any way, not just along the grid.
 GW.TREES.props = {
-  stump_cut:    { name: 'Tree stump',    sizes: [{ r: 4 }, { r: 6 }] },
-  stump_broken: { name: 'Snapped stump', sizes: [{ r: 4 }, { r: 6 }] },
-  log:          { name: 'Fallen tree',   sizes: [{ length: 72, width: 6 }, { length: 108, width: 9 }] },
+  stump_cut:    { name: 'Tree stump',    sizes: [{ r: 8 }, { r: 12 }] },
+  stump_broken: { name: 'Snapped stump', sizes: [{ r: 8 }, { r: 12 }] },
+  log:          { name: 'Fallen tree',   sizes: [{ length: 144, width: 12 }, { length: 216, width: 18 }] },
   // Landscaping on Genesis maps, where the terrain has brush, wildflowers, mushrooms, boulders,
   // reeds or forest floor (the tile keeps its terrain; these are drawn on it at their own
   // places). `hp` and `wood` by size, as for the dead wood; boulders can't be destroyed.

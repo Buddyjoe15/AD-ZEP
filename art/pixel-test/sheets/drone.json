@@ -6,7 +6,7 @@
     65.5,
     65.5
   ],
-  "worldPxPerArtPx": 0.25,
+  "worldPxPerArtPx": 0.5,
   "rows": "facing",
   "facings": [
     "up",

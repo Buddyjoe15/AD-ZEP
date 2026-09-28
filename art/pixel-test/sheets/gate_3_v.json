@@ -7,10 +7,10 @@
     0
   ],
   "footprintTiles": [
-    1,
-    3
+    2,
+    6
   ],
-  "worldPxPerArtPx": 0.25,
+  "worldPxPerArtPx": 0.5,
   "rows": "single row",
   "model": "art/sprite-lab/specs/gate_3_v.mjs",
   "states": {

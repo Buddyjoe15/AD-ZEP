@@ -11,7 +11,7 @@
   const G = GW, Math = globalThis.Math, TAU = Math.PI * 2;
   // World px a tree or fallen tree can reach past its position: half the largest frame
   // (a large fallen tree), plus lean and shadow.
-  const REACH = 80;
+  const REACH = 160;
   // Frames are stored run-length encoded (tools/genesis-trees.mjs); expanded once each.
   const plain = new Map();
   const expand = s => { let o = plain.get(s); if (o === undefined){ o = s.replace(/(\D)(\d+)/g, (_, ch, n) => ch.repeat(+n)); plain.set(s, o); } return o; };
@@ -145,28 +145,31 @@
   // Art px per world px of the tree art (4 since the art went up in resolution; 2 before).
   const AK = A => A.k || 2;
   const artScale = () => { const A = pixelArt(); return A ? AK(A) : 2; };
-  function levelFor(g){
-    const perArt = Math.abs(g.getTransform().a) / artScale();   // device px per art px
+  // How much bigger than drawn a kind stands on the map (trees and dead wood: 2).
+  const SC = (A, kind) => (A && A.scale && A.scale[kind]) || 1;
+  function levelFor(g, sc = 1){
+    const perArt = Math.abs(g.getTransform().a) * sc / artScale();   // device px per art px
     const level = perArt >= 1 ? 0 : perArt >= 0.5 ? 1 : perArt >= 0.25 ? 2 : 3;
     return { level, shrink: perArt * (1 << level) < 1 - 1e-6 };
   }
   let DECOR = null;
   const decorKinds = () => DECOR || (DECOR = Uint8Array.from(G.TREES.ALL, k => G.TREES.props[k] && G.TREES.props[k].decor ? 1 : 0));
   function drawPixel(g, I, count, A){
-    const ALL = G.TREES.ALL, smooth = g.imageSmoothingEnabled, { level, shrink } = levelFor(g);
+    const ALL = G.TREES.ALL, smooth = g.imageSmoothingEnabled, L1 = levelFor(g, 1), L2 = levelFor(g, 2);
+    const lv = j => SC(A, ALL[I.EK[j]]) > 1 ? L2 : L1, size = (j, v) => v.n / AK(A) * SC(A, ALL[I.EK[j]]);
     const frame = j => { const set = A.art[ALL[I.EK[j]]][I.ES[j]], v = set[I.VR[j] % set.length]; return v; };
     const shadow = j => layer(I.EK[j]) ? A.shadow[I.ES[j]] : A.propShadow[ALL[I.EK[j]]];
     const m = mask(g);
-    m.imageSmoothingEnabled = shrink;
     for (let k = 0; k < count; k++){
-      const j = I.ids[k], v = frame(j), str = expand(v.frames[I.step[j] % v.frames.length]), w = v.n / AK(A), off = shadow(j);
-      m.drawImage(mip(str, v.n, level, true), I.X[j] - w / 2 + I.dx[j] + off[0] / 2, I.Y[j] - w / 2 + off[1] / 2, w, w);
+      const j = I.ids[k], v = frame(j), str = expand(v.frames[I.step[j] % v.frames.length]), w = size(j, v), off = shadow(j), L = lv(j);
+      m.imageSmoothingEnabled = L.shrink;
+      m.drawImage(mip(str, v.n, L.level, true), I.X[j] - w / 2 + I.dx[j] + off[0] / 2, I.Y[j] - w / 2 + off[1] / 2, w, w);
     }
     g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = G.PixelArt.SHADOW_ALPHA; g.drawImage(m.canvas, 0, 0); g.restore();
-    g.imageSmoothingEnabled = shrink;
     for (let k = 0; k < count; k++){
-      const j = I.ids[k], v = frame(j), str = expand(v.frames[I.step[j] % v.frames.length]), w = v.n / AK(A);
-      g.drawImage(mip(str, v.n, level, false), I.X[j] - w / 2 + I.dx[j], I.Y[j] - w / 2, w, w);
+      const j = I.ids[k], v = frame(j), str = expand(v.frames[I.step[j] % v.frames.length]), w = size(j, v), L = lv(j);
+      g.imageSmoothingEnabled = L.shrink;
+      g.drawImage(mip(str, v.n, L.level, false), I.X[j] - w / 2 + I.dx[j], I.Y[j] - w / 2, w, w);
     }
     g.imageSmoothingEnabled = smooth;
   }
@@ -296,7 +299,7 @@
       const a0 = g.globalAlpha;
       g.globalAlpha = a0 * alpha;
       if (A){
-        const set = A.art[kind][size], v = set[variant % set.length], str = expand(v.frames[step % v.frames.length]), w = v.n / AK(A), { level, shrink } = levelFor(g), smooth = g.imageSmoothingEnabled;
+        const set = A.art[kind][size], v = set[variant % set.length], str = expand(v.frames[step % v.frames.length]), w = v.n / AK(A) * SC(A, kind), { level, shrink } = levelFor(g, SC(A, kind)), smooth = g.imageSmoothingEnabled;
         g.imageSmoothingEnabled = shrink;
         g.drawImage(mip(str, v.n, level, false), x - w / 2, y - w / 2, w, w);
         g.imageSmoothingEnabled = smooth;

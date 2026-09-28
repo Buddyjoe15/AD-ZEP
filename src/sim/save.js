@@ -183,8 +183,31 @@
     return v;
   }
 
-  // Keyed by the schema each step upgrades from; add { 10: migrate_10_to_11 } and so on.
-  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7, 7: migrate_7_to_8, 8: migrate_8_to_9, 9: migrate_9_to_10 };
+  // Schema 10 → schema 11: units and structures are twice the size. Every structure and
+  // construction site stands on twice as many tiles each way from the same top-left tile (its
+  // centre moves to match; a neighbour may now overlap it, which only matters to the art), and
+  // every unit except the ship has twice its collision radius.
+  function migrate_10_to_11(d){
+    const v = G.copy(d), T = 48;
+    v.schema = 11;
+    for (const b of [...(v.buildings || []), ...(v.constructionSites || [])]){
+      const bottom = b.y + b.h / 2 * T, x = b.x;
+      // The Resource Extractor needs an odd footprint centred on its deposit: 3 × 3 becomes 7 × 7.
+      if (b.type === 'mine_building' && b.w === 3 && b.h === 3){ b.gx -= 2; b.gy -= 2; b.w = b.h = 7; }
+      else { b.w *= 2; b.h *= 2; }
+      b.x = (b.gx + b.w / 2) * T; b.y = (b.gy + b.h / 2) * T;
+      // Rally points keep their place relative to the building's bottom edge, so a default
+      // rally is still the default one, just below the larger footprint.
+      const move = r => r && typeof r.x === 'number' && typeof r.y === 'number' ? { x: r.x + b.x - x, y: r.y + b.y + b.h / 2 * T - bottom } : r;
+      if (b.rally) b.rally = move(b.rally);
+      if (b.spawner && b.spawner.rally) b.spawner.rally = move(b.spawner.rally);
+    }
+    for (const u of v.units || []) if (!u.isShip && u.radius > 0) u.radius *= 2;
+    return v;
+  }
+
+  // Keyed by the schema each step upgrades from; add { 11: migrate_11_to_12 } and so on.
+  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7, 7: migrate_7_to_8, 8: migrate_8_to_9, 9: migrate_9_to_10, 10: migrate_10_to_11 };
 
   // Applies the steps in order until the save reaches G.SAVE_SCHEMA. A current save is
   // returned as is; anything newer or unknown is rejected.

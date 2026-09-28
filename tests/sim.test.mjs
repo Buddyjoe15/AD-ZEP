@@ -220,9 +220,9 @@ test('a row of walls: one Spider builds each in turn, skipping blocked tiles; ca
   const G = newGame();
   const S = G.State, spider = find(G, 'utility_spider'), p = field(G, 12, 14);
   S.resources.metal = 1000;
-  // Five cells east of p, with a wall already on the third.
-  const cells = [0, 1, 2, 3, 4].map(i => ({ gx: p.x + i, gy: p.y }));
-  G.Buildings.add('defensive_wall', p.x + 2, p.y);
+  // Five 2×2 wall spots east of p, with a wall already on the third.
+  const cells = [0, 1, 2, 3, 4].map(i => ({ gx: p.x + i * 2, gy: p.y }));
+  G.Buildings.add('defensive_wall', p.x + 4, p.y);
   const sites = G.Construction.orderRow(spider, 'wood_wall', cells);
   assert.equal(sites.length, 4, 'the blocked tile is skipped');
   assert.equal(G.Economy.get('metal'), 1000 - 4 * 25, 'paid for four');
@@ -237,13 +237,13 @@ test('a row of walls: one Spider builds each in turn, skipping blocked tiles; ca
   G.State.paused = false;                                     // loading pauses the game
   G.Sim.run(40);
   const built = G.State.buildings.filter(b => b.type === 'wood_wall' && !b.testZone).map(b => b.gx - p.x).sort((a, b) => a - b);
-  assert.equal(built.join(), '0,1,3,4', 'all four built');
+  assert.equal(built.join(), '0,2,6,8', 'all four built');
   assert.equal(G.State.constructionSites.length, 0);
   const sp2 = find(G, 'utility_spider');
   assert.equal(sp2.buildSiteId, null); assert.equal(sp2.command, 'idle');
   // A new order cancels the whole queue and refunds it.
   G.State.resources.metal = 1000;
-  const row = G.Construction.orderRow(sp2, 'defensive_wall', [0, 1, 2].map(i => ({ gx: p.x + i, gy: p.y + 2 })));
+  const row = G.Construction.orderRow(sp2, 'defensive_wall', [0, 1, 2].map(i => ({ gx: p.x + i * 2, gy: p.y + 2 })));
   assert.equal(row.length, 3);
   assert.equal(G.Economy.get('metal'), 1000 - 3 * 60);
   G.Orders.move([sp2], sp2.x + 100, sp2.y);
@@ -251,7 +251,7 @@ test('a row of walls: one Spider builds each in turn, skipping blocked tiles; ca
   assert.equal(G.State.constructionSites.length, 0);
   // The row stops where the metal runs out.
   G.State.resources.metal = 130;
-  assert.equal(G.Construction.orderRow(sp2, 'defensive_wall', [0, 1, 2].map(i => ({ gx: p.x + i, gy: p.y + 3 }))).length, 2);
+  assert.equal(G.Construction.orderRow(sp2, 'defensive_wall', [0, 1, 2].map(i => ({ gx: p.x + i * 2, gy: p.y + 4 }))).length, 2);
 });
 
 test('built chests are containers, not solid buildings', () => {
@@ -564,7 +564,7 @@ test('a unit pushed onto a wall with its next waypoint straight through it drops
   assert.ok(S.grid.passableWorld(u.x, u.y));
 });
 
-test('metal mines need a centred 3×3 Mine Building, then extract slowly into a stockpile Spiders haul', () => {
+test('metal mines need a centred 7×7 Mine Building, then extract slowly into a stockpile Spiders haul', () => {
   const G = newGame();
   const S = G.State, spider = find(G, 'utility_spider');
   const deposits = S.resourceNodes.filter(n => n.type === 'metal_mine');
@@ -575,17 +575,17 @@ test('metal mines need a centred 3×3 Mine Building, then extract slowly into a 
   assert.equal(G.Gather.command(spider, free), false);
   // Placement: only centred on the deposit.
   const d = G.Defs.buildables.get('mine_building');
-  assert.equal(d.w, 3); assert.equal(d.h, 3);
+  assert.equal(d.w, 7); assert.equal(d.h, 7);
   assert.equal(G.Buildings.canPlaceKey('mine_building', free.gx, free.gy), false, 'off-centre');
-  assert.equal(G.Buildings.canPlaceKey('mine_building', free.gx - 1, free.gy - 1), true, 'centred');
+  assert.equal(G.Buildings.canPlaceKey('mine_building', free.gx - 3, free.gy - 3), true, 'centred');
   const snap = G.Buildings.placementAt('mine_building', free.x + 40, free.y - 30);
-  assert.deepEqual([snap.gx, snap.gy], [free.gx - 1, free.gy - 1], 'snaps onto the nearby deposit');
+  assert.deepEqual([snap.gx, snap.gy], [free.gx - 3, free.gy - 3], 'snaps onto the nearby deposit');
   assert.equal(G.Buildings.canPlaceKey('defensive_wall', free.gx, free.gy), false, 'other structures cannot cover a deposit');
   // Build it with the Spider.
   S.resources.metal = 500;
-  assert.ok(G.Construction.order(spider, 'mine_building', free.gx - 1, free.gy - 1));
+  assert.ok(G.Construction.order(spider, 'mine_building', free.gx - 3, free.gy - 3));
   G.Sim.run(40);
-  const mine = S.buildings.find(b => b.type === 'mine_building' && b.gx === free.gx - 1);
+  const mine = S.buildings.find(b => b.type === 'mine_building' && b.gx === free.gx - 3);
   assert.ok(mine, 'mine built');
   assert.equal(free.buildingId, mine.id);
   // Extraction is slow (2/s) compared with scavenging (20/s).
@@ -608,7 +608,7 @@ test('metal mines need a centred 3×3 Mine Building, then extract slowly into a 
   assert.equal(G.Gather.mineOn(node2), mine2);
   mine2.hp = 0; G.Sim.run(0.2);
   assert.equal(node2.buildingId, null);
-  assert.equal(G.Buildings.canPlaceKey('mine_building', node2.gx - 1, node2.gy - 1), true);
+  assert.equal(G.Buildings.canPlaceKey('mine_building', node2.gx - 3, node2.gy - 3), true);
 });
 
 test('Follow: any friendly unit follows the unit chosen for it', () => {
@@ -860,8 +860,8 @@ test('genesis plants free-standing trees in thick and thin clusters, off the til
   const grid = G.MapGen.genesis(72491), art = grid.art, tr = art.trees, cols = grid.cols;
   // Pinned: saves of this map type rebuild their terrain and trees from the seed.
   assert.equal(art.generator, 'genesis');
-  assert.equal(fnv(grid.tiles), 535749720, 'genesis terrain unchanged');
-  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 2226709629, 'genesis trees unchanged');
+  assert.equal(fnv(grid.tiles), 3648065438, 'genesis terrain unchanged');
+  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 2011662247, 'genesis trees unchanged');
   const again = G.MapGen.genesis(72491);
   assert.equal(fnv(again.tiles), fnv(grid.tiles), 'same seed, same map');
   assert.equal(fnv(G.MapGen.woodlands(72491).tiles), 1031677493, 'woodlands itself is untouched');
@@ -1111,7 +1111,7 @@ test('map editor: load woodlands and the test map, and keep named maps', () => {
   assert.equal(G.MapEdit.loadMap('woodlands', 1.5), false);
   assert.equal(G.MapEdit.loadMap('woodlands', 9, [{ x: 0, y: 0, w: 1, h: 1, t: 200 }]), false, 'unknown terrain in an edit');
   // Save the test map with an edit, then swap in Woodlands under the running game.
-  G.MapEdit.paint(sh.gx - 30, sh.gy, 3, G.TT.WATER);
+  G.MapEdit.paint(sh.gx - 40, sh.gy, 3, G.TT.WATER);   // (west of the testing zone)
   const testTiles = Array.from(S.grid.tiles);
   assert.ok(G.MapLibrary.saveCurrent('Test map'));
   assert.ok(G.MapEdit.loadMap('woodlands', 424242));
@@ -1261,7 +1261,7 @@ test('Ore Processor turns metal, copper and uranium into steel, electronics and 
   const S = G.State, ship = G.Units.ship(), P = G.Fabrication;
   const proc = S.buildings.find(b => b.type === 'ore_processor');
   assert.ok(proc, 'one stands in the testing zone');
-  assert.equal(proc.w, 3); assert.equal(proc.h, 3);
+  assert.equal(proc.w, 6); assert.equal(proc.h, 6);
   // Each producer offers only its own recipes.
   assert.equal(P.recipesFor(proc).map(r => r.key).join(), 'steel,electronics,fuel_rods');
   assert.ok(P.recipesFor(ship).every(r => r.unit), 'the ship builds units only');
@@ -1305,9 +1305,9 @@ test('copper and uranium deposits are placed on each Earth and mined like metal'
   const S = G.State, spider = find(G, 'utility_spider');
   for (const type of ['copper_mine', 'uranium_mine']) assert.ok(S.resourceNodes.some(n => n.type === type), type + ' placed');
   const copper = S.resourceNodes.find(n => n.type === 'copper_mine');
-  assert.equal(G.Buildings.canPlaceKey('mine_building', copper.gx - 1, copper.gy - 1), true, 'room for a Mine Building');
+  assert.equal(G.Buildings.canPlaceKey('mine_building', copper.gx - 3, copper.gy - 3), true, 'room for a Mine Building');
   S.resources.metal = 500;
-  assert.ok(G.Construction.order(spider, 'mine_building', copper.gx - 1, copper.gy - 1));
+  assert.ok(G.Construction.order(spider, 'mine_building', copper.gx - 3, copper.gy - 3));
   G.Sim.run(60);
   const mine = S.buildings.find(b => b.nodeId === copper.id);
   assert.ok(mine, 'mine built on the copper deposit');
@@ -1335,7 +1335,7 @@ test('power: the Warp Drive gives 25, Solar Arrays scale with the Earth, and a s
   // A Solar Array stands north of the ship in the testing zone.
   const solar = S.buildings.find(b => b.type === 'solar_array');
   assert.ok(solar, 'solar array placed');
-  assert.equal(solar.w, 3); assert.equal(solar.h, 2);
+  assert.equal(solar.w, 6); assert.equal(solar.h, 4);
   assert.ok(solar.gy + solar.h <= ship.gy, 'north of the ship');
   assert.equal(P.output(ship), 25);
   assert.equal(P.output(solar), 8, 'full sun on the first (temperate) Earth');
@@ -1385,7 +1385,7 @@ test('power: the Warp Drive gives 25, Solar Arrays scale with the Earth, and a s
 test('power: solar and wind output follow each Earth\'s climate', () => {
   const G = newGame();
   const S = G.State, P = G.Power, solar = S.buildings.find(b => b.type === 'solar_array'), wind = S.buildings.find(b => b.type === 'wind_turbine');
-  assert.equal(wind.w, 2); assert.equal(wind.h, 2);
+  assert.equal(wind.w, 4); assert.equal(wind.h, 4);
   const expect = { temperate: [8, 6], frozen: [4.8, 10.8], silent: [10, 0.3], irradiated: [3.2, 7.8] };
   G.Defs.climates.all().forEach((c, i) => {
     S.expedition.climate = i;
@@ -1403,13 +1403,13 @@ test('the Resource Extractor mines whatever deposit it stands on', () => {
   const G = newGame();
   const S = G.State, d = G.Defs.buildables.get('mine_building');
   assert.equal(d.name, 'Resource Extractor');
-  assert.equal(d.w, 3); assert.equal(d.h, 3);
+  assert.equal(d.w, 7); assert.equal(d.h, 7);
   S.resources.metal = 10000;
   const made = {};
   for (const type of ['metal_mine', 'copper_mine', 'uranium_mine']){
     const n = S.resourceNodes.find(n => n.type === type && !G.Gather.mineOn(n) && !S.buildings.some(b => b.nodeId === n.id));
-    assert.ok(G.Buildings.canPlaceKey('mine_building', n.gx - 1, n.gy - 1), type);
-    const b = G.Buildings.add('mine_building', n.gx - 1, n.gy - 1);
+    assert.ok(G.Buildings.canPlaceKey('mine_building', n.gx - 3, n.gy - 3), type);
+    const b = G.Buildings.add('mine_building', n.gx - 3, n.gy - 3);
     assert.equal(b.nodeId, n.id, 'claims the deposit underneath');
     made[type] = b;
   }
@@ -1480,7 +1480,7 @@ test('Laser Turret: charges 2.5 s with a target in range before each shot, and l
 test('gates: 1×3 and 1×4, horizontal and vertical twins; a vertical gate lets friendly units through a north-south wall', () => {
   const G = newGame();
   const S = G.State, T = 48, D = G.Defs.buildables;
-  for (const [key, w, h] of [['gate', 2, 1], ['gate_v', 1, 2], ['gate_3', 3, 1], ['gate_3_v', 1, 3], ['gate_4', 4, 1], ['gate_4_v', 1, 4]]){
+  for (const [key, w, h] of [['gate', 4, 2], ['gate_v', 2, 4], ['gate_3', 6, 2], ['gate_3_v', 2, 6], ['gate_4', 8, 2], ['gate_4_v', 2, 8]]){
     const d = D.get(key);
     assert.equal(d.w + 'x' + d.h, w + 'x' + h, key);
     assert.ok(d.gate && !d.blocksMovement, key + ' is a gate');
@@ -1489,9 +1489,9 @@ test('gates: 1×3 and 1×4, horizontal and vertical twins; a vertical gate lets 
   assert.equal(D.all().filter(d => d.wall).map(d => d.key).join(), 'wood_wall,defensive_wall,reinforced_wall');
   // A north-south wall with a vertical 1×3 gate in it.
   const p = field(G, 20, 20);
-  for (let y = p.y - 7; y <= p.y + 9; y++) if (y < p.y || y > p.y + 2) G.Buildings.add('reinforced_wall', p.x, y);
+  for (let y = p.y - 8; y <= p.y + 14; y += 2) if (y < p.y || y > p.y + 5) G.Buildings.add('reinforced_wall', p.x, y);
   const gate = G.Buildings.add('gate_3_v', p.x, p.y);
-  for (let y = p.y; y < p.y + 3; y++) assert.equal(S.grid.passable(p.x, y), true);
+  for (let y = p.y; y < p.y + 6; y++) assert.equal(S.grid.passable(p.x, y), true);
   const sp = find(G, 'utility_spider');
   G.Units.clearOrders(sp); sp.x = gate.x - 4 * T; sp.y = gate.y;
   G.rebuildSpatial();
@@ -1505,10 +1505,10 @@ test('gates: 1×3 and 1×4, horizontal and vertical twins; a vertical gate lets 
 test('gate: friendly units pass when it opens; enemies never do, and it shuts while they are near', () => {
   const G = newGame();
   const S = G.State, T = 48, p = field(G, 16, 18);
-  // A wall line with a 2×1 gate in the middle.
-  for (let x = p.x - 6; x <= p.x + 7; x++) if (x < p.x || x > p.x + 1) G.Buildings.add('defensive_wall', x, p.y);
+  // A wall line with a 4×2 gate in the middle.
+  for (let x = p.x - 8; x <= p.x + 10; x += 2) if (x < p.x || x > p.x + 3) G.Buildings.add('defensive_wall', x, p.y);
   const gate = G.Buildings.add('gate', p.x, p.y);
-  assert.equal(gate.w, 2); assert.equal(gate.h, 1);
+  assert.equal(gate.w, 4); assert.equal(gate.h, 2);
   assert.equal(S.grid.passable(p.x, p.y), true, 'the grid (and so the pathfinder) sees the gate as a way through');
   assert.equal(G.Buildings.canPlace(p.x, p.y, 1, 1), false, 'nothing can be built on a gate');
   G.Sim.run(0.1);
@@ -1637,7 +1637,7 @@ test('Shield Projector: switched on it charges, draws 40 power and absorbs damag
   const G = newGame();
   const S = G.State, T = 48, p = field(G, 18, 24);
   const proj = G.Buildings.add('shield_projector', p.x, p.y);
-  const wall = G.Buildings.add('defensive_wall', p.x + 5, p.y + 1), far = G.Buildings.add('defensive_wall', p.x + 12, p.y + 1);
+  const wall = G.Buildings.add('defensive_wall', p.x + 7, p.y + 2), far = G.Buildings.add('defensive_wall', p.x + 14, p.y + 2);
   assert.equal(proj.shieldOn, false); assert.equal(proj.shield, 0);
   G.Sim.run(2);
   assert.equal(proj.shield, 0, 'no charge while off');
@@ -1652,7 +1652,7 @@ test('Shield Projector: switched on it charges, draws 40 power and absorbs damag
   assert.ok(Math.abs(proj.shield - c0 - 400 * ratio) < 5, `charged ${proj.shield - c0} at ${ratio}`);
   // Full power: up to capacity.
   const extra = [];
-  for (let i = 0; i < 6; i++) extra.push(G.Buildings.add('solar_array', p.x - 20, p.y + i * 3));
+  for (let i = 0; i < 6; i++) extra.push(G.Buildings.add('solar_array', p.x - 20, p.y + i * 4));
   G.Sim.run(80);
   assert.equal(proj.shield, 2500);
   // Hits on covered structures come off the charge; outside the field they don't.

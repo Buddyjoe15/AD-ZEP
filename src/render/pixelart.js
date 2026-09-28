@@ -133,7 +133,8 @@
       for (const b of G.State.buildings){
         if (!G.Defs.buildables.get(b.type)?.wall) continue;
         let mask = 0;
-        for (const [bit, dx, dy] of [[1, 0, -1], [2, 1, 0], [4, 0, 1], [8, -1, 0]]){
+        // (The tile just past each side of its footprint, level with its top-left tile.)
+        for (const [bit, dx, dy] of [[1, 0, -1], [2, b.w, 0], [4, 0, b.h], [8, -1, 0]]){
           const n = tiles.get(key(b.gx + dx, b.gy + dy));
           if (!n || n.team !== b.team) continue;
           const nd = G.Defs.buildables.get(n.type);
@@ -236,7 +237,7 @@
       if (this.rubble.length && this.rubble[0].until < now) this.rubble = this.rubble.filter(r => r.until >= now);
       for (const r of this.rubble){
         const name = this.BUILDINGS[r.type], sp = D.sprites[name];
-        if (inView((r.gx + 1) * T, (r.gy + 1) * T, sp.frameWidth * this.worldPerArt(sp))) this.stamp(g, name, sp.states.rubble.start, r.gx, r.gy, r.team);
+        if (inView((r.gx + r.w / 2) * T, (r.gy + r.h / 2) * T, sp.frameWidth * this.worldPerArt(sp))) this.stamp(g, name, sp.states.rubble.start, r.gx, r.gy, r.team);
       }
     },
 
@@ -302,9 +303,9 @@
   const P = G.PixelArt;
   // Rubble is a render-only afterimage of a destroyed structure; it is never saved.
   G.Events.on('building:removed', b => {
-    if (b.hp <= 0 && P.BUILDINGS[b.type]) P.rubble.push({ type: b.type, team: b.team, gx: b.gx, gy: b.gy, until: G.State.time + P.RUBBLE_SECONDS });
+    if (b.hp <= 0 && P.BUILDINGS[b.type]) P.rubble.push({ type: b.type, team: b.team, gx: b.gx, gy: b.gy, w: b.w, h: b.h, until: G.State.time + P.RUBBLE_SECONDS });
   });
-  const clearAt = s => { P.rubble = P.rubble.filter(r => r.gx + 2 <= s.gx || s.gx + s.w <= r.gx || r.gy + 2 <= s.gy || s.gy + s.h <= r.gy); };
+  const clearAt = s => { P.rubble = P.rubble.filter(r => r.gx + r.w <= s.gx || s.gx + s.w <= r.gx || r.gy + r.h <= s.gy || s.gy + s.h <= r.gy); };
   G.Events.on('building:placed', clearAt);
   G.Events.on('construction:queued', clearAt);
   G.Events.on('world:created', () => { P.rubble = []; P.aims.clear(); });

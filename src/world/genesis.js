@@ -30,7 +30,7 @@
   const pick = (h, table) => { let total = 0; for (const [, w] of table) total += w; h *= total; for (const [k, w] of table){ if (h < w) return k; h -= w; } return table[table.length - 1][0]; };
 
   // Spacing between trunks, in world px, from the thickest stand to the most open woodland.
-  const SPACING_THICK = 18, SPACING_THIN = 64;
+  const SPACING_THICK = 36, SPACING_THIN = 128;   // (trees stand at twice the size they first did)
   // Tiles with at least this much forest cover (share of tree tiles nearby) grow woodland.
   const WOODED = 0.08;
   // Candidate trunks are tried in PASSES rounds, each in a hashed share of the candidates, so
@@ -222,8 +222,8 @@
       for (let j = 0; j < 2; j++){
         if (hash(x, y, s + 651 + j) > (j ? 0.3 : 0.8)) continue;
         const px = Math.floor(x * TILE + TILE * (0.1 + hash(x, y, s + 653 + j) * 0.8)), py = Math.floor(y * TILE + TILE * (0.1 + hash(x, y, s + 657 + j) * 0.8));
-        if (!spaced(px, py, 14) || nearLog(px, py) < 6) continue;
-        add(px, py, 14, 'stump_cut', hash(x, y, s + 659 + j) < 0.5 ? 0 : 1, Math.floor(hash(px, py, s + 661) * 256));
+        if (!spaced(px, py, 28) || nearLog(px, py) < 12) continue;
+        add(px, py, 28, 'stump_cut', hash(x, y, s + 659 + j) < 0.5 ? 0 : 1, Math.floor(hash(px, py, s + 661) * 256));
       }
     }
 
@@ -893,20 +893,22 @@
         const deepest = inner.reduce((b, i) => dist.get(i) > dist.get(b) ? i : b, inner[0] ?? m);
         const at = i => ({ x: i % W, y: (i / W) | 0 });
         const cave = { x: mx, y: my, size: size ? 'medium' : 'small', cells: cells.size, chest: { ...at(deepest), rare: h(13) < (size ? 0.6 : 0.25) }, nest: null, recording: null };
-        const block = i => [0, 1, W, W + 1].every(o => cells.has(i + o) && i + o !== deepest) && [-1, 2, -W, 2 * W, -W + 1, 2 * W + 1, W - 1, W + 2].every(o => cells.has(i + o));
+        // Room for the nest's footprint (the buildable's size) with floor all round it.
+        const NW = G.Defs.buildables.get('cave_nest')?.w || 2, NH = G.Defs.buildables.get('cave_nest')?.h || 2;
+        const block = i => { for (let dy = -1; dy <= NH; dy++) for (let dx = -1; dx <= NW; dx++){ const j = i + dy * W + dx; if (!cells.has(j) || (dx >= 0 && dy >= 0 && dx < NW && dy < NH && j === deepest)) return false; } return true; };
         if (h(15) < (size ? 0.7 : 0.3)){
           const spots = inner.filter(block).sort((a, b) => Math.abs(dist.get(a) - dist.get(deepest) * 0.6) - Math.abs(dist.get(b) - dist.get(deepest) * 0.6));
           if (spots.length) cave.nest = at(spots[0]);
         }
         if (h(17) < 0.5){
-          const spots = inner.filter(i => i !== deepest && (!cave.nest || Math.hypot(i % W - cave.nest.x, ((i / W) | 0) - cave.nest.y) > 3) && dist.get(i) > 3);
+          const spots = inner.filter(i => i !== deepest && (!cave.nest || Math.hypot(i % W - cave.nest.x, ((i / W) | 0) - cave.nest.y) > 4) && dist.get(i) > 3);
           if (spots.length) cave.recording = at(spots[Math.floor(h(19) * spots.length)]);
         }
         out.push(cave);
         // Crystals and glowing fungi on the floor by the walls, pebbles and bones here and there.
         for (const i of cells){
           const x = i % W, y = (i / W) | 0, r = hash(x, y, s + 1121), wall = !inner.includes(i);
-          if (i === deepest || (cave.nest && Math.abs(x - cave.nest.x - 0.5) < 2 && Math.abs(y - cave.nest.y - 0.5) < 2)) continue;
+          if (i === deepest || (cave.nest && x >= cave.nest.x - 1 && y >= cave.nest.y - 1 && x <= cave.nest.x + 4 && y <= cave.nest.y + 4)) continue;
           const px = x * TILE + TILE * (0.2 + hash(x, y, s + 1123) * 0.6), py = y * TILE + TILE * (0.2 + hash(x, y, s + 1127) * 0.6);
           if (wall && r < 0.28) prop(px, py, 'crystal', r < 0.08 ? 1 : 0, Math.floor(hash(x, y, s + 1129) * 256));
           else if (r < 0.4) prop(px, py, 'mushrooms', 0, Math.floor(hash(x, y, s + 1131) * 256));
