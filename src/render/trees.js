@@ -147,6 +147,8 @@
     const level = perArt >= 1 ? 0 : perArt >= 0.5 ? 1 : 2;
     return { level, shrink: perArt * (1 << level) < 1 - 1e-6 };
   }
+  let DECOR = null;
+  const decorKinds = () => DECOR || (DECOR = Uint8Array.from(G.TREES.ALL, k => G.TREES.props[k] && G.TREES.props[k].decor ? 1 : 0));
   function drawPixel(g, I, count, A){
     const ALL = G.TREES.ALL, smooth = g.imageSmoothingEnabled, { level, shrink } = levelFor(g);
     const frame = j => { const set = A.art[ALL[I.EK[j]]][I.ES[j]], v = set[I.VR[j] % set.length]; return v; };
@@ -200,7 +202,9 @@
       const I = index(grd), A = pixelArt(), c = cy * I.ncx + cx, st = states(grd), tiles = grd.tiles;
       if (cx < 0 || cy < 0 || cx >= I.ncx || cy >= I.ncy) return;
       let count = 0, extras = false;
-      const take = j => { if (visible(I, j, st, tiles) && !(groundOnly && layer(I.EK[j]))){ I.ids[count++] = j; I.dx[j] = 0; I.step[j] = 0; } };
+      // Painted below full size (middle zoom), small ground detail is under a pixel: left out.
+      const DEC = decorKinds(), small = Math.abs(ctx.getTransform().a) < 0.75;
+      const take = j => { if (visible(I, j, st, tiles) && !(groundOnly && layer(I.EK[j])) && !(small && DEC[I.EK[j]])){ I.ids[count++] = j; I.dx[j] = 0; I.step[j] = 0; } };
       for (let p = I.start[c]; p < I.start[c + 1]; p++) take(I.list[p]);
       const x0 = cx * I.CS - REACH, x1 = (cx + 1) * I.CS + REACH, y0 = cy * I.CS - REACH, y1 = (cy + 1) * I.CS + REACH;
       for (const j of I.extraAt.values()) if (I.X[j] >= x0 && I.X[j] <= x1 && I.Y[j] >= y0 && I.Y[j] <= y1){ extras = true; take(j); }

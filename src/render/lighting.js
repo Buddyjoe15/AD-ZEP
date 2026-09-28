@@ -25,6 +25,11 @@
     // The time of day, 0–1 (0 midnight, 0.5 noon).
     phase(){ return this.hold != null ? (this.hold / 24) % 1 : (G.State.time / DAY + START) % 1; },
     hour(){ return this.phase() * 24; },
+    // Which day of the expedition it is (the first is day 1).
+    day(){ return this.hold != null ? 1 : Math.floor(G.State.time / DAY + START) + 1; },
+    // "HH:MM" on a 24-hour clock.
+    clock(){ const m = Math.floor(this.phase() * 24 * 60); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); },
+    isNight(){ return this.darkness() > 0.5; },
     // How dark it is: 0 by day, 1 in the middle of the night, with dusk and dawn between.
     darkness(){
       const p = this.phase();

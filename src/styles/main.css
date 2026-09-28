@@ -506,6 +506,17 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
   display:flex;gap:4px;z-index:31;pointer-events:auto
 }
 #topRightControls button{min-height:28px;padding:3px 7px;font-size:9px;min-width:34px}
+/* Time of day (maps with day and night): a sun or moon that rises and sets across the dial. */
+.day-clock{display:flex;align-items:center;gap:5px;min-height:28px;padding:2px 8px 2px 6px;border-radius:5px;
+  background:#101713cc;border:1px solid #536054;font-size:10px;color:#e8e2c8;pointer-events:auto;white-space:nowrap}
+.day-clock.hidden{display:none}
+.day-clock .day-icon{position:relative;width:26px;height:14px;overflow:hidden;border-bottom:1px solid #7d8a74}
+.day-clock .day-icon i{position:absolute;width:8px;height:8px;border-radius:50%;margin:-4px 0 0 -4px}
+.day-clock .day-icon i.sun{background:#f2c66a;box-shadow:0 0 5px #f2c66a}
+.day-clock .day-icon i.moon{background:#dfe8f0;box-shadow:inset -2px -1px 0 #8aa7b4, 0 0 4px #aef4ff88}
+.day-clock b{font-variant-numeric:tabular-nums;font-size:11px;letter-spacing:.03em}
+.day-clock small{color:#a8b5a9;font-size:8px}
+.day-clock.night{background:#0a1022cc;border-color:#3e4f6e}
 #miniSideControls{
   position:absolute;right:calc(max(6px,env(safe-area-inset-right)) + 156px);
   bottom:max(6px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:4px;z-index:22;pointer-events:auto

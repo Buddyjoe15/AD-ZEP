@@ -10,9 +10,12 @@
   // zoomed in past 1:1. `used` is the cache size in 1× chunks (a res-2 chunk costs 4).
   // On maps with free-standing trees (G.TreeArt) a close chunk comes in two kinds: with the
   // trees drawn in at rest (`bake`, for middle zoom) or without (the trees are drawn live).
-  const key = (cx, cy, res, bake) => cx + ',' + cy + ',' + res + (bake ? ',t' : '');
+  // Chunks below 1× (middle zoom) always have the trees drawn in and live in farChunks.
+  const key = (cx, cy, res, bake) => res < 1 ? 'f' + cx + ',' + cy + ',' + res : cx + ',' + cy + ',' + res + (bake ? ',t' : '');
   G.TerrainCache = {
     grid: null, chunks: new Map(), used: 0, farChunks: new Map(), overview: null, overviewDirty: true,
+    // Keys of the chunks the view needs this frame (set by the renderer): never evicted.
+    pin: new Set(), key,
     reset(grid){ this.grid = grid; this.chunks.clear(); this.used = 0; this.farChunks.clear(); this.overview = null; this.overviewDirty = true; },
     sync(){ if (this.grid !== G.State.grid) this.reset(G.State.grid); },
     drop(key){ const cv = this.chunks.get(key); if (cv){ this.used -= cv.res * cv.res; this.chunks.delete(key); } },
@@ -25,7 +28,7 @@
             this.drop(key(cx, cy, 1, bake));
             if (R !== 1) this.drop(key(cx, cy, R, bake));
           }
-          this.farChunks.delete(cx + ',' + cy);
+          for (const k of [...this.farChunks.keys()]) if (k.startsWith('f' + cx + ',' + cy + ',')) this.farChunks.delete(k);
         }
       this.overviewDirty = true;
     },
@@ -49,18 +52,21 @@
     // `res` below 1 (FAR_CHUNK_SCALE) is the lower-resolution chunk used at middle zoom. Those
     // have their own cache, counted in chunks (FAR_CHUNK_CACHE_MAX), so they never push the
     // close-up chunks out.
-    has(cx, cy, res = 1, bake = false){ return res < 1 ? this.farChunks.has(cx + ',' + cy) : this.chunks.has(key(cx, cy, res, bake)); },
+    has(cx, cy, res = 1, bake = false){ return res < 1 ? this.farChunks.has(key(cx, cy, res)) : this.chunks.has(key(cx, cy, res, bake)); },
     // Cached chunk without painting or touching the LRU order (fallback while a chunk at
     // the wanted resolution is still queued).
-    peek(cx, cy, res = 1, bake = false){ return (res < 1 ? this.farChunks.get(cx + ',' + cy) : this.chunks.get(key(cx, cy, res, bake))) || null; },
+    peek(cx, cy, res = 1, bake = false){ return (res < 1 ? this.farChunks.get(key(cx, cy, res)) : this.chunks.get(key(cx, cy, res, bake))) || null; },
     chunk(cx, cy, res = 1, bake = false){
       this.sync();
       if (res < 1){
-        const key = cx + ',' + cy, hit = this.farChunks.get(key);
-        if (hit){ this.farChunks.delete(key); this.farChunks.set(key, hit); return hit; }   // LRU touch
+        const fk = key(cx, cy, res), hit = this.farChunks.get(fk);
+        if (hit){ this.farChunks.delete(fk); this.farChunks.set(fk, hit); return hit; }   // LRU touch
         const cv = this.paint(cx, cy, res);
-        this.farChunks.set(key, cv);
-        while (this.farChunks.size > G.CONFIG.FAR_CHUNK_CACHE_MAX) this.farChunks.delete(this.farChunks.keys().next().value);
+        this.farChunks.set(fk, cv);
+        if (this.farChunks.size > G.CONFIG.FAR_CHUNK_CACHE_MAX) for (const old of [...this.farChunks.keys()]){
+          if (this.farChunks.size <= G.CONFIG.FAR_CHUNK_CACHE_MAX) break;
+          if (old !== fk && !this.pin.has(old)) this.farChunks.delete(old);
+        }
         return cv;
       }
       const k = key(cx, cy, res, bake);
@@ -68,7 +74,11 @@
       if (hit){ this.chunks.delete(k); this.chunks.set(k, hit); return hit; }   // LRU touch
       const cv = this.paint(cx, cy, res, bake);
       this.chunks.set(k, cv); this.used += res * res;
-      while (this.used > G.CONFIG.CHUNK_CACHE_MAX && this.chunks.size > 1) this.drop(this.chunks.keys().next().value);
+      // Oldest first, skipping what the view needs (the view never needs more than fits).
+      if (this.used > G.CONFIG.CHUNK_CACHE_MAX) for (const old of [...this.chunks.keys()]){
+        if (this.used <= G.CONFIG.CHUNK_CACHE_MAX) break;
+        if (old !== k && !this.pin.has(old)) this.drop(old);
+      }
       return cv;
     },
     // Paints in world px scaled by `res`, so the same art gains detail at higher res.

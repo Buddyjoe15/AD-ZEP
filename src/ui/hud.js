@@ -276,10 +276,30 @@
       const bar = $('economyBar'), squad = $('squadBar');
       if (squad) squad.style.top = bar.offsetHeight > 34 ? (bar.offsetTop + bar.offsetHeight + 4) + 'px' : '';
     },
+    // The time of day, on maps that have day and night (G.Lighting). The sun (or the moon at
+    // night) rides an arc across the little dial from sunrise to sunset.
+    renderClock(){
+      const el = $('dayClock'), Lt = G.Lighting;
+      if (!el) return;
+      const on = !!(Lt && G.State.grid && Lt.enabled());
+      el.classList.toggle('hidden', !on);
+      if (!on) return;
+      const time = Lt.clock(), sig = time + Lt.day();
+      if (sig === this.clockSig) return;
+      this.clockSig = sig;
+      const night = Lt.isNight(), p = Lt.phase(), f = night ? ((p + 0.25) % 1) / 0.5 : (p - 0.25) / 0.5;   // 0 rising … 1 setting
+      const u = Math.max(0, Math.min(1, f)), x = 3 + u * 20, y = 13 - Math.sin(u * Math.PI) * 10;
+      el.classList.toggle('night', night);
+      el.querySelector('.day-icon').innerHTML = `<i class="${night ? 'moon' : 'sun'}" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px"></i>`;
+      el.querySelector('.day-time').textContent = time;
+      el.querySelector('.day-num').textContent = 'Day ' + Lt.day();
+      el.title = `Time of day: ${time}, day ${Lt.day()} of the expedition. ${night ? 'Night: lamps and lights are on.' : 'Day.'}`;
+    },
     // Called every rendered frame; heavier refreshes are throttled.
     update(){
       const S = G.State, t = performance.now();
       this.renderEconomy();
+      this.renderClock();
       G.InventoryUI.refreshSearch();
       if (t - this.lastSlow < 250) return;
       this.lastSlow = t;

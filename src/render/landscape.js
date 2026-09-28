@@ -112,7 +112,7 @@
     const a = grd.art;
     if (a.land) return a.land;
     const n = grd.size;
-    a.land = { E: new Float32Array(n), W: new Float32Array(n), D: new Float32Array(n), noFace: new Uint8Array(n), near: new Uint8Array(n), P: new Float32Array(n), B: new Uint8Array(n), PK: new Uint8Array(n), S: new Float32Array(n), stones: new Map() };
+    a.land = { E: new Float32Array(n), W: new Float32Array(n), D: new Float32Array(n), noFace: new Uint8Array(n), rampNear: new Uint8Array(n), near: new Uint8Array(n), P: new Float32Array(n), B: new Uint8Array(n), PK: new Uint8Array(n), S: new Float32Array(n), stones: new Map() };
     // Stepping stones (grid.art.fords) listed by every tile they or their wake reach, and each
     // one's shape: stretched and turned, with a lumpy outline, in one of three greys of stone.
     const f = a.fords, t = T();
@@ -149,7 +149,7 @@
       L.B[i] = t === k.BOG ? 1 : 0;
       L.W[i] = wet ? 1 : 0;
       // Bare ground along contours: 1 a trail, 2 barren or sodden ground (drawn by kind, below).
-      L.P[i] = t === k.PATH || t === k.BARREN || t === k.ORE || t === k.VENT ? 1 : 0;
+      L.P[i] = t === k.PATH || t === k.STAIRS || t === k.BARREN || t === k.ORE || t === k.VENT ? 1 : 0;   // (a trail runs on over carved steps)
       L.PK[i] = t === k.BARREN || t === k.ORE || t === k.VENT ? 1 : 0;
       L.S[i] = t === k.SWAMP ? 1 : 0;   // sodden fen ground, its own field so it blends into grass, not dirt
       L.D[i] = t === k.DEEP ? 1 : 0;
@@ -163,6 +163,12 @@
       }
       if (t === k.CAVEF) e = l + 1;   // level with the rock round it here (no rims)
       L.E[i] = e;
+    }
+    // Tiles on or beside a ramp (their rims roll over softly).
+    for (let y = Math.max(0, y0 - 2); y < Math.min(rows, y0 + h + 2); y++) for (let x = Math.max(0, x0 - 2); x < Math.min(cols, x0 + w + 2); x++){
+      let r = 0;
+      for (let dy = -1; dy <= 1 && !r; dy++) for (let dx = -1; dx <= 1; dx++) if (inb(x + dx, y + dy) && L.noFace[(y + dy) * cols + x + dx]){ r = 1; break; }
+      L.rampNear[y * cols + x] = r;
     }
     // Tiles to shade (bits of `near`): 1 water or a shore, 2 a change of height within reach (two
     // rows up, for faces hanging from a rim above, one tile elsewhere), 4 a path or its edge.
@@ -284,13 +290,13 @@
         const yStart = cliffs && !carried ? py0 - F : cliffs ? py0 - 1 : py0, nRows = py1 - yStart, j0 = Math.floor((oy + (yStart + 0.5) * step) / t - 0.5);
         const rowAY = rowA;
         for (let r = 0; r < nRows; r++){ const wy = oy + (yStart + r + 0.5) * step, v = wy / t - 0.5, j = Math.floor(v); rowJ[r] = j - j0; rowF[r] = v - j; rowAY[r] = Math.floor(wy * 2); }
-        // Levels of every pixel in the tile (and a column either side, and a face's height
-        // above), for faces, lips and shadows.
-        const cw = px1 - px0 + 2;
+        // Levels of every pixel in the tile (and three columns either side, and a face's height
+        // above), for faces, lips, ledges and shadows.
+        const cw = px1 - px0 + 6;
         if (cliffs){
           if (!Lbuf || Lbuf.length < cw * nRows) Lbuf = new Int8Array(cw * nRows * 2);
           for (let c = 0; c < cw; c++){
-            const wx = ox + (px0 - 1 + c + 0.5) * step, ax = Math.floor(wx * 2) & (NS - 1);
+            const wx = ox + (px0 - 3 + c + 0.5) * step, ax = Math.floor(wx * 2) & (NS - 1);
             across(L.E, wx / t - 0.5, j0, colA);
             for (let r = 0; r < nRows; r++){
               const q = rowJ[r], a0 = colA[q], h = a0 + (colA[q + 1] - a0) * rowF[r];
@@ -306,7 +312,7 @@
         let stones = L.stones.get(i) || null;
         if (stones){ stones = stones.filter(q => grd.tiles[fd.crossings[fd.c[q]].mid] === k.STONES); if (!stones.length) stones = null; }
         for (let cx = px0; cx < px1; cx++){
-          const wx = ox + (cx + 0.5) * step, ax = Math.floor(wx * 2), axm = ax & (NS - 1), c = cx - px0 + 1, cb = c * nRows;
+          const wx = ox + (cx + 0.5) * step, ax = Math.floor(wx * 2), axm = ax & (NS - 1), c = cx - px0 + 3, cb = c * nRows;
           if (wet){ across(L.W, wx / t - 0.5, j0, colW); across(L.D, wx / t - 0.5, j0, colD); }
           if (trail){ across(L.P, wx / t - 0.5, j0, colP); across(L.S, wx / t - 0.5, j0, colS); }
           const nx7 = NOISE[7 * NS + axm] + NOISE[3 * NS + ((ax >> 1) & (NS - 1))] * 0.5;   // waterfall streak strength of this column
@@ -332,7 +338,11 @@
             // A slope or carved steps sit on either side of the rim (the rim wobbles across the tile
             // edge), so check both.
             let ramp = 0;
-            if ((face || (cliffs && rimL > lp && ft < Fc + fx7))){ const ry = oy + rimY * step, a1 = Math.min(rows - 1, Math.max(0, Math.floor((ry - 3) / t))), b1 = Math.min(rows - 1, Math.max(0, Math.floor((ry + 3) / t))); ramp = Math.max(L.noFace[a1 * cols + gx], L.noFace[b1 * cols + gx]);
+            // Where a ramp meets rock the change is sampled a little to either side of the true
+            // point (by noise down the face), so the edge between them is ragged, not a cut.
+            if ((face || (cliffs && rimL > lp && ft < Fc + fx7))){ const ry = oy + rimY * step, a1 = Math.min(rows - 1, Math.max(0, Math.floor((ry - 3) / t))), b1 = Math.min(rows - 1, Math.max(0, Math.floor((ry + 3) / t)));
+              const jx = Math.min(cols - 1, Math.max(0, Math.floor((wx + (NOISE[((ay >> 2) & (NS - 1)) * NS + ((ax >> 3) & (NS - 1))] - 0.5) * 30 + (NOISE[((ay + 50) & (NS - 1)) * NS + ((ax + 9) & (NS - 1))] - 0.5) * 8) / t)));
+              ramp = Math.max(L.noFace[a1 * cols + jx], L.noFace[b1 * cols + jx]);
               // Where a bank steps diagonally the rim crosses a plain tile: the bank is beside it.
               if (!ramp && grd.tiles[a1 * cols + gx] !== k.CLIFF && grd.tiles[b1 * cols + gx] !== k.CLIFF)
                 for (const gx2 of [gx - 1, gx + 1]) if (gx2 >= 0 && gx2 < cols) ramp = Math.max(ramp, L.noFace[a1 * cols + gx2], L.noFace[b1 * cols + gx2]);
@@ -396,7 +406,7 @@
                 if (f < 0.1 && dith < 0.6 - f * 5) col = P.grass3;
                 else if (tf > 0.84) col = f < 0.5 ? P.grass3 : P.grass2;                // tufts
                 else if (tf < 0.12 && f > 0.3) col = P.dust2;                           // bare earth
-                else { col = P.char0; alpha = (6 + f * f * 42 + dith * 10) | 0; }
+                else { col = P.char0; alpha = (8 + f * 58 + dith * 12) | 0; }
               }
             }
             else if (face){
@@ -503,9 +513,19 @@
               }
               else {
                 // Where no rock face shows: a lit lip on the high side of a rim, a shadow line below it.
-                const lx1 = Lbuf[cb - nRows + r], rx1 = Lbuf[cb + nRows + r];
-                if (lp > lx1 || lp > rx1 || (above > -128 && lp > above)) col = P.dust4;
-                else if (lp < lx1 || lp < rx1 || (lp < above && !face)){ col = P.char0; alpha = 170; }
+                // On and beside a ramp the ground rolls over softly instead (no line across it).
+                const lx1 = Lbuf[cb - nRows + r], rx1 = Lbuf[cb + nRows + r], soft = L.rampNear[i];
+                if (lp > lx1 || lp > rx1 || (above > -128 && lp > above)){ if (!soft) col = dith < 0.5 ? P.dust4 : P.grass3; else if (dith < 0.35){ col = P.grass3; } }
+                else if (lp < lx1 || lp < rx1 || (lp < above && !face)){ col = P.char0; alpha = soft ? 40 : 150; }
+                else if (!soft){
+                  // A ledge a pixel or three away: its brow lit on the high side, its shadow fading
+                  // out on the low side, so a low edge reads as a step in the ground, not a line.
+                  const l2 = Lbuf[cb - 2 * nRows + r], r2 = Lbuf[cb + 2 * nRows + r], u2 = r > 1 ? Lbuf[cb + r - 2] : lp, d2 = r < nRows - 2 ? Lbuf[cb + r + 2] : lp;
+                  const l3 = Lbuf[cb - 3 * nRows + r], r3 = Lbuf[cb + 3 * nRows + r], u3 = r > 2 ? Lbuf[cb + r - 3] : lp;
+                  if (lp > l2 || lp > r2 || lp > u2 || lp > d2){ if (dith < 0.45) col = P.grass3; }
+                  else if (lp < l2 || lp < r2 || lp < u2){ col = P.char0; alpha = 95; }
+                  else if (lp < l3 || lp < r3 || lp < u3){ col = P.char0; alpha = dith < 0.6 ? 50 : 0; if (!alpha) col = -1; }
+                }
               }
             }
             const o = (cy - by) * BW + cx - bx;
