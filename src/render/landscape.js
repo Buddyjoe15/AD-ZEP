@@ -277,7 +277,10 @@
         let i1 = Math.min(cols - 1, Math.max(0, i0 + 1)); i0 = Math.min(cols - 1, Math.max(0, i0));
         for (let r = 0; r < 8; r++){ const j = Math.min(rows - 1, Math.max(0, j0 + r)); out[r] = Fd[j * cols + i0] + (Fd[j * cols + i1] - Fd[j * cols + i0]) * fx; }
       };
-      let any = false, Lbuf = null, bx0 = 0, by0 = 0, bx1 = 0, by1 = 0;
+      let any = false, Lbuf = null, dE = null, dW = null, dN = null, bx0 = 0, by0 = 0, bx1 = 0, by1 = 0;
+      // Side banks: a cliff shows a strip of rock BAND_CLIFF world px wide on its high side, a
+      // ramp a grassy bank BAND_RAMP wide; MG columns of levels either side cover them.
+      const BAND_CLIFF = 9, BAND_RAMP = 16, MG = Math.ceil(BAND_RAMP * res) + 4;
       const openTiles = [], open = [];
       // Shades tile (gx, gy) — canvas px [px0, px1) × [py0, py1) of this chunk — into `buf`, an
       // image BW px wide whose pixel (0, 0) is canvas px (bx, by).
@@ -290,19 +293,26 @@
         const yStart = cliffs && !carried ? py0 - F : cliffs ? py0 - 1 : py0, nRows = py1 - yStart, j0 = Math.floor((oy + (yStart + 0.5) * step) / t - 0.5);
         const rowAY = rowA;
         for (let r = 0; r < nRows; r++){ const wy = oy + (yStart + r + 0.5) * step, v = wy / t - 0.5, j = Math.floor(v); rowJ[r] = j - j0; rowF[r] = v - j; rowAY[r] = Math.floor(wy * 2); }
-        // Levels of every pixel in the tile (and three columns either side, and a face's height
-        // above), for faces, lips, ledges and shadows.
-        const cw = px1 - px0 + 6;
+        // Levels of every pixel in the tile (and MG columns either side, and a face's height
+        // above), for faces, lips, side banks and shadows.
+        const cw = px1 - px0 + MG * 2;
         if (cliffs){
-          if (!Lbuf || Lbuf.length < cw * nRows) Lbuf = new Int8Array(cw * nRows * 2);
+          if (!Lbuf || Lbuf.length < cw * nRows){ const n = cw * nRows * 2; Lbuf = new Int8Array(n); dE = new Uint8Array(n); dW = new Uint8Array(n); dN = new Uint8Array(n); }
           for (let c = 0; c < cw; c++){
-            const wx = ox + (px0 - 3 + c + 0.5) * step, ax = Math.floor(wx * 2) & (NS - 1);
+            const wx = ox + (px0 - MG + c + 0.5) * step, ax = Math.floor(wx * 2) & (NS - 1);
             across(L.E, wx / t - 0.5, j0, colA);
             for (let r = 0; r < nRows; r++){
               const q = rowJ[r], a0 = colA[q], h = a0 + (colA[q + 1] - a0) * rowF[r];
               Lbuf[c * nRows + r] = Math.floor(h + 0.5 + (NOISE[(rowAY[r] & (NS - 1)) * NS + ax] - 0.5) * 0.2);
             }
           }
+          // How far each pixel is (in px, on its own level) from a drop to the east, to the west
+          // and to the north: the side banks and ledges are drawn from these.
+          for (let r = 0; r < nRows; r++){
+            for (let c = cw - 1; c >= 0; c--){ const o = c * nRows + r, l = Lbuf[o], n = c + 1 < cw ? Lbuf[o + nRows] : l; dE[o] = n < l ? 0 : n === l && c + 1 < cw ? Math.min(255, dE[o + nRows] + 1) : 255; }
+            for (let c = 0; c < cw; c++){ const o = c * nRows + r, l = Lbuf[o], n = c > 0 ? Lbuf[o - nRows] : l; dW[o] = n < l ? 0 : n === l && c > 0 ? Math.min(255, dW[o - nRows] + 1) : 255; }
+          }
+          for (let c = 0; c < cw; c++) for (let r = 0; r < nRows; r++){ const o = c * nRows + r, l = Lbuf[o], n = r > 0 ? Lbuf[o - 1] : l; dN[o] = n < l ? 0 : n === l && r > 0 ? Math.min(255, dN[o - 1] + 1) : 255; }
         }
         const lvlI = lvl[i], Wi = L.W[i], Di = L.D[i], fd = grd.art.fords;
         // Bog colours here: a bog tile, or dry land whose water comes from a bog beside it.
@@ -312,7 +322,7 @@
         let stones = L.stones.get(i) || null;
         if (stones){ stones = stones.filter(q => grd.tiles[fd.crossings[fd.c[q]].mid] === k.STONES); if (!stones.length) stones = null; }
         for (let cx = px0; cx < px1; cx++){
-          const wx = ox + (cx + 0.5) * step, ax = Math.floor(wx * 2), axm = ax & (NS - 1), c = cx - px0 + 3, cb = c * nRows;
+          const wx = ox + (cx + 0.5) * step, ax = Math.floor(wx * 2), axm = ax & (NS - 1), c = cx - px0 + MG, cb = c * nRows;
           if (wet){ across(L.W, wx / t - 0.5, j0, colW); across(L.D, wx / t - 0.5, j0, colD); }
           if (trail){ across(L.P, wx / t - 0.5, j0, colP); across(L.S, wx / t - 0.5, j0, colS); }
           const nx7 = NOISE[7 * NS + axm] + NOISE[3 * NS + ((ax >> 1) & (NS - 1))] * 0.5;   // waterfall streak strength of this column
@@ -403,7 +413,9 @@
                 // A grassy bank, not a face: the brow catches the light, the grass shades softly
                 // towards the foot, with tufts and a little bare earth on the way down.
                 const tf = NOISE[((ay * 3 + 5) & (NS - 1)) * NS + ((ax * 3 + 17) & (NS - 1))];
+                const hx = ((ax + ((NOISE[((ax >> 2) & (NS - 1)) * NS + 9] * 3) | 0)) % Math.max(3, Math.round(4 * res))) === 0;
                 if (f < 0.1 && dith < 0.6 - f * 5) col = P.grass3;
+                else if (hx && f > 0.15 && f < 0.85){ col = P.leaf0; alpha = (40 + f * 80) | 0; }   // hachures down the slope
                 else if (tf > 0.84) col = f < 0.5 ? P.grass3 : P.grass2;                // tufts
                 else if (tf < 0.12 && f > 0.3) col = P.dust2;                           // bare earth
                 else { col = P.char0; alpha = (8 + f * 58 + dith * 12) | 0; }
@@ -511,6 +523,35 @@
                 if (sc > 0.8 && ft < Fc + fx7 * 0.7){ col = sc > 0.86 ? P.dust4 : P.dust2; }
                 else { col = P.char0; alpha = 110; }
               }
+              else if (!face && (() => {
+                // A drop to the east, west or north seen from above: on the high side, a cliff
+                // shows a strip of rock face (lit where it faces west, into the light, dark facing
+                // east), a ramp a grassy bank shading down towards the drop, with hachures (short
+                // strokes running down the slope), so the two are easy to tell apart.
+                const o = cb + r, e = dE[o], w = dW[o], nn = dN[o], d = Math.min(e, w, nn);
+                const isRamp = L.noFace[i] || (L.rampNear[i] && grd.tiles[i] !== k.CLIFF);   // (beside a ramp, what isn't cliff is ramp)
+                const band = (isRamp ? BAND_RAMP : BAND_CLIFF) * res;
+                if (d >= band) return false;
+                const f = d / band;   // 0 at the drop, 1 at the top of the bank
+                if (isRamp){
+                  // Hachures: strokes along the fall line, every few px across it.
+                  const along = e === d || w === d ? ay : ax, hach = ((along + ((NOISE[(along >> 2 & (NS - 1)) * NS + 7] * 3) | 0)) % Math.max(3, Math.round(4 * res))) === 0 && f > 0.12 && f < 0.8;
+                  const lit = w === d;   // a slope facing west catches the light
+                  const north = nn === d && e !== d && w !== d;   // a slope falling north faces away: fainter
+                  if (hach){ col = lit ? P.grass3 : P.leaf0; alpha = lit ? 170 : north ? 45 : (40 + (1 - f) * 90) | 0; }
+                  else if (f > 0.82) col = dith < 0.7 ? P.grass3 : P.grass2;                // the lit brow
+                  else if (lit){ col = P.grass3; alpha = ((1 - f) * 90 + dith * 20) | 0; }
+                  else { col = P.char0; alpha = ((north ? 8 : 20) + (1 - f) * (north ? 40 : 100) + dith * 14) | 0; }
+                  return true;
+                }
+                const faceW = w === d, faceN = nn === d && !faceW && e !== d, n2 = NOISE[((ay * 2 + 11) & (NS - 1)) * NS + ((ax * 2 + 3) & (NS - 1))];
+                const crack = Math.abs(NOISE[((ay >> 1) & (NS - 1)) * NS + ((ax + 40) & (NS - 1))] - 0.5) < 0.03;
+                if (f > 0.86){ col = dith < 0.6 ? P.grass3 : P.dust4; return true; }              // the lip, grass on top
+                let tone = (faceW ? 0.72 : faceN ? 0.42 : 0.26) + (n2 - 0.5) * 0.35 + dith * 0.12 - (1 - f) * 0.15;
+                col = crack ? P.char1 : tone > 0.7 ? P.dust5 : tone > 0.5 ? P.dust4 : tone > 0.32 ? P.dust3 : tone > 0.18 ? P.dust2 : P.dust1;
+                if (d === 0 && !faceW) col = P.char1;                                      // its dark foot
+                return true;
+              })()){ /* a side bank */ }
               else {
                 // Where no rock face shows: a lit lip on the high side of a rim, a shadow line below it.
                 // On and beside a ramp the ground rolls over softly instead (no line across it).
