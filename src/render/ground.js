@@ -75,7 +75,47 @@
   const mk = (k, a) => LUT[k][a < 0 ? 0 : a > 255 ? 255 : a | 0];
   const FL = FLOWER.map(k => LUT[k][235]);
 
+  // High-resolution grass for close up: a seamless texture four tiles square at 4 art px per
+  // world px (768 × 768), of short grass blades leaning a little either way, lit at their tips,
+  // over a mottled base, drawn once and then copied tile by tile (a tile takes the quarter
+  // its position picks, so the pattern repeats only every four tiles and never shows a seam).
+  const GT = 4, GP = 48 * GT, GN = GP * 4;
+  let grassCv = null;
+  function grassTexture(){
+    if (grassCv) return grassCv;
+    const img = new ImageData(GN, GN), d = new Uint32Array(img.data.buffer), L = LUT;
+    const base = [L.grass0[255], L.grass1[255]], wrap = v => ((v % GN) + GN) % GN;
+    // Mottled base (the noise table tiles every 256 of its cells: sampled to repeat over GN).
+    for (let y = 0; y < GN; y++) for (let x = 0; x < GN; x++){
+      const u = x / GN * 256, v = y / GN * 256, i = Math.floor(u) & 255, j = Math.floor(v) & 255, n = NT[j * NS + i], m = NT[((j * 4) & 255) * NS + ((i * 4) & 255)];
+      d[y * GN + x] = n * 0.6 + m * 0.4 > 0.52 ? base[1] : base[0];
+    }
+    // Blades.
+    for (let k = 0, n = Math.round(GN * GN / 7); k < n; k++){
+      const x0 = Math.floor(hx(k, 1, 301) * GN), y0 = Math.floor(hx(k, 2, 301) * GN), len = 2 + Math.floor(hx(k, 3, 301) * 4), lean = hx(k, 4, 301) < 0.5 ? -1 : 1, bend = 1 + Math.floor(hx(k, 5, 301) * 3), tone = hx(k, 6, 301);
+      const body = tone < 0.35 ? L.leaf2[255] : tone < 0.85 ? L.grass1[255] : L.grass2[255], tip = tone < 0.35 ? L.grass1[255] : tone < 0.9 ? L.grass2[255] : L.grass3[255];
+      d[wrap(y0 + 1) * GN + wrap(x0 + 1)] = L.grass0[255];   // its shadow at the root
+      for (let t = 0; t < len; t++){ const x = wrap(x0 + (t >= bend ? lean : 0)), y = wrap(y0 - t); d[y * GN + x] = t === len - 1 ? tip : body; }
+    }
+    // A few clover leaves and tiny flowers.
+    for (let k = 0, n = Math.round(GN * GN / 2600); k < n; k++){
+      const x0 = Math.floor(hx(k, 7, 303) * GN), y0 = Math.floor(hx(k, 8, 303) * GN), f = hx(k, 9, 303);
+      if (f < 0.75){ for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1], [-1, 0], [0, -1]]) d[wrap(y0 + dy) * GN + wrap(x0 + dx)] = dx + dy < 0 ? L.grass3[255] : L.leaf2[255]; }
+      else { const c = f < 0.88 ? L.white[255] : L.amber2[255]; d[wrap(y0) * GN + wrap(x0)] = c; d[wrap(y0) * GN + wrap(x0 + 1)] = c; d[wrap(y0 + 1) * GN + wrap(x0)] = L.gold0[255]; }
+    }
+    grassCv = document.createElement('canvas'); grassCv.width = grassCv.height = GN;
+    grassCv.getContext('2d').putImageData(img, 0, 0);
+    return grassCv;
+  }
+
   G.Ground = {
+    // Draws grass tile (gx, gy) at (px, py), S world px square, from the close-up texture.
+    grass(ctx, gx, gy, px, py, S){
+      const smooth = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = G.PixelArt.shrinks(ctx, S, GP);
+      ctx.drawImage(grassTexture(), (gx & 3) * GP, (gy & 3) * GP, GP, GP, px, py, S + 0.5, S + 0.5);
+      ctx.imageSmoothingEnabled = smooth;
+    },
     // Textures the chunk of ct × ct tiles at tile (x0, y0), drawn into ctx in chunk space. One
     // texel covers two world px (four when the chunk is painted smaller).
     paintChunk(ctx, grd, x0, y0, ct, r0 = 0, r1 = ct){

@@ -125,6 +125,8 @@
         // never stalls a frame; a half-painted one carries on next frame.
         const t1 = now();
         for (let k = 0; k < want.length && (k < 1 || now() - t1 < C.CHUNK_BUILD_MS); k++) if (!TC.work(want[k][0], want[k][1], res, bake, t1 + C.CHUNK_BUILD_MS)) break;
+        // What is left of the budget for work ahead of need (time spent drawing doesn't count).
+        const spare = () => C.CHUNK_BUILD_MS - (now() - t1 - drawn), t2 = now(); let drawn = 0;
         const liveKey = (cx, cy) => { const k = ct / CT; return Math.floor(cy * k) * 4096 + Math.floor(cx * k); };   // (in the tree index's full-size chunks)
         for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++){
           if (TC.has(cx, cy, res, bake)){
@@ -137,19 +139,20 @@
           chunks++;
           if (live && !got.baked) live.add(liveKey(cx, cy));
         }
-        // Time to spare: houses and caverns are drawn ahead of need.
-        if (!this.warmed && now() - t1 < C.CHUNK_BUILD_MS * 0.5) this.warmed = G.Structures.warm(S.grid, t1 + C.CHUNK_BUILD_MS * 0.8);
+        drawn = now() - t2;
         // With the view complete and time to spare, the ring of chunks round it is painted
         // ahead, so scrolling finds them ready.
-        if (!want.length || now() - t1 < C.CHUNK_BUILD_MS * 0.5){
+        if (!want.length || spare() > C.CHUNK_BUILD_MS * 0.5){
           const rx0 = Math.max(0, cx0 - 1), ry0 = Math.max(0, cy0 - 1), rx1 = Math.min(Math.ceil(C.WORLD_W / ct) - 1, cx1 + 1), ry1 = Math.min(Math.ceil(C.WORLD_H / ct) - 1, cy1 + 1);
           if (res < 1 || (rx1 - rx0 + 1) * (ry1 - ry0 + 1) * TC.cost(res) <= C.CHUNK_CACHE_MAX){
             const ring = [];
             for (let cy = ry0; cy <= ry1; cy++) for (let cx = rx0; cx <= rx1; cx++){ const k = TC.key(cx, cy, res, bake); TC.pin.add(k); if (!TC.has(cx, cy, res, bake)) ring.push([cx, cy]); }
             ring.sort((a, b) => (a[0] - mx) ** 2 + (a[1] - my) ** 2 - (b[0] - mx) ** 2 - (b[1] - my) ** 2);
-            if (ring.length && now() - t1 < C.CHUNK_BUILD_MS * 0.5) TC.work(ring[0][0], ring[0][1], res, bake, t1 + C.CHUNK_BUILD_MS);
+            if (ring.length && spare() > C.CHUNK_BUILD_MS * 0.5) TC.work(ring[0][0], ring[0][1], res, bake, now() + spare());
           }
         }
+        // Time to spare: houses and caverns are drawn ahead of need.
+        if (!this.warmed && spare() > C.CHUNK_BUILD_MS * 0.5) this.warmed = G.Structures.warm(S.grid, now() + spare() * 0.8);
         g.imageSmoothingEnabled = true;
         // Pixel-art trees moving in the wind (Woodlands); lower-resolution chunks have them drawn in.
         if (near) G.Landscape.drawLive(g, S.grid, v, t, z);   // waterfalls and glinting water (Genesis)

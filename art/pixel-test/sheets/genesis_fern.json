@@ -6,7 +6,7 @@
     47.5,
     47.5
   ],
-  "worldPxPerArtPx": 0.5,
+  "worldPxPerArtPx": 0.25,
   "rows": [
     "{\"r\":9}",
     "{\"r\":13}"

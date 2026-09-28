@@ -1,21 +1,21 @@
 {
   "name": "genesis_tree_spruce",
-  "frameWidth": 88,
-  "frameHeight": 88,
+  "frameWidth": 176,
+  "frameHeight": 176,
   "origin": [
-    43.5,
-    43.5
+    87.5,
+    87.5
   ],
-  "worldPxPerArtPx": 0.5,
+  "worldPxPerArtPx": 0.25,
   "rows": [
     "small",
     "medium",
     "large"
   ],
   "frameSizes": [
-    48,
-    68,
-    88
+    96,
+    136,
+    176
   ],
   "crownWorldPx": [
     18,
@@ -50,6 +50,6 @@
     "elevation": "prop"
   },
   "image": "genesis_tree_spruce.png",
-  "sheetWidth": 528,
-  "sheetHeight": 264
+  "sheetWidth": 1056,
+  "sheetHeight": 528
 }

@@ -142,9 +142,12 @@
   // shift `I.dx` in world px, rustle step `I.step`) must be filled in for each.
   // The mip level to draw at in `g`, and whether it still needs averaging (fewer device px
   // than art px) rather than sampling.
+  // Art px per world px of the tree art (4 since the art went up in resolution; 2 before).
+  const AK = A => A.k || 2;
+  const artScale = () => { const A = pixelArt(); return A ? AK(A) : 2; };
   function levelFor(g){
-    const perArt = Math.abs(g.getTransform().a) / 2;   // device px per art px
-    const level = perArt >= 1 ? 0 : perArt >= 0.5 ? 1 : 2;
+    const perArt = Math.abs(g.getTransform().a) / artScale();   // device px per art px
+    const level = perArt >= 1 ? 0 : perArt >= 0.5 ? 1 : perArt >= 0.25 ? 2 : 3;
     return { level, shrink: perArt * (1 << level) < 1 - 1e-6 };
   }
   let DECOR = null;
@@ -156,13 +159,13 @@
     const m = mask(g);
     m.imageSmoothingEnabled = shrink;
     for (let k = 0; k < count; k++){
-      const j = I.ids[k], v = frame(j), str = expand(v.frames[I.step[j] % v.frames.length]), w = v.n / 2, off = shadow(j);
+      const j = I.ids[k], v = frame(j), str = expand(v.frames[I.step[j] % v.frames.length]), w = v.n / AK(A), off = shadow(j);
       m.drawImage(mip(str, v.n, level, true), I.X[j] - w / 2 + I.dx[j] + off[0] / 2, I.Y[j] - w / 2 + off[1] / 2, w, w);
     }
     g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = G.PixelArt.SHADOW_ALPHA; g.drawImage(m.canvas, 0, 0); g.restore();
     g.imageSmoothingEnabled = shrink;
     for (let k = 0; k < count; k++){
-      const j = I.ids[k], v = frame(j), str = expand(v.frames[I.step[j] % v.frames.length]), w = v.n / 2;
+      const j = I.ids[k], v = frame(j), str = expand(v.frames[I.step[j] % v.frames.length]), w = v.n / AK(A);
       g.drawImage(mip(str, v.n, level, false), I.X[j] - w / 2 + I.dx[j], I.Y[j] - w / 2, w, w);
     }
     g.imageSmoothingEnabled = smooth;
@@ -297,7 +300,7 @@
       const a0 = g.globalAlpha;
       g.globalAlpha = a0 * alpha;
       if (A){
-        const set = A.art[kind][size], v = set[variant % set.length], str = expand(v.frames[step % v.frames.length]), w = v.n / 2, { level, shrink } = levelFor(g), smooth = g.imageSmoothingEnabled;
+        const set = A.art[kind][size], v = set[variant % set.length], str = expand(v.frames[step % v.frames.length]), w = v.n / AK(A), { level, shrink } = levelFor(g), smooth = g.imageSmoothingEnabled;
         g.imageSmoothingEnabled = shrink;
         g.drawImage(mip(str, v.n, level, false), x - w / 2, y - w / 2, w, w);
         g.imageSmoothingEnabled = smooth;

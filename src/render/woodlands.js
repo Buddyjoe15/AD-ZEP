@@ -148,13 +148,15 @@
   }
   const genesis = () => !!(art && art.generator === 'genesis');
   function grassBase(ctx, gx, gy, px, py, S){
-    if (pix) blit(ctx, variant(pix.grass, gx, gy, 11), px, py, S);
+    if (pix && genesis() && Math.abs(ctx.getTransform().a) >= 1.5) G.Ground.grass(ctx, gx, gy, px, py, S);   // close up: the fine grass
+    else if (pix) blit(ctx, variant(pix.grass, gx, gy, 11), px, py, S);
     else { ctx.fillStyle = rgb(RGB[K.GRASS]); ctx.fillRect(px, py, S + .5, S + .5); }
   }
   function drawTile(ctx, i, t, gx, gy, px, py, S){
     if (t === K.LOG && art && art.trees && G.TreeArt.logOn(grid, i)) t = K.FOREST;   // a Genesis fallen tree lies here (G.TreeArt)
     const gen = genesis();
     // A cavern's floor (its walls: G.Structures).
+    if (gen && (t === K.GRASS || t === K.FOREST || t === K.TREE || t === K.LOG) && Math.abs(ctx.getTransform().a) >= 1.5){ grassBase(ctx, gx, gy, px, py, S); return; }   // close up: fine grass under everything (undergrowth: G.Ground)
     if (gen && t === K.CAVEF){ G.Structures.caveFloor(ctx, gx, gy, px, py, S); return; }
     if (gen && (CONTOUR.has(t) || GEN_GRASS.has(t))){ grassBase(ctx, gx, gy, px, py, S); return; }
     if (gen && GEN_DUST.has(t)){ dustBase(ctx, gx, gy, px, py, S); return; }

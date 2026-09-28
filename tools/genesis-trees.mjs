@@ -9,7 +9,9 @@
 // Frames are stored run-length encoded (see rle), since a fallen tree's frame is mostly empty.
 import { C, Grid, rng, finish } from './pixelart.mjs';
 
-const K = 2, TAU = Math.PI * 2;
+// Art px per world px: 4, so trees and props hold their detail up close (the renderer reads
+// it from the data as `k`).
+const K = 4, TAU = Math.PI * 2;
 export const GENESIS_SIZES = ['small', 'medium', 'large'];
 export const GENESIS_CROWN = {
   spruce: [18, 28, 38], pine: [22, 34, 46], birch: [20, 30, 40], maple: [24, 40, 56], snag: [18, 26, 36]
@@ -79,6 +81,17 @@ function brush(g){
       }, col);
     },
     line(x0, y0, x1, y1, w, col){ this.taper(x0, y0, x1, y1, w, w, col); },
+    // A clump of leaves seen from above: rounded, lit on its upper left, shaded on its lower
+    // right, one shade either way of `col` on the foliage ramp.
+    clump(x, y, rr, col){
+      const t = LEAF_RAMP.indexOf(col), lit = LEAF_RAMP[Math.min(LEAF_RAMP.length - 1, t + 1)], dark = LEAF_RAMP[Math.max(0, t - 1)];
+      this.paint(x - rr, y - rr, x + rr, y + rr, (px, py) => {
+        const dx = px - x, dy = py - y, d = Math.hypot(dx, dy);
+        if (d > rr) return null;
+        const l = -(dx + dy) / (rr * 1.41);   // towards the light
+        return l > 0.35 && d < rr * 0.8 ? lit : l < -0.45 && d > rr * 0.5 ? dark : col;
+      });
+    },
     // Any shape: `fn(x, y)` returns a colour name for the point, or nothing.
     paint(x0, y0, x1, y1, fn){
       const ax0 = Math.max(0, Math.floor(c0 + x0 * K)), ax1 = Math.min(g.w - 1, Math.ceil(c0 + x1 * K));
@@ -88,6 +101,7 @@ function brush(g){
   };
 }
 const polar = (a, d) => [Math.cos(a) * d, Math.sin(a) * d];
+const LEAF_RAMP = ['leaf0', 'leaf1', 'leaf2', 'grass2', 'grass3'];
 
 // Crowns of radius R (world px). Flat mid-tones; the pipeline adds edge light and outline.
 const DRAW = {
@@ -134,8 +148,8 @@ const DRAW = {
     for (let i = 0; i < n; i++){
       // Two in three clusters make the outer ring, so the crown reaches its full width.
       const a = (i / n) * TAU + r() * 0.5, cr = R * (0.2 + r() * 0.08), d = i % 3 < 2 ? (R - cr) * (0.88 + r() * 0.12) : R * (0.15 + r() * 0.4), [x, y] = polar(a, d);
-      b.disc(x, y, cr, 'leaf2');
-      b.disc(x - cr * 0.25, y - cr * 0.25, cr * 0.55, 'grass2');
+      b.clump(x, y, cr, 'leaf2');
+      b.clump(x - cr * 0.25, y - cr * 0.25, cr * 0.55, 'grass2');
       b.disc(x + cr * 0.45, y + cr * 0.45, cr * 0.3, 'leaf1');
       b.disc(x - cr * 0.4, y - cr * 0.4, 0.6, 'grass3');
       for (let k = 0; k < 3; k++) b.disc(x + (r() - 0.5) * cr * 1.4, y + (r() - 0.5) * cr * 1.4, 0.5, r() < 0.4 ? 'leaf1' : 'grass3');
@@ -148,9 +162,9 @@ const DRAW = {
     const n = Math.round(7 + R / 6);
     for (let i = 0; i < n; i++){
       const a = (i / n) * TAU + r() * 0.4, lr = R * (0.24 + r() * 0.08), [x, y] = polar(a, Math.min(R - lr, R * (0.56 + r() * 0.12)));
-      b.disc(x, y, lr, 'leaf1');
+      b.clump(x, y, lr, 'leaf1');
     }
-    for (let i = 0; i < Math.round(R * 1.4); i++){ const [x, y] = polar(r() * TAU, r() * R * 0.72); b.disc(x, y, R * (0.08 + r() * 0.07), 'leaf2'); }
+    for (let i = 0; i < Math.round(R * 1.4); i++){ const [x, y] = polar(r() * TAU, r() * R * 0.72); b.clump(x, y, R * (0.08 + r() * 0.07), 'leaf2'); }
     for (let i = 0; i < Math.round(R * 0.9); i++){ const [x, y] = polar(r() * TAU, r() * R * 0.8); b.disc(x, y, Math.max(0.5, R * (0.03 + r() * 0.03)), 'leaf0'); }
     b.disc(-R * 0.26, -R * 0.26, R * 0.2, 'leaf2');
     for (let i = 0; i < Math.round(R * 0.5); i++){ const [x, y] = polar(r() * TAU, r() * R * 0.6); b.disc(x - R * 0.1, y - R * 0.1, 0.5, 'grass3'); }
@@ -170,6 +184,29 @@ const DRAW = {
     b.disc(0.3, 0.3, R * 0.08, 'dust0');
   }
 };
+
+// Fine foliage for art drawn at 4 px per world px: the crown's flat areas broken into small
+// leaf clusters (a few art px each), lit on the upper left and shaded on the lower right, so
+// a crown has texture up close instead of smooth discs. Edges are left alone (the outline and
+// rustle work from them).
+const FOLIAGE = { maple: 1, birch: 1, pine: 0.6, spruce: 0.45 };
+const RAMP = ['leaf0', 'leaf1', 'leaf2', 'grass2', 'grass3'];
+function foliage(g, kind, seed){
+  const amt = FOLIAGE[kind];
+  if (!amt || K < 4) return;
+  const r = rng(seed * 7 + 31), N = g.w, idx = new Map(RAMP.map((k, i) => [C[k], i])), o = g.clone();
+  const inside = (x, y) => { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (!g.get(x + dx, y + dy)) return false; return true; };
+  const n = Math.round(N * N * 0.05 * amt);
+  for (let i = 0; i < n; i++){
+    const x = 2 + Math.floor(r() * (N - 4)), y = 2 + Math.floor(r() * (N - 4)), c = g.get(x, y), t = idx.get(c);
+    if (t === undefined || !inside(x, y)) continue;
+    // A cluster: 2–3 px across, lighter at its upper left, darker at its lower right.
+    const w = 2 + Math.floor(r() * 2), lit = RAMP[Math.min(4, t + 1)], dark = RAMP[Math.max(0, t - 1)];
+    for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < w; dx++) if (idx.has(g.get(x + dx, y + dy))) o.set(x + dx, y + dy, C[dy === 0 && dx < w - 1 ? lit : dx === w - 1 && dy === 1 ? dark : RAMP[t]]);
+    if (idx.has(g.get(x + w, y + 2))) o.set(x + w, y + 2, C[dark]);   // its shadow
+  }
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) g.set(x, y, o.get(x, y));
+}
 
 // Leaf rustle: step 0 is the crown as drawn; steps 1 and 2 drop some edge leaves, grow others
 // just outside, in K × K clumps, and catch the light in different places.
@@ -204,6 +241,7 @@ function variantFrames(kind, z, v){
   const d = GENESIS_CROWN[kind][z], N = frameSize(d), seed = 701 + GENESIS_KINDS.indexOf(kind) * 131 + z * 17 + v * 5;
   const g = new Grid(N, N);
   DRAW[kind](brush(g), rng(seed), d / 2);
+  foliage(g, kind, seed);
   const steps = kind === 'snag' ? 1 : RUSTLES;
   return { n: N, frames: Array.from({ length: steps }, (_, s) => {
     const f = rustle(g, kind, seed, s);
@@ -586,5 +624,5 @@ export function genesisTrees(){
       rows: sets.map(fs => fs.map(pad))
     };
   }
-  return { data: { encoding: 'rle', kinds: GENESIS_KINDS, sizes: GENESIS_SIZES, crown: GENESIS_CROWN, shadow: GENESIS_SHADOW, props: GENESIS_PROPS, propShadow: PROP_SHADOW, logAngles: LOG_ANGLES, art }, sheets };
+  return { data: { encoding: 'rle', k: K, kinds: GENESIS_KINDS, sizes: GENESIS_SIZES, crown: GENESIS_CROWN, shadow: GENESIS_SHADOW, props: GENESIS_PROPS, propShadow: PROP_SHADOW, logAngles: LOG_ANGLES, art }, sheets };
 }

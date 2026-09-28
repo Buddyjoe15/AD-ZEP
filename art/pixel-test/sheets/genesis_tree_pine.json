@@ -1,21 +1,21 @@
 {
   "name": "genesis_tree_pine",
-  "frameWidth": 104,
-  "frameHeight": 104,
+  "frameWidth": 208,
+  "frameHeight": 208,
   "origin": [
-    51.5,
-    51.5
+    103.5,
+    103.5
   ],
-  "worldPxPerArtPx": 0.5,
+  "worldPxPerArtPx": 0.25,
   "rows": [
     "small",
     "medium",
     "large"
   ],
   "frameSizes": [
-    56,
-    80,
-    104
+    112,
+    160,
+    208
   ],
   "crownWorldPx": [
     22,
@@ -50,6 +50,6 @@
     "elevation": "prop"
   },
   "image": "genesis_tree_pine.png",
-  "sheetWidth": 624,
-  "sheetHeight": 312
+  "sheetWidth": 1248,
+  "sheetHeight": 624
 }
