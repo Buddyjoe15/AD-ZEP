@@ -227,7 +227,7 @@
         if (u.haulState === 'loading' || u.haulState === 'waiting') u.haulState = 'toMine';
         if (G.Units.navIdle(u) && S.time >= u.commandNextPath){
           u.commandNextPath = S.time + REPLAN;
-          const ap = G.Construction.approachPoint(b.gx, b.gy, b.w, b.h, u);
+          const ap = G.Construction.approachFor(b, u);
           S.paths.request(u, ap.x, ap.y);
         }
         return;

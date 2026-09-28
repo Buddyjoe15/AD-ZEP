@@ -199,7 +199,7 @@
       // Construction sites.
       for (const site of S.constructionSites){
         if (!inView(site.x, site.y, site.w * T)) continue;
-        const px = site.gx * T, py = site.gy * T, pct = 1 - site.remaining / site.buildTime;
+        const px = G.Buildings.fx(site) * T, py = G.Buildings.fy(site) * T, pct = 1 - site.remaining / site.buildTime;
         if (G.PixelArt.buildingSprite(site.type)) G.PixelArt.drawSite(g, site, pct);
         else {
         g.fillStyle = 'rgba(160,160,145,.28)'; g.strokeStyle = '#d4b96b'; g.lineWidth = 2 / z; g.setLineDash([6 / z, 5 / z]);
@@ -417,22 +417,24 @@
           g.beginPath(); g.arc(s.x2, s.y2, missile ? 70 : 40, 0, TAU); g.fill();
         }
       }
+      if (S.buildPreview) this.drawBuildGrid(g, z, S.buildPreview);
       if (S.buildPreview){
         const bp = S.buildPreview, d = G.Defs.buildables.get(bp.key) || { w: 1, h: 1, cost: {} }, builder = !!G.Construction.builder(S.buildMode.builderId);
-        const cell = (gx, gy, ok) => {
+        const cell = (o, ok) => {
+          const x = G.Buildings.fx(o) * T, y = G.Buildings.fy(o) * T;
           g.fillStyle = ok ? 'rgba(125,220,130,.30)' : 'rgba(230,90,80,.32)'; g.strokeStyle = ok ? '#8de295' : '#ee6b62'; g.lineWidth = 2 / z;
-          g.fillRect(gx * T, gy * T, T * d.w, T * d.h); g.strokeRect(gx * T, gy * T, T * d.w, T * d.h);
+          g.fillRect(x, y, T * d.w, T * d.h); g.strokeRect(x, y, T * d.w, T * d.h);
         };
         if (bp.cells){
           // A row of walls: green where it will be built, red where blocked or beyond the resources.
-          for (const c of bp.cells) cell(c.gx, c.gy, c.afford && builder);
+          for (const c of bp.cells) cell({ ...c, w: d.w, h: d.h }, c.afford && builder);
           const n = bp.cells.filter(c => c.afford).length, last = bp.cells[bp.cells.length - 1];
           const cost = G.Economy.describe(Object.fromEntries(Object.entries(d.cost).map(([k, v]) => [k, v * n])));
           g.font = `bold ${12 / z}px sans-serif`; g.textAlign = 'center';
-          const label = `${n} × ${d.name}${n ? ' · ' + cost : ''}`, lx = (last.gx + 0.5) * T, ly = last.gy * T - 8 / z, w = g.measureText(label).width + 12 / z;
+          const label = `${n} × ${d.name}${n ? ' · ' + cost : ''}`, lx = (G.Buildings.fx(last) + d.w / 2) * T, ly = G.Buildings.fy(last) * T - 8 / z, w = g.measureText(label).width + 12 / z;
           g.fillStyle = 'rgba(10,16,12,.8)'; g.fillRect(lx - w / 2, ly - 14 / z, w, 18 / z);
           g.fillStyle = n ? '#dff5c8' : '#ffb3a8'; g.fillText(label, lx, ly);
-        } else cell(bp.gx, bp.gy, G.Buildings.canPlaceKey(bp.key, bp.gx, bp.gy) && builder && G.Economy.canAfford(d.cost));
+        } else cell({ ...bp, w: d.w, h: d.h }, G.Buildings.canPlaceKey(bp.key, bp.gx, bp.gy, bp.sx || 0, bp.sy || 0) && builder && G.Economy.canAfford(d.cost));
       }
       if (S.formationPreview){
         const fp = S.formationPreview;
@@ -444,6 +446,30 @@
           g.fillStyle = '#fff4b0'; g.font = (9 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(String(i + 1), q.x, q.y + 3 / z);
         });
       }
+    },
+    // The building grid while placing a structure, around the preview: tile lines, the
+    // quarter-tile cells inside them (when zoomed in enough to see them), and ground nothing
+    // can be built on (cliffs, water, trees) shaded red. It fades out with distance.
+    drawBuildGrid(g, z, bp){
+      const S = G.State, grid = S.grid, T = G.CONFIG.TILE, K = G.Buildings.SUB, R = 9;
+      const d = G.Defs.buildables.get(bp.key) || { w: 1, h: 1 };
+      const cx = G.Buildings.fx(bp) + d.w / 2, cy = G.Buildings.fy(bp) + d.h / 2;
+      const x0 = Math.max(0, Math.floor(cx - R)), y0 = Math.max(0, Math.floor(cy - R)), x1 = Math.min(grid.cols, Math.ceil(cx + R)), y1 = Math.min(grid.rows, Math.ceil(cy + R));
+      const fine = T / K * z >= 5;
+      g.save();
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++){
+        const f = 1 - Math.hypot(x + 0.5 - cx, y + 0.5 - cy) / R;
+        if (f <= 0) continue;
+        if (!grid.terrainPassable(x, y)){ g.fillStyle = `rgba(220,60,50,${(0.32 * f).toFixed(3)})`; g.fillRect(x * T, y * T, T, T); }
+        g.strokeStyle = `rgba(230,240,225,${(0.28 * f).toFixed(3)})`; g.lineWidth = 1 / z;
+        g.strokeRect(x * T, y * T, T, T);
+        if (fine){
+          g.strokeStyle = `rgba(230,240,225,${(0.2 * f).toFixed(3)})`; g.beginPath();
+          for (let i = 1; i < K; i++){ g.moveTo(x * T + i * T / K, y * T); g.lineTo(x * T + i * T / K, (y + 1) * T); g.moveTo(x * T, y * T + i * T / K); g.lineTo((x + 1) * T, y * T + i * T / K); }
+          g.stroke();
+        }
+      }
+      g.restore();
     },
     drawMinimap(){
       const m = this.mini, S = G.State, C = G.CONFIG;

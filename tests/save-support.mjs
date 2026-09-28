@@ -117,7 +117,7 @@ export function representativeGame(){
   // A finished player structure and chest (not part of the testing zone), far enough from
   // the crew that the hostile attacking the wall survives the few seconds simulated.
   const wallAt = S.grid.nearestOpen(sh.gx - 30, sh.gy - 22, 10);
-  const wall = G.Buildings.add('defensive_wall', wallAt.x, wallAt.y);
+  const wall = G.Buildings.add('defensive_wall', wallAt.x, wallAt.y, { sx: 2 });   // half a tile over on the building grid
   const chestAt = S.grid.nearestOpen(sh.gx + 10, sh.gy + sh.h + 6, 10);
   G.Buildings.add('chest', chestAt.x, chestAt.y).items.push(G.Items.create('field_cap'));
   // A Genesis map under the game, with trees blown down by a blast (snapped stumps, their

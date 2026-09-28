@@ -46,7 +46,8 @@
         this.count++;
         const open = this.shouldOpen(b, gd), v = open ? OPEN : CLOSED;
         this.open.set(b.id, open);
-        for (let y = b.gy; y < b.gy + b.h; y++) for (let x = b.gx; x < b.gx + b.w; x++) if (grid.inBounds(x, y)) this.mask[y * grid.cols + x] = v;
+        const c = G.Buildings.cover(b);
+        for (let y = c.gy; y < c.gy + c.h; y++) for (let x = c.gx; x < c.gx + c.w; x++) if (grid.inBounds(x, y)) this.mask[y * grid.cols + x] = v;
       }
       // Destroyed gates leave the mask on the next structure change (their removal).
     },

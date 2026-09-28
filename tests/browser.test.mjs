@@ -636,6 +636,8 @@ test('pixel-art walls join their neighbours and gate ends (never diagonally); ga
       const side = add('defensive_wall', 3, 1), down = add('wood_wall', 0, 1);
       const lone = add('defensive_wall', 8, 4), d1 = add('wood_wall', 10, 4), d2 = add('wood_wall', 11, 5);
       const vg = add('gate_v', 0, 2), below = add('wood_wall', 0, 4);
+      // Two walls a quarter tile off the tile grid, flush against each other, join.
+      const q1 = G.Buildings.add('wood_wall', x0 + 16, y0 + 14, { team: 'blue', sx: 1, sy: 1 }), q2 = G.Buildings.add('wood_wall', x0 + 18, y0 + 14, { team: 'blue', sx: 1, sy: 1 });
       const mask = w => P.joins(w);
       G.centerCamera((x0 + 6) * T, (y0 + 4) * T, 1); G.Renderer.draw();
       const sp = P.data.sprites.defensive_wall;
@@ -643,7 +645,7 @@ test('pixel-art walls join their neighbours and gate ends (never diagonally); ga
       // Open the gate by bringing Vance to it.
       h.x = gate.x; h.y = gate.y - 1.5 * T; h.path = []; G.rebuildSpatial(); G.Gates.update();
       const open = P.buildingState(gate, P.data.sprites.gate_3);
-      return { a: mask(a), b: mask(b), c: mask(c), side: mask(side), down: mask(down), lone: mask(lone), d1: mask(d1), d2: mask(d2), below: mask(below), col, finished: sp.states.finished.start, open };
+      return { a: mask(a), b: mask(b), c: mask(c), side: mask(side), down: mask(down), lone: mask(lone), d1: mask(d1), d2: mask(d2), below: mask(below), q1: mask(q1), q2: mask(q2), col, finished: sp.states.finished.start, open };
     });
     assert.equal(r.a, 2 | 4, 'wood wall joins the metal wall east and the wood wall south');
     assert.equal(r.b, 2 | 8, 'metal wall joins the wood wall west and the gate end east');
@@ -653,6 +655,7 @@ test('pixel-art walls join their neighbours and gate ends (never diagonally); ga
     assert.equal(r.below, 1, 'and the vertical gate end north');
     assert.equal(r.lone, 0);
     assert.equal(r.d1, 0, 'no diagonal joins'); assert.equal(r.d2, 0);
+    assert.equal(r.q1, 2, 'walls off the tile grid join east'); assert.equal(r.q2, 8, 'and west');
     assert.equal(r.col, r.finished + (2 | 8), 'the sheet column is the finished piece for its mask');
     assert.equal(r.open, 'open', 'an open gate shows its open state');
     await page.screenshot({ path: path.join(OUT, 'pixel-art-walls.png') });
@@ -688,7 +691,8 @@ test('building walls: press and drag builds a row in the direction dragged, prev
       G.BuildUI.enter(u); G.BuildUI.choose('wood_wall');
       return spot;
     });
-    const cellCentre = async (gx, gy) => screen(page, (gx + 0.5) * 48, (gy + 0.5) * 48);
+    // Placement centres a structure on the pointer: point at the middle of a 2 × 2 wall section.
+    const cellCentre = async (gx, gy) => screen(page, (gx + 1) * 48, (gy + 1) * 48);
     // Drag east 8 tiles (and a little south): a row of 5 east-west.
     let a = await cellCentre(at.gx, at.gy), b = await cellCentre(at.gx + 8, at.gy + 1);
     await page.mouse.move(a.x, a.y); await page.mouse.down();

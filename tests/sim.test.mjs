@@ -1424,6 +1424,42 @@ test('the Resource Extractor mines whatever deposit it stands on', () => {
 // An open field east of the ship, away from the testing zone and deposits.
 const field = (G, dx = 14, dy = 16) => { const sh = G.Units.ship(); return G.State.grid.nearestOpen(sh.gx + dx, sh.gy + dy, 6); };
 
+test('building grid: structures snap to quarter-tile cells and may share a tile; movement is blocked on every tile they touch', () => {
+  const G = newGame();
+  const S = G.State, B = G.Buildings, p = field(G, 16, 20);
+  // Placement snaps to cells, centred on the point: a 2 × 2 wall centred on a tile corner
+  // sits squarely; nudged by a cell it sits a quarter tile over.
+  assert.deepEqual({ ...B.placementAt('defensive_wall', (p.x + 1) * T, (p.y + 1) * T) }, { gx: p.x, gy: p.y, sx: 0, sy: 0, node: null });
+  assert.deepEqual({ ...B.placementAt('defensive_wall', (p.x + 1.25) * T, (p.y + 1) * T) }, { gx: p.x, gy: p.y, sx: 1, sy: 0, node: null });
+  // A wall half a tile over: it covers three tiles across, all blocked for movement.
+  const a = B.add('defensive_wall', p.x, p.y, { sx: 2 });
+  assert.equal(a.x, (p.x + 0.5 + 1) * T);
+  assert.deepEqual({ ...B.cover(a) }, { gx: p.x, gy: p.y, w: 3, h: 2 });
+  for (let x = p.x; x < p.x + 3; x++) assert.equal(S.grid.passable(x, p.y), false, 'tile ' + (x - p.x));
+  // Another wall may share its last tile (cells don't overlap), but not overlap it by a cell.
+  assert.equal(B.canPlaceKey('defensive_wall', p.x + 2, p.y, 2, 0), true, 'flush against it, sharing a tile');
+  assert.equal(B.canPlaceKey('defensive_wall', p.x + 2, p.y, 1, 0), false, 'one cell into it');
+  const b = B.add('defensive_wall', p.x + 2, p.y, { sx: 2 });
+  // The shared tile stays blocked until both are gone.
+  B.remove(a);
+  assert.equal(S.grid.passable(p.x + 2, p.y), false, 'still under the second wall');
+  assert.equal(S.grid.passable(p.x, p.y), true);
+  // Clicks find the structure under the point, not the tile.
+  assert.equal(B.atPoint((p.x + 2.4) * T, (p.y + 0.5) * T), null, 'the free half of the shared tile');
+  assert.equal(B.atPoint((p.x + 2.6) * T, (p.y + 0.5) * T), b);
+  // A Spider builds at an offset, and a save keeps it.
+  S.resources.metal = 1000;
+  const spider = find(G, 'utility_spider'), q = field(G, 12, 26);
+  assert.ok(G.Construction.order(spider, 'wood_wall', q.x, q.y, 3, 1));
+  G.Sim.run(30);
+  const built = S.buildings.find(o => o.type === 'wood_wall' && o.gx === q.x && o.gy === q.y);
+  assert.ok(built && built.sx === 3 && built.sy === 1, 'built a cell over');
+  G.Save.restore(JSON.parse(JSON.stringify(G.Save.serialize())), 1);
+  const again = G.State.buildings.find(o => o.id === built.id);
+  assert.deepEqual([again.sx, again.sy, again.x, again.y], [3, 1, built.x, built.y]);
+  assert.equal(G.State.grid.passable(q.x + 2, q.y + 2), false, 'its covered tiles are blocked again after loading');
+});
+
 test('walls: Reinforced Walls take less damage; both block movement like the old Wall', () => {
   const G = newGame();
   const S = G.State, T = 48, p = field(G);

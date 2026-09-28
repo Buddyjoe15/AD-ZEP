@@ -79,7 +79,7 @@
       }
       return best;
     },
-    buildingAt(wx, wy){ const T = G.CONFIG.TILE; return G.Buildings.at(Math.floor(wx / T), Math.floor(wy / T)); },
+    buildingAt(wx, wy){ return G.Buildings.atPoint(wx, wy); },
     nodeAt(wx, wy){ const r = 32 / G.State.camera.z; return G.State.resourceNodes.find(n => n.remaining > 0 && Math.hypot(n.x - wx, n.y - wy) < r) || null; },
     // Something a gatherer can be sent to: a Mine Building, or a scavenge / deposit node;
     // or, with a unit that saws selected, a tree, stump or fallen tree ({ tree: index }).

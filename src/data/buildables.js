@@ -31,7 +31,7 @@
 GW.Defs.buildables.defineAll({
   chest: {
     name: 'Chest', w: 2, h: 2, buildTime: 2, cost: {}, container: { capacity: 24 },
-    description: 'A 1×1 storage chest. Player-built chests are immediately usable.'
+    description: 'A 2×2 storage chest. Player-built chests are immediately usable.'
   },
   // ---- Fortifications ----
   shield_projector: {
@@ -50,12 +50,12 @@ GW.Defs.buildables.defineAll({
   wood_wall: {
     name: 'Wood Wall', w: 2, h: 2, hp: 350, buildTime: 3, cost: { metal: 25 }, wall: true,
     behaviors: [{ type: 'defenseAura', radiusTiles: 1, reduction: 0.15 }],
-    description: 'Quick, cheap palisade of sharpened logs with stakes angled out from its foot, one 1×1 section at a time. Weakest wall: 350 HP. Friendly units within one tile take 15% less damage.'
+    description: 'Quick, cheap palisade of sharpened logs with stakes angled out from its foot, one 2×2 section at a time. Weakest wall: 350 HP. Friendly units within one tile take 15% less damage.'
   },
   defensive_wall: {
     name: 'Metal Wall', w: 2, h: 2, hp: 600, buildTime: 5, cost: { metal: 60 }, wall: true,
     behaviors: [{ type: 'defenseAura', radiusTiles: 1, reduction: 0.20 }],
-    description: 'Standard bolted steel wall, one 1×1 section at a time. Blocks enemies and channels them into controlled approaches. Friendly units within one tile take 20% less damage.'
+    description: 'Standard bolted steel wall, one 2×2 section at a time. Blocks enemies and channels them into controlled approaches. Friendly units within one tile take 20% less damage.'
   },
   reinforced_wall: {
     name: 'Reinforced Metal Wall', w: 2, h: 2, hp: 1600, armor: 0.35, buildTime: 8, cost: { metal: 40, steel: 12 }, wall: true,

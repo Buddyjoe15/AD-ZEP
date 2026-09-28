@@ -124,18 +124,23 @@
       return this.joinMasks.get(b.id) || 0;
     },
     rebuildJoins(){
-      const tiles = new Map(), key = (x, y) => y * 65536 + x, masks = this.joinMasks;
+      // Walls and gates by building-grid cell (walls can sit a quarter tile over).
+      const cells = new Map(), key = (x, y) => y * 65536 + x, masks = this.joinMasks, K = G.Buildings.SUB;
+      const at = b => [b.gx * K + (b.sx || 0), b.gy * K + (b.sy || 0)];
       masks.clear();
       for (const b of G.State.buildings){
         const d = G.Defs.buildables.get(b.type);
-        if (d && (d.wall || d.gate)) for (let y = b.gy; y < b.gy + b.h; y++) for (let x = b.gx; x < b.gx + b.w; x++) tiles.set(key(x, y), b);
+        if (!d || !(d.wall || d.gate)) continue;
+        const [c0, r0] = at(b);
+        for (let y = r0; y < r0 + b.h * K; y++) for (let x = c0; x < c0 + b.w * K; x++) cells.set(key(x, y), b);
       }
       for (const b of G.State.buildings){
         if (!G.Defs.buildables.get(b.type)?.wall) continue;
         let mask = 0;
-        // (The tile just past each side of its footprint, level with its top-left tile.)
-        for (const [bit, dx, dy] of [[1, 0, -1], [2, b.w, 0], [4, 0, b.h], [8, -1, 0]]){
-          const n = tiles.get(key(b.gx + dx, b.gy + dy));
+        const [c0, r0] = at(b);
+        // (The cell just past each side of its footprint, level with its top-left cell.)
+        for (const [bit, dx, dy] of [[1, 0, -1], [2, b.w * K, 0], [4, 0, b.h * K], [8, -1, 0]]){
+          const n = cells.get(key(c0 + dx, r0 + dy));
           if (!n || n.team !== b.team) continue;
           const nd = G.Defs.buildables.get(n.type);
           if (nd.wall || (nd.gate && (dx ? n.w > n.h : n.h > n.w))) mask |= bit;
@@ -175,13 +180,13 @@
     // falls on its neighbour (the joins of a wall stay clean).
     drawBuildingShadow(g, b, t){
       const sp = D.sprites[this.BUILDINGS[b.type]];
-      this.stampFrame(g, sp, sp.frames[0][this.buildingCol(b, sp, t)], b.gx, b.gy, b.team, 'shadow');
+      this.stampFrame(g, sp, sp.frames[0][this.buildingCol(b, sp, t)], G.Buildings.fx(b), G.Buildings.fy(b), b.team, 'shadow');
     },
     drawBuilding(g, b, z, t, noShadow){
       const name = this.BUILDINGS[b.type], sp = D.sprites[name], state = this.buildingState(b, sp);
-      this.stampFrame(g, sp, sp.frames[0][this.buildingCol(b, sp, t)], b.gx, b.gy, b.team, noShadow ? 'body' : undefined);
+      this.stampFrame(g, sp, sp.frames[0][this.buildingCol(b, sp, t)], G.Buildings.fx(b), G.Buildings.fy(b), b.team, noShadow ? 'body' : undefined);
       if (sp.head && sp.head.on[state]) this.drawHead(g, b, sp, sp.head.on[state], t);
-      if (b.hp < b.maxHp) G.Visuals.bar(g, b.x, b.gy * G.CONFIG.TILE - 7, b.w * G.CONFIG.TILE * 0.8, b.hp / b.maxHp);
+      if (b.hp < b.maxHp) G.Visuals.bar(g, b.x, G.Buildings.fy(b) * G.CONFIG.TILE - 7, b.w * G.CONFIG.TILE * 0.8, b.hp / b.maxHp);
     },
     // A turret's head layer: the facing nearest the aim it is drawn at, which eases toward the
     // aim the simulation last set (G.Turrets) at the head's turn rate. While the turret has a
@@ -224,13 +229,13 @@
         } else f = this.frameOf(fire, t);
       }
       const facing = ((Math.round((this.headAim(b, H, t) + Math.PI / 2) / (Math.PI * 2 / H.facings)) % H.facings) + H.facings) % H.facings;
-      this.stampFrame(g, sp, H.frames[facing][f], b.gx, b.gy, b.team);
+      this.stampFrame(g, sp, H.frames[facing][f], G.Buildings.fx(b), G.Buildings.fy(b), b.team);
     },
     // Construction site: foundation, frame, then near-complete as the build progresses.
     drawSite(g, site, pct){
       const st = D.sprites[this.BUILDINGS[site.type]].states;
       const s = pct < 1 / 3 ? st.foundation : pct < 2 / 3 ? st.frame : st['near-complete'];
-      this.stamp(g, this.BUILDINGS[site.type], s.start, site.gx, site.gy, site.team);
+      this.stamp(g, this.BUILDINGS[site.type], s.start, G.Buildings.fx(site), G.Buildings.fy(site), site.team);
     },
     drawRubble(g, inView){
       const now = G.State.time, T = G.CONFIG.TILE;
@@ -303,9 +308,9 @@
   const P = G.PixelArt;
   // Rubble is a render-only afterimage of a destroyed structure; it is never saved.
   G.Events.on('building:removed', b => {
-    if (b.hp <= 0 && P.BUILDINGS[b.type]) P.rubble.push({ type: b.type, team: b.team, gx: b.gx, gy: b.gy, w: b.w, h: b.h, until: G.State.time + P.RUBBLE_SECONDS });
+    if (b.hp <= 0 && P.BUILDINGS[b.type]) P.rubble.push({ type: b.type, team: b.team, gx: G.Buildings.fx(b), gy: G.Buildings.fy(b), w: b.w, h: b.h, until: G.State.time + P.RUBBLE_SECONDS });   // (gx, gy: edges in tiles, fractional)
   });
-  const clearAt = s => { P.rubble = P.rubble.filter(r => r.gx + r.w <= s.gx || s.gx + s.w <= r.gx || r.gy + r.h <= s.gy || s.gy + s.h <= r.gy); };
+  const clearAt = s => { const x = G.Buildings.fx(s), y = G.Buildings.fy(s); P.rubble = P.rubble.filter(r => r.gx + r.w <= x || x + s.w <= r.gx || r.gy + r.h <= y || y + s.h <= r.gy); };
   G.Events.on('building:placed', clearAt);
   G.Events.on('construction:queued', clearAt);
   G.Events.on('world:created', () => { P.rubble = []; P.aims.clear(); });

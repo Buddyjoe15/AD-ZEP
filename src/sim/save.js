@@ -206,8 +206,18 @@
     return v;
   }
 
-  // Keyed by the schema each step upgrades from; add { 11: migrate_11_to_12 } and so on.
-  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7, 7: migrate_7_to_8, 8: migrate_8_to_9, 9: migrate_9_to_10, 10: migrate_10_to_11 };
+  // Schema 12: structures and construction sites sit on a building grid of quarter-tile
+  // cells, with `sx, sy` (0–3) the cell of their top-left corner within tile (gx, gy).
+  // Everything placed before stands squarely on its tiles.
+  function migrate_11_to_12(d){
+    const v = G.copy(d);
+    v.schema = 12;
+    for (const b of [...(v.buildings || []), ...(v.constructionSites || [])]){ b.sx = 0; b.sy = 0; }
+    return v;
+  }
+
+  // Keyed by the schema each step upgrades from; add { 12: migrate_12_to_13 } and so on.
+  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7, 7: migrate_7_to_8, 8: migrate_8_to_9, 9: migrate_9_to_10, 10: migrate_10_to_11, 11: migrate_11_to_12 };
 
   // Applies the steps in order until the save reaches G.SAVE_SCHEMA. A current save is
   // returned as is; anything newer or unknown is rejected.
@@ -232,6 +242,7 @@
     const list = (x, max = LIMITS.list) => Array.isArray(x) && x.length <= max;
     const W = (d && d.worldSize || 0) * C.TILE;
     const point = p => p && num(p.x) && num(p.y) && p.x >= 0 && p.y >= 0 && p.x <= W && p.y <= W;
+    const cell = o => [o.sx, o.sy].every(v => int(v) && v >= 0 && v < G.Buildings.SUB);   // building-grid cell within the tile
     const item = i => i && typeof i.id === 'string' && D.items.has(i.key) &&
       (D.items.get(i.key).stackable ? int(i.count) && i.count > 0 && i.count <= D.items.get(i.key).maxStack : num(i.durability) && num(i.maxDurability) && i.durability >= 0);
     const cost = o => o && typeof o === 'object' && Object.entries(o).every(([k, v]) => D.resources.has(k) && num(v) && v >= 0);
@@ -275,8 +286,8 @@
     if (!d.camera || !point(d.camera) || !num(d.camera.z) || d.camera.z < C.ZOOM_MIN || d.camera.z > C.ZOOM_MAX) fail('camera');
     for (const k of ['containers', 'buildings', 'constructionSites', 'resourceNodes', 'terrainEdits']) if (!list(d[k])) fail(k);
     if (!d.containers.every(c => point(c) && typeof c.id === 'string' && list(c.items, 1000) && c.items.every(item) && num(c.capacity))) fail('container');
-    if (!d.buildings.every(b => point(b) && D.buildables.has(b.type) && num(b.hp) && num(b.maxHp) && [b.gx, b.gy, b.w, b.h].every(int) && (!b.fabQueue || queue(b.fabQueue)) && (!b.spawner || spawner(b.spawner)))) fail('building');
-    if (!d.constructionSites.every(s => point(s) && D.buildables.has(s.type) && num(s.remaining) && num(s.buildTime) && [s.gx, s.gy, s.w, s.h].every(int))) fail('construction site');
+    if (!d.buildings.every(b => point(b) && D.buildables.has(b.type) && num(b.hp) && num(b.maxHp) && [b.gx, b.gy, b.w, b.h].every(int) && cell(b) && (!b.fabQueue || queue(b.fabQueue)) && (!b.spawner || spawner(b.spawner)))) fail('building');
+    if (!d.constructionSites.every(s => point(s) && D.buildables.has(s.type) && num(s.remaining) && num(s.buildTime) && [s.gx, s.gy, s.w, s.h].every(int) && cell(s))) fail('construction site');
     if (!d.resourceNodes.every(n => point(n) && D.nodes.has(n.type) && num(n.remaining) && n.remaining >= 0 &&
       (D.nodes.get(n.type).kind !== 'deposit' || (int(n.gx) && int(n.gy))))) fail('resource node');
     if (!d.buildings.every(b => !b.fabQueue || b.rally === null || point(b.rally))) fail('building rally point');

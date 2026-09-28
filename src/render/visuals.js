@@ -129,7 +129,7 @@
 
   // Wall sections. Neighbouring sections join up so a line of walls reads as one wall.
   const wall = (colors) => (g, b, z) => {
-    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T;
+    const T = G.CONFIG.TILE, px = G.Buildings.fx(b) * T, py = G.Buildings.fy(b) * T;
     const joins = (dx, dy) => { const n = G.Buildings.at(b.gx + dx, b.gy + dy); return n && n !== b && /_wall$|^gate$/.test(n.type); };
     const l = joins(-1, 0) ? 0 : 3, r = joins(1, 0) ? 0 : 3, t = joins(0, -1) ? 0 : 3, bt = joins(0, 1) ? 0 : 3;
     g.fillStyle = colors.base; g.fillRect(px + l, py + t, T - l - r, T - t - bt);
@@ -145,7 +145,7 @@
   // Gates: two leaves that slide apart while open, along the gate's long side (any length,
   // horizontal or vertical: drawn in the gate's own frame, turned for a vertical one).
   const gate = (g, b, z) => {
-    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T, open = G.Gates.isOpen(b), vert = b.h > b.w;
+    const T = G.CONFIG.TILE, px = G.Buildings.fx(b) * T, py = G.Buildings.fy(b) * T, open = G.Gates.isOpen(b), vert = b.h > b.w;
     const w = (vert ? b.h : b.w) * T, h = T;
     g.save(); g.translate(b.x, b.y); if (vert) g.rotate(Math.PI / 2); g.translate(-w / 2, -h / 2);
     g.fillStyle = '#3b423d'; g.fillRect(0, 4, w, h - 8);
@@ -160,7 +160,7 @@
 
   // Turrets: a base, and a head that turns toward what it last aimed at.
   const turret = (style) => (g, b, z, t, def) => {
-    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T, w = b.w * T, h = b.h * T, s = G.Turrets.get(b), k = b.w;
+    const T = G.CONFIG.TILE, px = G.Buildings.fx(b) * T, py = G.Buildings.fy(b) * T, w = b.w * T, h = b.h * T, s = G.Turrets.get(b), k = b.w;
     g.fillStyle = '#2d3438'; g.strokeStyle = '#11171a'; g.lineWidth = 2 / z;
     g.fillRect(px + 3, py + 3, w - 6, h - 6); g.strokeRect(px + 3, py + 3, w - 6, h - 6);
     g.fillStyle = style.ring; g.beginPath(); g.arc(b.x, b.y, 13 * k, 0, TAU); g.fill();
@@ -175,7 +175,7 @@
   };
   // Shield Projector: an emitter that glows by charge. Its field is drawn by V.shields().
   V.registerBuilding('shield_projector', (g, b, z, t, def) => {
-    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T, w = b.w * T, h = b.h * T, f = b.shield / def.shield.capacity;
+    const T = G.CONFIG.TILE, px = G.Buildings.fx(b) * T, py = G.Buildings.fy(b) * T, w = b.w * T, h = b.h * T, f = b.shield / def.shield.capacity;
     g.fillStyle = '#2b3a40'; g.strokeStyle = '#10181b'; g.lineWidth = 2 / z;
     g.fillRect(px + 4, py + 4, w - 8, h - 8); g.strokeRect(px + 4, py + 4, w - 8, h - 8);
     g.fillStyle = '#3d5058'; for (const [ox, oy] of [[10, 10], [w - 26, 10], [10, h - 26], [w - 26, h - 26]]) g.fillRect(px + ox, py + oy, 16, 16);
@@ -202,7 +202,7 @@
   };
   // Defensive Sensor: a turning dish.
   V.registerBuilding('defensive_sensor', (g, b, z, t) => {
-    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T;
+    const T = G.CONFIG.TILE, px = G.Buildings.fx(b) * T, py = G.Buildings.fy(b) * T;
     g.fillStyle = '#2d3a34'; g.strokeStyle = '#111a15'; g.lineWidth = 2 / z;
     g.fillRect(px + 6, py + 6, T - 12, T - 12); g.strokeRect(px + 6, py + 6, T - 12, T - 12);
     g.save(); g.translate(b.x, b.y); g.rotate(b.testZone ? 0 : t * 1.6);
@@ -229,7 +229,7 @@
     g.fillStyle = core; g.beginPath(); g.arc(0, 0, 13, 0, TAU); g.fill();
     for (let k = 0; k < 4; k++){ const a = k * 1.57 + 0.78; g.fillStyle = `rgba(255,90,70,${0.4 + pulse * 0.6})`; g.beginPath(); g.arc(Math.cos(a) * 24, Math.sin(a) * 24, 2.2, 0, TAU); g.fill(); }
     g.restore();
-    if (b.hp < b.maxHp) bar(g, b.x, b.gy * T - 6, T * 1.4, b.hp / b.maxHp);
+    if (b.hp < b.maxHp) bar(g, b.x, G.Buildings.fy(b) * T - 6, T * 1.4, b.hp / b.maxHp);
   });
   // A cave cache (a battered strongbox, gold-banded when rare) or a black-box recorder (an
   // orange case with a blinking light), shut or opened.
@@ -277,7 +277,7 @@
   // Resource Extractor: 3×3 headframe over the deposit, with a turning wheel while it
   // extracts and a stockpile gauge. Its wheel and label follow the material underneath.
   V.registerBuilding('mine_building', (g, b, z, t, def) => {
-    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T, w = b.w * T, h = b.h * T;
+    const T = G.CONFIG.TILE, px = G.Buildings.fx(b) * T, py = G.Buildings.fy(b) * T, w = b.w * T, h = b.h * T;
     const cap = (def.behaviors.find(x => x.type === 'extractor') || {}).stockCap || 300;
     const stock = G.Gather.stockTotal(b), full = stock >= cap - 0.01, working = !!b.nodeId && !full;
     const nd = G.Gather.def(G.Gather.node(b.nodeId)), res = nd && G.Defs.resources.get(nd.resource), ore = nd?.ore || '#e1cf9b';
@@ -299,7 +299,7 @@
   });
 
   V.registerBuilding('generic', (g, b, z, t, def) => {
-    const T = G.CONFIG.TILE, px = b.gx * T, py = b.gy * T;
+    const T = G.CONFIG.TILE, px = G.Buildings.fx(b) * T, py = G.Buildings.fy(b) * T;
     g.fillStyle = def?.color || '#8a948d'; g.strokeStyle = '#1b2320'; g.lineWidth = 2 / z;
     g.fillRect(px + 3, py + 3, b.w * T - 6, b.h * T - 6); g.strokeRect(px + 3, py + 3, b.w * T - 6, b.h * T - 6);
     g.fillStyle = '#0b1820'; g.font = `bold 11px sans-serif`; g.textAlign = 'center'; g.fillText(G.initials(def?.name || b.type), b.x, b.y + 4);

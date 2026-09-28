@@ -315,3 +315,19 @@ test('migrate_10_to_11: structures double their footprint, extractors stay centr
   const sp = S.buildings.find(b => b.spawner);
   assert.deepEqual({ ...sp.spawner.rally }, { ...G.Spawner.defaultRally(sp) });
 });
+
+test('migrate_11_to_12: structures and sites stand squarely on their tiles, and bad building-grid cells are rejected', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(11)), before = JSON.stringify(raw);
+  const up = G.Save.migrations[11](raw);
+  assert.equal(JSON.stringify(raw), before, 'the input is not modified');
+  assert.equal(up.schema, 12);
+  for (const b of [...up.buildings, ...up.constructionSites]) assert.deepEqual([b.sx, b.sy], [0, 0], b.type);
+  raw.buildings.forEach((b, i) => { assert.equal(up.buildings[i].x, b.x); assert.equal(up.buildings[i].gx, b.gx); });
+  G.Save.restore(raw, 1);
+  for (const sx of [4, -1, 1.5, undefined]){
+    const bad = readJSON(fixtureFile(12));
+    bad.buildings[0].sx = sx;
+    assert.throws(() => G.Save.validate(bad), /building/, String(sx));
+  }
+});
