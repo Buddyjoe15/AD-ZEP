@@ -1,12 +1,12 @@
 {
   "name": "sentry_turret_head",
-  "frameWidth": 96,
-  "frameHeight": 96,
+  "frameWidth": 192,
+  "frameHeight": 192,
   "origin": [
-    48,
-    48
+    96,
+    96
   ],
-  "worldPxPerArtPx": 0.5,
+  "worldPxPerArtPx": 0.25,
   "facings": 16,
   "rows": "facing, clockwise from up",
   "pivot": "footprint centre",
@@ -60,12 +60,12 @@
   "shadow": {
     "drawnBy": "engine",
     "offset": [
-      8,
-      8
+      16,
+      16
     ],
     "elevation": "structure"
   },
   "image": "sentry_turret_head.png",
-  "sheetWidth": 1824,
-  "sheetHeight": 1536
+  "sheetWidth": 3648,
+  "sheetHeight": 3072
 }

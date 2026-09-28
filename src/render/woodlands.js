@@ -528,7 +528,7 @@
     if (t === K.TREE && pix && !fenAt(gx, gy)){
       // Trees that lean in the current wind are drawn every frame (drawTrees); the rest are
       // drawn upright into the chunk, and rustling leaves are drawn over them when close.
-      if (bakeTrees || !G.Weather.sways(gx, gy)) G.PixelArt.prop(ctx, treeFrame(gy * grid.cols + gx, gx, gy, 0), px, py, S);
+      G.PixelArt.prop(ctx, treeFrame(gy * grid.cols + gx, gx, gy, 0), px, py, S);   // (trees stand still: always in the chunk)
       return;
     }
     if (t === K.TREE){
@@ -661,8 +661,10 @@
       return pix.tree.types[treeKind(gy * grd.cols + gx, gx, gy)];
     },
     RUSTLE_ZOOM: 0.5,
+    // Trees no longer move, so there is nothing to draw here (they are all in the chunks).
+    ANIMATED: false,
     drawTrees(g, grd, v, T, t, z = 1){
-      if (!this.isWoodlands(grd) || G.TreeArt.has(grd)) return;
+      if (!this.ANIMATED || !this.isWoodlands(grd) || G.TreeArt.has(grd)) return;
       bind(grd);
       if (!pix) return;
       const cols = grd.cols, tiles = grd.tiles;

@@ -5,8 +5,9 @@
    Two kinds of entry share the atlas:
    - Canvas art from visuals.js, one 512 px cell per frame at 4 atlas px per world px,
      rotated to the unit's heading when drawn.
-   - Pixel art (pixelart.js), 128 px slots at 2 atlas px per world px, one frame per facing
-     and animation step; never rotated, the facing is picked from the heading instead. */
+   - Pixel art (pixelart.js), 256 px slots at 4 atlas px per world px, one frame per facing
+     and animation step (added on first use); never rotated, the facing is picked from the
+     heading instead. */
 (function(){
   'use strict';
   const G = GW;
@@ -14,10 +15,11 @@
   // Canvas art stays sharp at maximum zoom on high-DPI screens.
   const BOX = 128, RES = 4, CELL = BOX * RES, ATLAS_W = 4096, PER_ROW = ATLAS_W / CELL;
   const ORIGIN_X = 64, ORIGIN_Y = 76;   // unit position inside the box (tall art reaches up)
-  // Pixel art: 2 atlas px per world px, which is 1 atlas px per art px for sprites drawn at
-  // 2 art px per world px. A slot holds frames up to 64 world px (the 49×49 Spider and Vance
-  // are 98×98 art px).
-  const SLOT = 128, SLOTS_PER_CELL = (CELL / SLOT) ** 2, PIXEL_DENSITY = 2;   // pixel art: atlas px per world px
+  // Pixel art: 4 atlas px per world px, which is 1 atlas px per art px for sprites drawn at
+  // 4 art px per world px. A slot holds frames up to 64 world px (the 49×49 Spider and Vance
+  // are 196×196 art px). Frames go into the atlas the first time they are drawn, so only the
+  // facings and animation steps in use take room.
+  const SLOT = 256, SLOTS_PER_CELL = (CELL / SLOT) ** 2, PIXEL_DENSITY = 4;   // pixel art: atlas px per world px
 
   G.SpriteAtlas = {
     RES, CELL,
@@ -102,7 +104,9 @@
       if (e.pixel){
         const a = G.PixelArt.anim(e.anims, u), step = a.frames > 1 ? Math.floor((t + u.id * 0.37) * a.fps) % a.frames : 0;
         const block = e.variants ? G.PixelArt.variant(e.variants, u) * e.variants.framesEach : 0;
-        return e.facings[G.PixelArt.facing(u.heading)][block + a.start + step];
+        const i = e.facings[G.PixelArt.facing(u.heading)][block + a.start + step];
+        if (!e.at[i]) this.paintFrame(e, i);
+        return i;
       }
       const frames = u.path.length && e.move.length ? e.move : e.idle;
       return frames.length > 1 ? frames[Math.floor(((t + u.id * 0.37) / e.period) * frames.length) % frames.length] : frames[0];
@@ -162,19 +166,23 @@
       e = { pixel: true, upright: true, anims: sp.animations, variants: sp.variants || null, facings: [], at: [], scale: PIXEL_DENSITY,
         shadow: sp.shadow.offset.map(v => v * k),
         rect: { x: -(sp.origin[0] + 0.5) * k, y: -(sp.origin[1] + 0.5) * k, w: w * k, h: h * k } };
+      e.src = []; e.team = team; e.w = w; e.h = h; e.res = res; e.pad = pad;
       for (const row of sp.frames){
         const list = [];
-        for (const str of row){
-          const [sx, sy] = A.allocSlot(), x = sx + pad[0], y = sy + pad[1], g = A.g;   // (the atlas may have grown)
-          g.imageSmoothingEnabled = false;
-          g.clearRect(sx, sy, SLOT, SLOT);
-          g.drawImage(P.canvas(str, w, h, team), x, y, w * res, h * res);
-          list.push(e.at.length); e.at.push([x, y]);
-        }
+        for (const str of row){ list.push(e.at.length); e.at.push(null); e.src.push(str); }
         e.facings.push(list);
       }
-      A.cells.set(key, e); A.version++;
+      A.cells.set(key, e);
       return e;
+    },
+    // Paints pixel-art frame i of entry e into a slot (the first time it is needed).
+    paintFrame(e, i){
+      const P = G.PixelArt, [sx, sy] = this.allocSlot(), x = sx + e.pad[0], y = sy + e.pad[1], g = this.g;   // (the atlas may have grown)
+      g.imageSmoothingEnabled = false;
+      g.clearRect(sx, sy, SLOT, SLOT);
+      g.drawImage(P.canvas(e.src[i], e.w, e.h, e.team), x, y, e.w * e.res, e.h * e.res);
+      e.at[i] = [x, y];
+      this.version++;
     }
   };
 })();

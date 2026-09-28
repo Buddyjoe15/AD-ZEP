@@ -1,5 +1,5 @@
 // Building blocks for sprite-lab sprites (art/PIXEL_ART_RULES.md, "Sprite lab"): straight
-// top-down, 96 art px per tile, materials on the game's 48-colour palette. Sprite specs in
+// top-down, 192 art px per tile (RES 4 art px per world px), materials on the game's 48-colour palette. Sprite specs in
 // art/sprite-lab/specs/ import this; tools/sprite-lab.mjs renders them with tools/render3d.mjs.
 import { C } from './pixelart.mjs';
 import { noise3, along, mix } from './render3d.mjs';
@@ -7,7 +7,7 @@ export * from './render3d.mjs';
 import { renderSprite } from './render3d.mjs';
 
 export const LIFT = 0;            // straight top-down: height doesn't move a point on screen
-export const RES = 2;             // art px per world px: a 48 world px tile is 96 × 96 art px
+export const RES = 4;             // art px per world px: a 48 world px tile is 192 × 192 art px
 export const TILE = 48;           // world px per tile
 export const FACINGS = ['up', 'up-right', 'right', 'down-right', 'down', 'down-left', 'left', 'up-left'];
 export const ENGINE_ANIMS = ['idle', 'walk', 'work', 'fly'];
@@ -89,14 +89,16 @@ export function piston(m, p, q, r = 0.75){
 // Frame sizes in art px (see "Sprite lab" in the rules). The origin (ox, oy) is the model
 // origin: the unit's position, or the centre of a structure's footprint, at the frame centre.
 // Units keep their art inside the frame's inscribed circle less 1 world px, so no facing clips.
+// (Sizes are given in world px and multiplied by RES; `reach` stays in world px.)
+const uf = (world, reach) => ({ w: world * RES, h: world * RES, ox: world * RES / 2, oy: world * RES / 2, reach });
 export const UNIT_FRAMES = {
-  standard: { w: 96, h: 96, ox: 48, oy: 48, reach: 23 },   // a 1-tile unit, 48 world px: Spider-sized
-  small: { w: 64, h: 64, ox: 32, oy: 32, reach: 15 },      // 32 world px: drone-sized
-  large: { w: 192, h: 192, ox: 96, oy: 96, reach: 47 }     // 96 world px: a 2-tile unit
+  standard: uf(48, 23),   // a 1-tile unit, 48 world px: Spider-sized
+  small: uf(32, 15),      // 32 world px: drone-sized
+  large: uf(96, 47)       // 96 world px: a 2-tile unit
 };
 export const unitFrame = (size = 'standard') => ({ ...UNIT_FRAMES[size] });
-// Structures and props: footprint × 96 art px, origin at the footprint centre.
-export const structureFrame = (fw, fh) => ({ w: fw * TILE * RES, h: fh * TILE * RES, ox: fw * TILE, oy: fh * TILE });
+// Structures and props: footprint × TILE × RES art px, origin at the footprint centre.
+export const structureFrame = (fw, fh) => ({ w: fw * TILE * RES, h: fh * TILE * RES, ox: fw * TILE * RES / 2, oy: fh * TILE * RES / 2 });
 // Engine shadow offsets by elevation, in world px (the metadata stores art px).
 export const SHADOW = { ground: [2, 4], hover: [6, 8], air: [8, 10], structure: [4, 4], prop: [4, 4] };
 

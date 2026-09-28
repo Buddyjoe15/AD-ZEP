@@ -1,7 +1,7 @@
 {
   "name": "gate_3",
-  "frameWidth": 288,
-  "frameHeight": 96,
+  "frameWidth": 576,
+  "frameHeight": 192,
   "origin": [
     0,
     0
@@ -10,7 +10,7 @@
     3,
     1
   ],
-  "worldPxPerArtPx": 0.5,
+  "worldPxPerArtPx": 0.25,
   "rows": "single row",
   "model": "art/sprite-lab/specs/gate_3.mjs",
   "states": {
@@ -46,13 +46,13 @@
   "shadow": {
     "drawnBy": "engine",
     "offset": [
-      8,
-      8
+      16,
+      16
     ],
     "elevation": "structure"
   },
   "team": "team0..team2 (magenta ramp)",
   "image": "gate_3.png",
-  "sheetWidth": 2016,
-  "sheetHeight": 96
+  "sheetWidth": 4032,
+  "sheetHeight": 192
 }

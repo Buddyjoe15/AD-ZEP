@@ -251,12 +251,8 @@
       }
       if (!count) return;
       sortIds(I, count, extras);
-      for (let k = 0; k < count; k++){
-        const j = I.ids[k];
-        if (!layer(I.EK[j])){ I.dx[j] = 0; I.step[j] = 0; continue; }   // dead wood doesn't move
-        const pose = W.treePose(I.X[j], I.Y[j], t, SP[KINDS[I.EK[j]]]);
-        I.dx[j] = pose.lean * LEAN[I.ES[j]]; I.step[j] = pose.rustle;
-      }
+      // Trees stand still (no lean or rustle): drawn live only so crowns go over units.
+      for (let k = 0; k < count; k++){ const j = I.ids[k]; I.dx[j] = 0; I.step[j] = 0; }
       drawPixel(g, I, count, A);
     },
     // The crowns of trees standing over ground units in `units`, drawn again above them
@@ -290,7 +286,7 @@
       const live = this.live(grd, z), LEAN = G.TREES.LEAN_PX;
       g.save(); g.globalAlpha = this.CANOPY_ALPHA;
       for (let k = 0; k < count; k++){
-        const j = I.ids[k], pose = live ? G.Weather.treePose(I.X[j], I.Y[j], t, SP[KINDS[I.EK[j]]]) : { lean: 0, rustle: 0 };
+        const j = I.ids[k], pose = { lean: 0, rustle: 0 };   // (trees stand still)
         this.drawCrown(g, KINDS[I.EK[j]], I.ES[j], I.VR[j], I.X[j] + pose.lean * LEAN[I.ES[j]], I.Y[j], 1, pose.rustle, A);
       }
       g.restore();

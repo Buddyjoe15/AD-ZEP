@@ -20,7 +20,7 @@ lab (art/sprite-lab/ and tools/sprite-lab.mjs). Make a test sprite, following
    Don't ask me about gaps: use the rules' defaults and list them as assumptions. Ask
    only if the idea conflicts with the lore, is organic or Omega, or can't fit any frame.
 3. Write art/sprite-lab/specs/<key>.mjs as a 3D model built with tools/sprite-kit.mjs:
-   straight top-down, 96 × 96 art px per tile, and the shared palette only.
+   straight top-down, 192 × 192 art px per tile, and the shared palette only.
 4. Run: npm run sprite -- art/sprite-lab/specs/<key>.mjs --capture
    Fix every FAIL. Look once at sheet.png and preview.png, fix what you see, and
    render again.

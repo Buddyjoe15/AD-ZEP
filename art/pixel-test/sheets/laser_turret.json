@@ -1,7 +1,7 @@
 {
   "name": "laser_turret",
-  "frameWidth": 96,
-  "frameHeight": 96,
+  "frameWidth": 192,
+  "frameHeight": 192,
   "origin": [
     0,
     0
@@ -10,7 +10,7 @@
     1,
     1
   ],
-  "worldPxPerArtPx": 0.5,
+  "worldPxPerArtPx": 0.25,
   "rows": "row 0 states; the head sheet has one row per facing",
   "model": "art/sprite-lab/specs/laser_turret.mjs",
   "states": {
@@ -42,8 +42,8 @@
   "shadow": {
     "drawnBy": "engine",
     "offset": [
-      8,
-      8
+      16,
+      16
     ],
     "elevation": "structure"
   },
@@ -104,6 +104,6 @@
     "image": "laser_turret_head.png"
   },
   "image": "laser_turret.png",
-  "sheetWidth": 576,
-  "sheetHeight": 96
+  "sheetWidth": 1152,
+  "sheetHeight": 192
 }

@@ -57,10 +57,13 @@
 
     // Decoded 1× frames: team-coloured, or a black silhouette for shadows. Cached per string.
     cache: new Map(),
+    // Frame text may be run-length encoded (a character, then its count when it repeats).
+    expand(str){ return /\d/.test(str) ? str.replace(/(\D)(\d+)/g, (_, ch, n) => ch.repeat(+n)) : str; },
     canvas(str, w, h, team, silhouette){
       const key = str + (silhouette ? '|s' : '|' + team);
       let c = this.cache.get(key);
       if (c) return c;
+      str = this.expand(str);
       c = document.createElement('canvas'); c.width = w; c.height = h;
       const g = c.getContext('2d'), img = g.createImageData(w, h), ramp = TEAMS[team] || TEAMS.blue;
       for (let i = 0; i < w * h; i++){

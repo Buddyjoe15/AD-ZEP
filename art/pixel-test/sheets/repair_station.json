@@ -1,7 +1,7 @@
 {
   "name": "repair_station",
-  "frameWidth": 192,
-  "frameHeight": 192,
+  "frameWidth": 384,
+  "frameHeight": 384,
   "origin": [
     0,
     0
@@ -10,7 +10,7 @@
     2,
     2
   ],
-  "worldPxPerArtPx": 0.5,
+  "worldPxPerArtPx": 0.25,
   "rows": "single row",
   "states": {
     "foundation": {
@@ -46,13 +46,13 @@
   "shadow": {
     "drawnBy": "engine",
     "offset": [
-      4,
-      4
+      8,
+      8
     ],
     "elevation": "ground"
   },
   "team": "team0..team2 (magenta ramp)",
   "image": "repair_station.png",
-  "sheetWidth": 1920,
-  "sheetHeight": 192
+  "sheetWidth": 3840,
+  "sheetHeight": 384
 }

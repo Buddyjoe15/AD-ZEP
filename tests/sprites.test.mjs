@@ -9,7 +9,8 @@ import { build, dataScript, OUT, DATA_FILE, FACINGS } from '../tools/sprites.mjs
 import { PALETTE, ALPHABET, Grid, rot90, finish } from '../tools/pixelart.mjs';
 
 const { data } = build();
-const decode = (s, w) => { const g = new Grid(w, s.length / w); [...s].forEach((ch, i) => g.p[i] = ALPHABET.indexOf(ch)); return g; };
+const plain = s => /\d/.test(s) ? s.replace(/(\D)(\d+)/g, (_, ch, n) => ch.repeat(+n)) : s;   // sprite frames are run-length encoded
+const decode = (s, w) => { s = plain(s); const g = new Grid(w, s.length / w); [...s].forEach((ch, i) => g.p[i] = ALPHABET.indexOf(ch)); return g; };
 
 test('palette has 48 distinct colours', () => {
   assert.equal(PALETTE.length, 48);
@@ -161,11 +162,11 @@ test('genesis trees: five species in three sizes drawn to the crowns the generat
   assert.ok(west > east, 'root plate (dark soil) at the west end');
 });
 
-test('sprite lab: the example spec renders top-down at 96 × 96 and passes every check; a sprite too big for its frame fails', async () => {
+test('sprite lab: the example spec renders top-down at 192 × 192 and passes every check; a sprite too big for its frame fails', async () => {
   const { loadSpec, renderSpec, check } = await import('../tools/sprite-lab.mjs');
   const { Model, MAT, mul, translate, scale, unitFrame, LIFT } = await import('../tools/sprite-kit.mjs');
   assert.equal(LIFT, 0, 'straight top-down');
-  assert.deepEqual([unitFrame().w, unitFrame().h], [96, 96], 'a one-tile unit frame is 96 × 96 art px');
+  assert.deepEqual([unitFrame().w, unitFrame().h], [192, 192], 'a one-tile unit frame is 192 × 192 art px (4 per world px)');
   const spec = await loadSpec(path.join(path.dirname(new URL(import.meta.url).pathname), '../art/sprite-lab/specs/example_spider.mjs'));
   const R = renderSpec(spec);
   assert.equal(R.rows.length, 8, 'eight facings');
@@ -189,7 +190,7 @@ test('sprite lab: the example spec renders top-down at 96 × 96 and passes every
 
 test('Sentry Turret: modelled base states and a head layer in 16 facings, turned about the footprint centre', () => {
   const tu = data.sprites.sentry_turret, H = tu.head, N = tu.frameWidth;
-  assert.equal(N, 96, 'a 1 × 1 structure is 96 × 96 art px');
+  assert.equal(N, 192, 'a 1 × 1 structure is 192 × 192 art px');
   for (const s of ['foundation', 'frame', 'near-complete', 'finished', 'damaged', 'rubble']) assert.ok(tu.states[s], s);
   assert.equal(tu.frames[0].length, Object.values(tu.states).reduce((n, s) => n + s.frames, 0));
   assert.equal(H.facings, 16); assert.equal(H.frames.length, 16);
@@ -200,7 +201,7 @@ test('Sentry Turret: modelled base states and a head layer in 16 facings, turned
   assert.equal(new Set(H.frames[0].slice(dmg.start, dmg.start + dmg.frames)).size, dmg.frames, 'the damaged gun spins and feeds too');
   assert.equal(new Set(H.frames[0].slice(H.states.firing.start, H.states.firing.start + H.states.firing.frames)).size, H.states.firing.frames, 'the barrels and belts move every firing frame');
   const cols = Object.values(H.states).reduce((n, s) => n + s.frames, 0);
-  for (const row of H.frames){ assert.equal(row.length, cols); for (const str of row) assert.equal(str.length, N * N); }
+  for (const row of H.frames){ assert.equal(row.length, cols); for (const str of row) assert.equal(plain(str).length, N * N); }
   // Each facing is the model turned, not a copy: every facing differs, and the one pointing
   // down is the up facing turned 180° (nearly: each is rasterised on its own).
   assert.equal(new Set(H.frames.map(r => r[0])).size, 16);
@@ -226,19 +227,19 @@ test('walls: 16 joined pieces per state that reach the tile edge exactly on the 
   }
   for (const [name, w, h] of [['gate', 2, 1], ['gate_3', 3, 1], ['gate_4', 4, 1], ['gate_v', 1, 2], ['gate_3_v', 1, 3], ['gate_4_v', 1, 4]]){
     const sp = data.sprites[name];
-    assert.deepEqual([sp.frameWidth, sp.frameHeight], [w * 96, h * 96], name);
+    assert.deepEqual([sp.frameWidth, sp.frameHeight], [w * 192, h * 192], name);
     assert.ok(sp.states.open && sp.states.finished && sp.states.damaged, name);
     assert.notEqual(sp.frames[0][sp.states.open.start], sp.frames[0][sp.states.finished.start], name + ' looks different open');
   }
   // A vertical gate is the horizontal one turned, not squashed: same silhouette area, near enough.
-  const area = s => [...s].filter(ch => ch !== ALPHABET[0]).length;
+  const area = s => [...plain(s)].filter(ch => ch !== ALPHABET[0]).length;
   const hz = data.sprites.gate_3, vt = data.sprites.gate_3_v, a = area(hz.frames[0][hz.states.finished.start]), b = area(vt.frames[0][vt.states.finished.start]);
   assert.ok(Math.abs(a - b) < a * 0.05, `turned gate keeps its size (${a} vs ${b} px)`);
 });
 
 test('Laser Turret: a diamond base and a head in 16 facings whose charging frames light one more coil each', () => {
   const sp = data.sprites.laser_turret, H = sp.head;
-  assert.equal(sp.frameWidth, 96);
+  assert.equal(sp.frameWidth, 192);
   assert.equal(H.facings, 16);
   assert.equal(H.chargeTime, 2.5);
   assert.deepEqual(H.firing, { idle: ['charging', 'flash'], damaged: ['damaged-charging', 'damaged-flash'] });
@@ -246,7 +247,7 @@ test('Laser Turret: a diamond base and a head in 16 facings whose charging frame
   assert.equal(ch.frames, 6);
   // Each charging frame has more lit (cyan) pixels than the one before.
   const cyan = new Set(['cyan1', 'cyan2', 'white'].map(n => ALPHABET[PALETTE.findIndex(([k]) => k === n) + 1]));
-  const lit = s => [...s].filter(c => cyan.has(c)).length;
+  const lit = s => [...plain(s)].filter(c => cyan.has(c)).length;
   for (let i = 1; i < ch.frames; i++) assert.ok(lit(row[ch.start + i]) > lit(row[ch.start + i - 1]), 'coil ' + i);
   assert.ok(lit(row[H.states.idle.start]) < lit(row[ch.start]), 'idle has no coil lit');
 });
