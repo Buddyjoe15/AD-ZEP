@@ -153,10 +153,16 @@
     draw(units, barUnits, t){
       if (!this.ok || !units.length && !barUnits.length) return;
       const gl = this.gl, S = G.State, c = S.camera, R = G.Renderer, D = G.Defs.units;
-      // Pass 1: make sure every visible visual has atlas cells, then upload once if needed.
-      const ents = this.ents || (this.ents = []);
-      ents.length = units.length;
-      for (let i = 0; i < units.length; i++){ const def = D.get(units[i].type); ents[i] = def ? SA().entryFor(def, units[i].team) : null; }
+      // Pass 1: make sure every visible visual and its current animation frame are in the
+      // atlas, then upload once if needed. (Picking the frame paints it the first time it is
+      // used, so it must happen before the upload, or that unit blinks out for a frame.)
+      SA().ensureRoom();
+      const ents = this.ents || (this.ents = []), frames = this.frames || (this.frames = []);
+      ents.length = frames.length = units.length;
+      for (let i = 0; i < units.length; i++){
+        const def = D.get(units[i].type), e = ents[i] = def ? SA().entryFor(def, units[i].team) : null;
+        if (e) frames[i] = SA().frame(e, units[i], t);
+      }
       if (this.uploaded !== SA().version) this.upload();
       // Pass 2: instance data. Pixel-art sprites also get a shadow instance at their offset.
       const A = SA(), AH = A.canvas.height, AW = A.canvas.width;
@@ -165,7 +171,7 @@
       for (let i = 0; i < units.length; i++){
         const u = units[i], e = ents[i];
         if (!e) continue;
-        const at = e.at[A.frame(e, u, t)], o = n * FLOATS;
+        const at = e.at[frames[i]], o = n * FLOATS;
         buf[o] = u.x; buf[o + 1] = u.y; buf[o + 2] = e.upright ? 0 : u.heading; buf[o + 3] = u.radius;
         buf[o + 4] = at[0] / AW; buf[o + 5] = at[1] / AH;
         buf[o + 6] = e.rect.x; buf[o + 7] = e.rect.y; buf[o + 8] = e.rect.w; buf[o + 9] = e.rect.h; buf[o + 10] = e.scale;

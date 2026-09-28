@@ -13,7 +13,7 @@
   const G = GW;
   // Atlas cell: a 128×128 world-px box around the unit, stored at 4 px per world px so
   // Canvas art stays sharp at maximum zoom on high-DPI screens.
-  const BOX = 128, RES = 4, CELL = BOX * RES, ATLAS_W = 4096, PER_ROW = ATLAS_W / CELL;
+  const BOX = 128, RES = 4, CELL = BOX * RES, ATLAS_W = 4096, PER_ROW = ATLAS_W / CELL, ATLAS_MAX_H = 8192;
   const ORIGIN_X = 64, ORIGIN_Y = 76;   // unit position inside the box (tall art reaches up)
   const UNIT_SIZE = 2;                   // units are shown at twice the size their Canvas art was drawn for
   // Pixel art: 2 atlas px per world px, which is 1 atlas px per art px for unit sprites (drawn
@@ -38,6 +38,12 @@
       if (this.canvas){ this.canvas.height = CELL; this.g = this.canvas.getContext('2d', { willReadFrequently: true }); }
       this.version++;
     },
+    // Starts the atlas over (entries repaint as they are next drawn) when it is nearly full, so
+    // new frames never land past its last row, where they would draw as nothing. Called by the
+    // renderers before they pick any entries for a frame.
+    ensureRoom(){
+      if (this.canvas && (ATLAS_MAX_H / CELL) * PER_ROW - this.next < 24) this.reset();
+    },
     cellX(idx){ return (idx % PER_ROW) * CELL; },
     cellY(idx){ return Math.floor(idx / PER_ROW) * CELL; },
     // Next free cell, growing the atlas (and keeping what is already drawn) when full.
@@ -46,7 +52,7 @@
       if ((row + 1) * CELL > this.canvas.height){
         // One row at a time: rows are large at this resolution, so doubling would waste memory.
         const old = this.canvas, grown = document.createElement('canvas');
-        grown.width = ATLAS_W; grown.height = Math.min(8192, (row + 1) * CELL);
+        grown.width = ATLAS_W; grown.height = Math.min(ATLAS_MAX_H, (row + 1) * CELL);
         const gg = grown.getContext('2d', { willReadFrequently: true });
         gg.drawImage(old, 0, 0);
         this.canvas = grown; this.g = gg;
@@ -105,8 +111,10 @@
       if (e.pixel){
         const a = G.PixelArt.anim(e.anims, u), step = a.frames > 1 ? Math.floor((t + u.id * 0.37) * a.fps) % a.frames : 0;
         const block = e.variants ? G.PixelArt.variant(e.variants, u) * e.variants.framesEach : 0;
-        const i = e.facings[G.PixelArt.facing(u.heading)][block + a.start + step];
-        if (!e.at[i]) this.paintFrame(e, i);
+        const row = e.facings[G.PixelArt.facing(u.heading)], i = row[block + a.start + step];
+        // The first time a frame is needed, paint the whole animation for this facing, so a
+        // walk cycle costs one atlas upload instead of one per step.
+        if (!e.at[i]) for (let s = 0; s < a.frames; s++){ const j = row[block + a.start + s]; if (j != null && !e.at[j]) this.paintFrame(e, j); }
         return i;
       }
       const frames = u.path.length && e.move.length ? e.move : e.idle;

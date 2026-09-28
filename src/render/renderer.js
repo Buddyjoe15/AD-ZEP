@@ -275,6 +275,7 @@
     drawUnits2D(g, visible, z, t){
       const S = G.State, C = G.CONFIG, lod = z < this.unitLodZoom(), batches = new Map();
       const A = G.SpriteAtlas, c = S.camera, k = this.dpr * z, items = [];
+      A.ensureRoom();
       let shadows = false;
       for (const u of visible){
         if (u.isShip) continue;
