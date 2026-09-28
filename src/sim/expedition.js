@@ -88,13 +88,15 @@
       }
       return null;
     },
-    // One of every buildable and item, left of the ship, for testing, plus a metal deposit
-    // with a working Mine Building beneath the grid. The grid has 6-tile cells, so
-    // structures larger than 4×4 go in the bottom row beside the mine instead.
+    // One of every buildable and item, left of the ship, for testing (except those in the
+    // rules' testSkip, which the player builds). The grid has 6-tile cells, so structures
+    // larger than 4×4 go in rows below it, beside a Mine Building on a metal deposit when
+    // the extractor isn't skipped.
     testingZone(){
-      const S = G.State, sh = G.Units.ship(), T = G.CONFIG.TILE, north = new Set(R().testNorth || []), CELL = 6;   // grid cells, tiles
+      const S = G.State, sh = G.Units.ship(), T = G.CONFIG.TILE, north = new Set(R().testNorth || []), skip = new Set(R().testSkip || []), CELL = 6;   // grid cells, tiles
       // Turned twins (vertical gates, `listed: false`) are left out: one of each structure.
-      const small = d => d.w <= CELL - 2 && d.h <= CELL - 2 && !north.has(d.key) && d.listed !== false, large = d => !small(d) && !north.has(d.key) && d.listed !== false;
+      const shown = d => !north.has(d.key) && !skip.has(d.key) && d.listed !== false;
+      const small = d => d.w <= CELL - 2 && d.h <= CELL - 2 && shown(d), large = d => !small(d) && shown(d);
       const entries = [
         // (Not the cave nest, which would wake beside the ship, nor the recordings, found in caves.)
         ...G.Defs.buildables.all().filter(d => !d.placeOnNode && small(d) && d.key !== 'cave_nest').map(d => ({ kind: 'building', key: d.key })),
@@ -102,7 +104,7 @@
       ];
       const cols = 4, x0 = sh.gx - cols * CELL - 4, y0 = sh.gy + 1, rows = Math.ceil(entries.length / cols);
       // The mine and the large structures go in rows under the grid, wrapping at its width.
-      const mine = G.Defs.buildables.all().find(d => d.placeOnNode === 'deposit'), below = [];
+      const mine = G.Defs.buildables.all().find(d => d.placeOnNode === 'deposit' && !skip.has(d.key)), below = [];
       let lx = x0 + (mine ? mine.w + 2 : 0), ly = y0 + rows * CELL, rowH = mine ? mine.h : 0;
       for (const d of G.Defs.buildables.all().filter(d => !d.placeOnNode && large(d))){
         if (lx > x0 && lx + d.w > x0 + cols * CELL){ lx = x0; ly += rowH + 2; rowH = 0; }
@@ -117,7 +119,7 @@
         if (d.container){ G.Containers.create(x, y, [], { opened: true, built: true, gx, gy, capacity: d.container.capacity, name: 'Test ' + d.name, testZone: true }); return; }
         G.Buildings.add(e.key, gx, gy, { id: 'test-' + G.newId(), extra: { testZone: true } });
       });
-      for (const d of G.Defs.buildables.all().filter(d => d.placeOnNode === 'deposit')){
+      for (const d of mine ? [mine] : []){
         const node = G.Defs.nodes.all().find(n => n.kind === 'deposit' && n.building === d.key);
         if (!node) continue;
         const gx = x0, gy = y0 + rows * CELL;

@@ -60,6 +60,7 @@ GW.EXPEDITION_RULES = {
   copperMines: [[1000, 420]],                // copper and uranium deposits, further out
   uraniumMines: [[-760, -620]],
   testNorth: ['solar_array', 'wind_turbine'],                // testing-zone structures placed north of the ship
+  testSkip: ['shield_projector', 'mine_building', 'ore_processor', 'sensor', 'generator'],   // left out of the testing zone (built by the player instead)
   signalCount: 6, signalStudySeconds: 4, archiveReward: { metal: 70 }, signalRange: 100,
   firstWave: 110, waveInterval: 100, waveBase: 2, waveMax: 5,
   hazardSafeRadius: 700, crewRadius: 620,

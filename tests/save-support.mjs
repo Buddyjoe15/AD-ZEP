@@ -81,7 +81,18 @@ export function representativeGame(){
   G.Orders.move([straggler], back.x, back.y);
   straggler.recallPoint = back;
 
-  // Work: one Spider hauls from the testing-zone Mine Building, one builds.
+  // Structures the testing zone no longer has: a Mine Building on a metal deposit, and an
+  // Ore Processor and a Shield Projector on open ground.
+  const openSpot = (key, gx, gy) => { const d = G.Defs.buildables.get(key);
+    for (let r = 0; r < 40; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (Math.max(Math.abs(dx), Math.abs(dy)) === r && G.Buildings.canPlace(gx + dx, gy + dy, d.w, d.h)) return G.Buildings.add(key, gx + dx, gy + dy);
+    throw new Error('representative game: no room for ' + key); };
+  const deposit = S.resourceNodes.find(n => n.type === 'metal_mine' && G.Buildings.canPlaceKey('mine_building', n.gx - 3, n.gy - 3));
+  if (deposit) G.Buildings.add('mine_building', deposit.gx - 3, deposit.gy - 3);
+  const proc = openSpot('ore_processor', ship.gx - 14, ship.gy - 16);
+  G.Shields.set(openSpot('shield_projector', ship.gx + 16, ship.gy - 16), true);
+  G.Fabrication.enqueue(proc, 'steel');
+
+  // Work: one Spider hauls from the Mine Building, one builds.
   const mine = S.buildings.find(b => G.Gather.isMine(b));
   if (!mine || !G.Gather.command(spider, mine)) throw new Error('representative game: no Mine Building to haul from');
   const scavenger = G.Units.spawn('utility_spider', ship.x - 260, ship.y + 320);

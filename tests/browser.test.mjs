@@ -765,7 +765,9 @@ test('Ore Processor window lists its three products and queues them; the top bar
     assert.equal(await page.$$eval('#economyBar .resource-pill:not(.power)', els => els.length), 1, 'only metal before anything else is stocked');
     const pr = await page.evaluate(() => {
       Object.assign(GW.State.resources, { metal: 100, copper: 12 });
-      const b = GW.State.buildings.find(b => b.type === 'ore_processor'); GW.centerCamera(b.x, b.y + 150, 0.8); return { x: b.x, y: b.y };
+      // (Built here: the testing zone has none.)
+      const sh = GW.Units.ship(), p = GW.State.grid.nearestOpen(sh.gx + 14, sh.gy + 16, 6), b = GW.Buildings.add('ore_processor', p.x, p.y, { team: 'blue' });
+      GW.centerCamera(b.x, b.y + 150, 0.8); return { x: b.x, y: b.y };
     });
     const p = await screen(page, pr.x, pr.y);
     await page.touchscreen.tap(p.x, p.y);

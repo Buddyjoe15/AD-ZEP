@@ -182,8 +182,8 @@ test('salvage crawler: fabricated, cuts salvage 1.5× faster than a Spider into 
   const c = G.Units.cargoTotal(crawler), s = G.Units.cargoTotal(spider);
   assert.ok(s > 40 && Math.abs(c / s - 1.5) < 0.05, `crawler ${c}, spider ${s}`);
   // Saws cut wrecks: no hauling from a Mine Building or a bare deposit.
-  const mine = S.buildings.find(b => G.Gather.isMine(b)), deposit = S.resourceNodes.find(n => G.Gather.isDeposit(n));
-  assert.ok(mine && deposit);
+  const [site, deposit] = S.resourceNodes.filter(n => n.type === 'metal_mine'), mine = G.Buildings.add('mine_building', site.gx - 3, site.gy - 3);
+  assert.ok(G.Gather.isMine(mine) && G.Gather.isDeposit(deposit));
   assert.equal(G.Gather.command(crawler, mine), false);
   assert.equal(G.Gather.command(crawler, deposit), false);
   assert.equal(crawler.nodeId, scrap.id, 'a refused order keeps the current one');
@@ -312,7 +312,7 @@ test('hostile waves fight, walls reduce damage and repair stations heal', () => 
 
 test('sensor stations and surveyors study signals', () => {
   const G = newGame();
-  const S = G.State, E = S.expedition, sensor = S.buildings.find(b => b.type === 'sensor');
+  const S = G.State, E = S.expedition, p = field(G), sensor = G.Buildings.add('sensor', p.x, p.y);
   E.sites = [{ id: 's1', x: sensor.x + 120, y: sensor.y, kind: 'Archive', done: false, progress: 0 }];
   const metal = G.Economy.get('metal');
   G.Sim.run(5);
@@ -540,7 +540,7 @@ test('crowded units slide along a wall instead of pinning each other against it'
   // into the wall by every push, could never move, and a unit squeezing past it stayed stuck
   // (a Hostile Fabricator's spawn point next to the Shield Projector never cleared).
   const G = newGame();
-  const S = G.State, grid = S.grid, b = S.buildings.find(b => b.type === 'shield_projector');
+  const S = G.State, grid = S.grid, p = field(G), b = G.Buildings.add('shield_projector', p.x, p.y);
   const gx = Math.floor(b.x / T), gy = Math.floor((b.y - b.h * T / 2) / T);   // top row of its footprint
   assert.ok(!grid.passable(gx, gy) && grid.passable(gx, gy - 1) && grid.passable(gx + 1, gy - 1), 'open ground along the top edge');
   const put = (x, y) => { const u = G.Units.spawn('hostile_machine', x, y, { team: 'red' }); u.aiHold = true; u.path = []; return u; };
@@ -555,7 +555,7 @@ test('a unit pushed onto a wall with its next waypoint straight through it drops
   // Regression: sliding along the open axis moved it ~0 px each tick, so it kept a route it
   // could never follow (and a spawner waiting for it to leave never spawned again).
   const G = newGame();
-  const S = G.State, b = S.buildings.find(b => b.type === 'shield_projector');
+  const S = G.State, p = field(G), b = G.Buildings.add('shield_projector', p.x, p.y);
   const gx = Math.floor(b.x / T), gy = Math.floor((b.y - b.h * T / 2) / T);
   const x0 = (gx + 0.5) * T, u = G.Units.spawn('hostile_machine', x0, gy * T - 0.05, { team: 'red' });
   u.aiHold = true; u.path = [{ x: x0 + 0.01, y: (gy + 4) * T }]; u.pathIndex = 0;
@@ -568,7 +568,7 @@ test('metal mines need a centred 7×7 Mine Building, then extract slowly into a 
   const G = newGame();
   const S = G.State, spider = find(G, 'utility_spider');
   const deposits = S.resourceNodes.filter(n => n.type === 'metal_mine');
-  assert.ok(deposits.length >= 3, 'deposits near the ship plus one in the testing zone');
+  assert.ok(deposits.length >= 2, 'deposits near the ship');
   const free = deposits.find(n => !G.Gather.mineOn(n) && !S.buildings.some(b => b.nodeId === n.id));
   assert.ok(free.remaining >= 1e6 - 1, 'near-endless reserve');
   // A bare deposit does nothing and cannot be hauled from.
@@ -1259,8 +1259,7 @@ test('rally points: units from the ship and Fabricators walk to their rally poin
 test('Ore Processor turns metal, copper and uranium into steel, electronics and fuel rods', () => {
   const G = newGame();
   const S = G.State, ship = G.Units.ship(), P = G.Fabrication;
-  const proc = S.buildings.find(b => b.type === 'ore_processor');
-  assert.ok(proc, 'one stands in the testing zone');
+  const p = field(G), proc = G.Buildings.add('ore_processor', p.x, p.y);
   assert.equal(proc.w, 6); assert.equal(proc.h, 6);
   // Each producer offers only its own recipes.
   assert.equal(P.recipesFor(proc).map(r => r.key).join(), 'steel,electronics,fuel_rods');
@@ -1339,8 +1338,8 @@ test('power: the Warp Drive gives 25, Solar Arrays scale with the Earth, and a s
   assert.ok(solar.gy + solar.h <= ship.gy, 'north of the ship');
   assert.equal(P.output(ship), 25);
   assert.equal(P.output(solar), 8, 'full sun on the first (temperate) Earth');
-  // Idle producers draw nothing; the test-zone mine draws 5 while extracting.
-  const fab = S.buildings.find(b => b.type === 'fabricator'), proc = S.buildings.find(b => b.type === 'ore_processor');
+  // Idle producers draw nothing; a mine draws 5 while extracting.
+  const at = field(G), fab = S.buildings.find(b => b.type === 'fabricator'), proc = G.Buildings.add('ore_processor', at.x, at.y);
   const mines = S.buildings.filter(b => b.type === 'mine_building' && b.team === 'blue');
   assert.equal(P.draw(fab), 0); assert.equal(P.draw(proc), 0);
   const wind = S.buildings.find(b => b.type === 'wind_turbine');
