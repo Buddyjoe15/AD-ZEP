@@ -59,63 +59,95 @@
       g.save(); g.scale(z, z); g.translate(-c.x, -c.y);
 
       // Terrain: overview image underneath, detailed chunks on top when close enough.
-      const TC = G.TerrainCache, ct = C.CHUNK_TILES * T;
-      const cx0 = Math.max(0, Math.floor(v.x0 / ct)), cy0 = Math.max(0, Math.floor(v.y0 / ct));
-      const cx1 = Math.min(Math.ceil(C.WORLD_W / ct) - 1, Math.floor(v.x1 / ct)), cy1 = Math.min(Math.ceil(C.WORLD_H / ct) - 1, Math.floor(v.y1 / ct));
-      // Full-resolution chunks up close (TERRAIN_RES once a world px covers more than one
-      // device px, if they fit the cache), lower-resolution chunks at middle zoom (or when the
+      const TC = G.TerrainCache, CT = C.CHUNK_TILES * T;
+      const span = ct => [Math.max(0, Math.floor(v.x0 / ct)), Math.max(0, Math.floor(v.y0 / ct)), Math.min(Math.ceil(C.WORLD_W / ct) - 1, Math.floor(v.x1 / ct)), Math.min(Math.ceil(C.WORLD_H / ct) - 1, Math.floor(v.y1 / ct))];
+      const count0 = (() => { const [a0, b0, a1, b1] = span(CT); return (a1 - a0 + 1) * (b1 - b0 + 1); })();
+      // Full-resolution chunks up close, lower-resolution chunks at middle zoom (or when the
       // view holds more chunks than the full cache), and only the overview image when far.
-      const count = (cx1 - cx0 + 1) * (cy1 - cy0 + 1), near = z >= C.LOD_ZOOM && count <= C.CHUNK_CACHE_MAX;
-      const far = !near && (z < C.FAR_CHUNK_ZOOM || count > C.FAR_CHUNK_CACHE_MAX), low = !near && !far;
-      // Detail thresholds have some give (a few percent of zoom), so zooming back and forth
-      // across one doesn't throw the whole view away and repaint it each time.
-      // Near chunks come at three resolutions: TERRAIN_RES once a world px covers more than one
-      // device px, half resolution when it covers half a device px or less, else 1×.
-      const L = this.lod || (this.lod = { hi: false, half: false, live: false }), R = C.TERRAIN_RES, zd = this.dpr * z;
-      L.hi = count * R * R <= C.CHUNK_CACHE_MAX && (L.hi ? zd > 0.92 : zd > 1.05);
-      L.half = !L.hi && (L.half ? zd < 0.6 : zd < 0.5);
-      const res = low ? C.FAR_CHUNK_SCALE : L.hi ? R : L.half ? 0.5 : 1;
-      const alt = low ? 0.5 : res === 1 ? R : 1;   // drawn while the wanted chunk is still queued
+      const near = z >= C.LOD_ZOOM && count0 <= C.CHUNK_CACHE_MAX;
+      const far = !near && (z < C.FAR_CHUNK_ZOOM || count0 > C.FAR_CHUNK_CACHE_MAX), low = !near && !far;
+      // Close up, chunks are painted at about the screen's own resolution: a world px covers
+      // zd device px, and chunks come at ½, 1, 2, 3 or 4 canvas px per world px (the largest the
+      // cache can hold for this view). Thresholds have some give, so zooming back and forth
+      // across one doesn't repaint the whole view each time.
+      const L = this.lod || (this.lod = { res: 1, live: false }), zd = this.dpr * z;
+      const fits = r => { const [a0, b0, a1, b1] = span(TC.tilesFor(r) * T); return (a1 - a0 + 1) * (b1 - b0 + 1) * TC.cost(r) <= C.CHUNK_CACHE_MAX * 0.8; };
+      const pick = d => d <= 0.55 ? 0.5 : Math.min(C.TERRAIN_RES_MAX, Math.max(1, Math.ceil(d - 0.08)));
+      let want1 = pick(zd);
+      if (want1 !== L.res && (pick(zd * 1.08) === L.res || pick(zd / 1.08) === L.res)) want1 = L.res;   // hysteresis
+      while (want1 > 1 && !fits(want1)) want1--;
+      L.res = want1;
+      const res = low ? C.FAR_CHUNK_SCALE : want1, ct = TC.tilesFor(res) * T;
+      const [cx0, cy0, cx1, cy1] = span(ct);
       // Free-standing trees (Genesis) are drawn live up close and drawn into the chunks further out.
       const TA = G.TreeArt, trees = TA.has(S.grid);
       L.live = near && TA.live(S.grid, z * (L.live ? 1.08 : 0.95));
       const bake = trees && !L.live, live = trees && near ? new Set() : null;
       g.imageSmoothingEnabled = false; g.drawImage(TC.getOverview(), 0, 0, C.WORLD_W, C.WORLD_H); g.imageSmoothingEnabled = true;
       let chunks = 0;
+      // The best copy at hand for the world rect of chunk (cx, cy) while it is painted: another
+      // resolution (its chunk may be larger or smaller: the matching part, or the parts), the
+      // other tree layer, or a middle-zoom copy. Returns whether anything was drawn, and
+      // whether it had the trees in it.
+      const stand = (cx, cy) => {
+        const X = cx * ct, Y = cy * ct;
+        const tries = [];
+        for (const r of [res, 2, 1, 3, 4, 0.5]) if (r !== res || trees) for (const bk of trees ? [bake, !bake] : [false]) if (!(r === res && bk === bake)) tries.push([r, bk]);
+        tries.push([C.FAR_CHUNK_SCALE, true]);
+        for (const [r, bk] of tries){
+          const cs = TC.tilesFor(r) * T;
+          if (cs >= ct){
+            const k = Math.floor(X / cs), m = Math.floor(Y / cs), cv = TC.peek(k, m, r, bk);
+            if (!cv) continue;
+            const f = cv.width / cs;
+            g.drawImage(cv, (X - k * cs) * f, (Y - m * cs) * f, ct * f, ct * f, X, Y, ct, ct);
+            return { baked: bk || r < 1 };
+          }
+          // Smaller chunks: all of the pieces, or none.
+          const n = ct / cs, parts = [];
+          for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){ const cv = TC.peek(cx * n + i, cy * n + j, r, bk); if (!cv) break; parts.push([cv, i, j]); }
+          if (parts.length < n * n) continue;
+          for (const [cv, i, j] of parts) g.drawImage(cv, X + i * cs, Y + j * cs, cs, cs);
+          return { baked: bk || r < 1 };
+        }
+        return null;
+      };
       if (!far){
         g.imageSmoothingEnabled = !(G.PixelArt.enabled && z * this.dpr >= 1);   // pixel terrain stays crisp up close
         // Chunks in view are never evicted while they are wanted. Missing ones are painted
         // nearest the middle of the screen first, as many as fit in a few milliseconds a frame
         // (at least one), so the view fills from the centre out and never waits on the edges.
-        // Until then the best copy at hand stands in: another resolution, the other tree
-        // layer, the lower-resolution middle-zoom copy, or the overview underneath.
         TC.pin.clear();
         const mx = (v.x0 + v.x1) / 2 / ct - 0.5, my = (v.y0 + v.y1) / 2 / ct - 0.5, want = [];
         for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++){ TC.pin.add(TC.key(cx, cy, res, bake)); if (!TC.has(cx, cy, res, bake)) want.push([cx, cy]); }
         want.sort((a, b) => (a[0] - mx) ** 2 + (a[1] - my) ** 2 - (b[0] - mx) ** 2 - (b[1] - my) ** 2);
+        // Painted a band of rows at a time within the frame's budget, so even a big chunk
+        // never stalls a frame; a half-painted one carries on next frame.
         const t1 = now();
-        for (let k = 0; k < want.length && (k < 1 || now() - t1 < C.CHUNK_BUILD_MS); k++) TC.chunk(want[k][0], want[k][1], res, bake);
+        for (let k = 0; k < want.length && (k < 1 || now() - t1 < C.CHUNK_BUILD_MS); k++) if (!TC.work(want[k][0], want[k][1], res, bake, t1 + C.CHUNK_BUILD_MS)) break;
+        const liveKey = (cx, cy) => { const k = ct / CT; return Math.floor(cy * k) * 4096 + Math.floor(cx * k); };   // (in the tree index's full-size chunks)
         for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++){
-          let cv = TC.has(cx, cy, res, bake) ? TC.chunk(cx, cy, res, bake) : null, baked = bake;
-          if (!cv) cv = TC.peek(cx, cy, alt, bake);
-          if (!cv && trees){ baked = !bake; cv = TC.peek(cx, cy, res, baked) || TC.peek(cx, cy, alt, baked); }
-          if (!cv && res === 0.5){ baked = true; cv = TC.peek(cx, cy, 1, true) || TC.peek(cx, cy, 1, false); }
-          if (!cv && res >= 1){ baked = true; cv = TC.peek(cx, cy, 0.5); }
-          if (!cv && !low){ baked = true; cv = TC.peek(cx, cy, C.FAR_CHUNK_SCALE); }
-          if (!cv) continue;
-          g.drawImage(cv, cx * ct, cy * ct, ct, ct); chunks++;
-          if (live && !baked && res >= 1) live.add(cy * 4096 + cx);
+          if (TC.has(cx, cy, res, bake)){
+            g.drawImage(TC.chunk(cx, cy, res, bake), cx * ct, cy * ct, ct, ct); chunks++;
+            if (live && !bake && res >= 1) live.add(liveKey(cx, cy));
+            continue;
+          }
+          const got = stand(cx, cy);
+          if (!got) continue;
+          chunks++;
+          if (live && !got.baked) live.add(liveKey(cx, cy));
         }
+        // Time to spare: houses and caverns are drawn ahead of need.
+        if (!this.warmed && now() - t1 < C.CHUNK_BUILD_MS * 0.5) this.warmed = G.Structures.warm(S.grid, t1 + C.CHUNK_BUILD_MS * 0.8);
         // With the view complete and time to spare, the ring of chunks round it is painted
         // ahead, so scrolling finds them ready.
         if (!want.length || now() - t1 < C.CHUNK_BUILD_MS * 0.5){
           const rx0 = Math.max(0, cx0 - 1), ry0 = Math.max(0, cy0 - 1), rx1 = Math.min(Math.ceil(C.WORLD_W / ct) - 1, cx1 + 1), ry1 = Math.min(Math.ceil(C.WORLD_H / ct) - 1, cy1 + 1);
-          const cost = res < 1 ? 0 : res * res;
-          if (!cost || (rx1 - rx0 + 1) * (ry1 - ry0 + 1) * cost <= C.CHUNK_CACHE_MAX){
+          if (res < 1 || (rx1 - rx0 + 1) * (ry1 - ry0 + 1) * TC.cost(res) <= C.CHUNK_CACHE_MAX){
             const ring = [];
             for (let cy = ry0; cy <= ry1; cy++) for (let cx = rx0; cx <= rx1; cx++){ const k = TC.key(cx, cy, res, bake); TC.pin.add(k); if (!TC.has(cx, cy, res, bake)) ring.push([cx, cy]); }
             ring.sort((a, b) => (a[0] - mx) ** 2 + (a[1] - my) ** 2 - (b[0] - mx) ** 2 - (b[1] - my) ** 2);
-            if (ring.length && now() - t1 < C.CHUNK_BUILD_MS * 0.5) TC.chunk(ring[0][0], ring[0][1], res, bake);
+            if (ring.length && now() - t1 < C.CHUNK_BUILD_MS * 0.5) TC.work(ring[0][0], ring[0][1], res, bake, t1 + C.CHUNK_BUILD_MS);
           }
         }
         g.imageSmoothingEnabled = true;

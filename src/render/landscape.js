@@ -253,6 +253,8 @@
   }
 
   G.Landscape = {
+    // Builds the map's contour fields now (a new map), so the first chunks don't wait for them.
+    warm(grd){ if (this.on(grd)) fields(grd); },
     // True for grids drawn with contours (Genesis).
     on: grd => !!(grd && grd.art && grd.art.generator === 'genesis'),
     fields,
@@ -263,7 +265,8 @@
 
     // Shades the chunk of ct × ct tiles at tile (x0, y0) into ctx (chunk-local world px,
     // scaled by the canvas resolution).
-    paintChunk(ctx, grd, x0, y0, ct){
+    // Rows r0 to r1 of the chunk's tiles only, when given (a chunk can be painted a band at a time).
+    paintChunk(ctx, grd, x0, y0, ct, r0 = 0, r1 = ct){
       const L = fields(grd), t = T(), res = Math.abs(ctx.getTransform().a), cols = grd.cols, rows = grd.rows;
       const W = Math.round(ct * t * res), s = image(W, W), d = s.img.data, lvl = grd.art.level, k = ids();
       const step = 1 / res, F = Math.round(FACE * res), ox = x0 * t, oy = y0 * t, fx7 = 7 * res;
@@ -580,7 +583,7 @@
         if (carry) carry.ok = !!cliffs;
       };
       const tw0 = Math.round(t * res) + 1, carry = { ok: false, rimY: new Float64Array(tw0), rimL: new Int16Array(tw0) };
-      for (let lx = 0; lx < ct; lx++){ carry.ok = false; for (let ly = 0; ly < ct; ly++){
+      for (let lx = 0; lx < ct; lx++){ carry.ok = false; for (let ly = r0; ly < r1; ly++){
         const gx = x0 + lx, gy = y0 + ly;
         if (gx >= cols || gy >= rows){ carry.ok = false; continue; }
         const i = gy * cols + gx, near = L.near[i];

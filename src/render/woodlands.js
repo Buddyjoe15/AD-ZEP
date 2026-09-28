@@ -603,22 +603,28 @@
     // which may overhang the chunk edge (the neighbouring chunk draws the other part).
     // `opts.trees` draws pixel-art trees at rest into the canvas too (the preview); the game
     // leaves them to drawTrees so they can sway.
+    // A chunk can also be painted in parts, over several frames: `opts.rows` [r0, r1] paints
+    // just the ground of those tile rows; `opts.finish` then adds everything on top.
     paintChunk(ctx, grd, x0, y0, ct, S, opts){
       bind(grd);
-      const cols = grd.cols, rows = grd.rows, gen = genesis();
-      for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
-        const gx = x0 + lx, gy = y0 + ly;
-        if (gx >= cols || gy >= rows) continue;
-        const i = gy * cols + gx, px = lx * S, py = ly * S;
-        drawTile(ctx, i, grd.tiles[i], gx, gy, px, py, S);
-        const d = art.detail[i];
-        if (d && !gen) drawDecal(ctx, d, gx, gy, px, py, S, art.angle[i] / 256 * TAU, seed);
+      const cols = grd.cols, rows = grd.rows, gen = genesis(), band = opts && opts.rows, r0 = band ? band[0] : 0, r1 = band ? band[1] : ct;
+      if (!(opts && opts.finish)){
+        for (let ly = r0; ly < r1; ly++) for (let lx = 0; lx < ct; lx++){
+          const gx = x0 + lx, gy = y0 + ly;
+          if (gx >= cols || gy >= rows) continue;
+          const i = gy * cols + gx, px = lx * S, py = ly * S;
+          drawTile(ctx, i, grd.tiles[i], gx, gy, px, py, S);
+          const d = art.detail[i];
+          if (d && !gen) drawDecal(ctx, d, gx, gy, px, py, S, art.angle[i] / 256 * TAU, seed);
+        }
+        if (gen){
+          G.Ground.paintChunk(ctx, grd, x0, y0, ct, r0, r1);   // grass, undergrowth, brush and flowers
+          G.Landscape.paintChunk(ctx, grd, x0, y0, ct, r0, r1);   // water, shores, cliffs and trails along contours
+        }
       }
-      // Genesis: water, shores, cliffs, waterfalls and trails along contours, then the ground
-      // detail on top (tracks and footprints show on the trails).
+      if (band) return;
+      // Genesis: the ground detail on top (tracks and footprints show on the trails).
       if (gen){
-        G.Ground.paintChunk(ctx, grd, x0, y0, ct);   // grass, undergrowth, brush and flowers
-        G.Landscape.paintChunk(ctx, grd, x0, y0, ct);
         for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
           const gx = x0 + lx, gy = y0 + ly;
           if (gx >= cols || gy >= rows) continue;
@@ -637,7 +643,7 @@
       this.paintTops(ctx, grd, x0, y0, ct, S, true);
       // Trees at rest when asked; the ground layer (dead wood, bushes, grass, rocks) always, as it
       // never moves.
-      if (art.trees) G.TreeArt.paintChunk(ctx, grd, Math.floor(x0 / ct), Math.floor(y0 / ct), !bakeTrees);
+      if (art.trees) G.TreeArt.paintChunk(ctx, grd, x0, y0, ct, !bakeTrees);
       bakeTrees = false;
     },
     // Pixel-art trees in view that move in the current weather, drawn every frame. Leaning

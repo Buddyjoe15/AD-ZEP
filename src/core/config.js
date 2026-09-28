@@ -9,15 +9,18 @@
     FIXED_DT: 1 / 30, MAX_FRAME: 0.25, MAX_STEPS_PER_FRAME: 4,
 
     // Rendering
-    // CHUNK_CACHE_MAX is a budget in 1×-resolution chunks; a TERRAIN_RES chunk costs RES².
-    // Missing chunks are painted for up to CHUNK_BUILD_MS a frame (at least one), centre first.
-    CHUNK_TILES: 16, CHUNK_CACHE_MAX: 64, CHUNK_BUILD_MS: 10,
-    TERRAIN_RES: 2,            // canvas px per world px for terrain chunks when zoomed in past 1:1
+    // CHUNK_CACHE_MAX is a budget in full-size 1× chunks (about 2.4 MB each); a chunk at res r
+    // costs r² times its share of a full chunk. Missing chunks are painted for up to
+    // CHUNK_BUILD_MS a frame (at least one), centre first.
+    CHUNK_TILES: 16, CHUNK_CACHE_MAX: 128, CHUNK_BUILD_MS: 10,
+    // Close up, terrain chunks are painted at the screen's resolution: 2, 3 or 4 canvas px per
+    // world px, up to TERRAIN_RES_MAX; from SUB_RES up, chunks are half as many tiles across.
+    TERRAIN_RES: 2, TERRAIN_RES_MAX: 4, SUB_RES: 3,
     // Between LOD_ZOOM and FAR_CHUNK_ZOOM (1.5× further out) terrain uses lower-resolution
     // chunks (FAR_CHUNK_SCALE of full size, trees drawn in at rest) before the overview image.
     FAR_CHUNK_ZOOM: 0.20, FAR_CHUNK_SCALE: 1 / 3, FAR_CHUNK_CACHE_MAX: 176,
     // Below UNIT_LOD_ZOOM (UNIT_LOD_ZOOM_PIXEL with pixel art on) ordinary units draw as team squares.
-    LOD_ZOOM: 0.30, UNIT_LOD_ZOOM: 0.45, UNIT_LOD_ZOOM_PIXEL: 0.30, ZOOM_MIN: 0.055, ZOOM_MAX: 2.2, MINIMAP_HZ: 8,
+    LOD_ZOOM: 0.30, UNIT_LOD_ZOOM: 0.45, UNIT_LOD_ZOOM_PIXEL: 0.30, ZOOM_MIN: 0.055, ZOOM_MAX: 4, MINIMAP_HZ: 8,
     COLORS: { blue: '#49a4ff', red: '#ef5b55', neutral: '#d4c46c' },
 
     // Spatial partitioning

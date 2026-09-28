@@ -22,10 +22,13 @@
   const PX = Object.fromEntries(Object.entries(HEX).map(([k, v]) => [k, px32(v)]));
   const SHADOW = px32('#000000', 110);
   const h3 = (a, b, c) => G.hashRandom3(a, b, c);
-  // Smooth value noise in art px (cell 8), for wear, moss and missing boards.
+  // Smooth value noise in art px (cell 8), for wear, moss and missing boards: random values on
+  // a 256 × 256 lattice (built once), each seed `s` reading it from its own offset.
+  const LAT = (() => { const t = new Float32Array(65536); for (let j = 0; j < 256; j++) for (let i = 0; i < 256; i++) t[j * 256 + i] = h3(i, j, 0); return t; })();
   const vn = (x, y, s) => {
-    const gx = x / 8, gy = y / 8, x0 = Math.floor(gx), y0 = Math.floor(gy), fx = gx - x0, fy = gy - y0, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
-    const a = h3(x0, y0, s), b = h3(x0 + 1, y0, s), c = h3(x0, y0 + 1, s), d = h3(x0 + 1, y0 + 1, s);
+    const gx = x / 8 + ((s * 97) & 255), gy = y / 8 + ((s * 57) & 255), x0 = Math.floor(gx), y0 = Math.floor(gy), fx = gx - x0, fy = gy - y0, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+    const i0 = x0 & 255, i1 = (x0 + 1) & 255, j0 = (y0 & 255) << 8, j1 = ((y0 + 1) & 255) << 8;
+    const a = LAT[j0 + i0], b = LAT[j0 + i1], c = LAT[j1 + i0], d = LAT[j1 + i1];
     return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
   };
   const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => (v + 0.5) / 16);
@@ -87,7 +90,18 @@
     }
     return (a.houses = { list, of });
   }
-  G.Events.on('terrain:changed', () => { const grd = G.State.grid; if (grd && grd.art){ grd.art.houses = null; grd.art.bridgeWay = null; grd.art.cavernArt = null; } });
+  // A change to the tiles rebuilds what it touches: the houses (only if it reaches one), the
+  // bridges' directions and the caverns.
+  G.Events.on('terrain:changed', r => {
+    const grd = G.State.grid, a = grd && grd.art;
+    if (!a) return;
+    a.bridgeWay = null; a.cavernArt = null;
+    if (!a.houses || !r){ a.houses = null; return; }
+    const k = ids(), PART = new Set([k.wall, k.floor, k.door, k.log_wall]);
+    let hit = a.houses.list.some(H => H.x <= r.x + r.w && H.x + H.w >= r.x - 1 && H.y <= r.y + r.h && H.y + H.h >= r.y - 1);
+    for (let y = r.y; y <= r.y + r.h && !hit; y++) for (let x = r.x; x <= r.x + r.w; x++) if (grd.inBounds(x, y) && PART.has(grd.tiles[y * grd.cols + x])){ hit = true; break; }
+    if (hit) a.houses = null;
+  });
 
   const PAD = 12;   // world px round a house canvas, for the eaves and shadow
   // An intact house: a roof over the whole building, hipped on stone houses (four slopes, the
@@ -405,6 +419,18 @@
   }
 
   G.Structures = {
+    // Draws the houses' and caverns' art ahead of need, until the clock passes `deadline`, so
+    // painting a chunk never has to stop for it. Returns true when all is ready.
+    warm(grd, deadline){
+      if (!grd || !grd.art || grd.art.generator !== 'genesis') return true;
+      const Hs = houses(grd);
+      // Nearest the camera first.
+      const c = G.State.camera, T = G.CONFIG.TILE, todo = Hs.list.filter(H => !H.cv);
+      todo.sort((p, q) => Math.hypot(p.x * T - c.x, p.y * T - c.y) - Math.hypot(q.x * T - c.x, q.y * T - c.y));
+      for (const H of todo){ H.cv = H.intact ? roof(H, grd) : ruin(H, grd, Hs.of); if (performance.now() > deadline) return false; }
+      for (const C of caverns(grd)){ if (C.cv) continue; C.cv = cavernCanvas(C, grd); if (performance.now() > deadline) return false; }
+      return true;
+    },
     // Draws cave floor tile (gx, gy) at (px, py), S world px square.
     caveFloor(ctx, gx, gy, px, py, S){
       const P = G.PixelArt, smooth = ctx.imageSmoothingEnabled;
@@ -456,3 +482,7 @@
     }
   };
 })();
+// A new map, or changed terrain: its houses and caverns are drawn ahead again; the contour
+// fields are built straight away.
+GW.Events.on('world:created', () => { GW.Renderer.warmed = false; GW.Landscape.warm(GW.State.grid); });
+GW.Events.on('terrain:changed', () => { GW.Renderer.warmed = false; });

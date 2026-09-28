@@ -196,21 +196,28 @@
     has: grd => !!(grd && grd.art && grd.art.trees),
     // True when trees are drawn every frame at zoom z (pixel art on, close enough to see them move).
     live(grd, z){ return this.has(grd) && !!pixelArt() && z >= this.LIVE_ZOOM; },
-    // Every tree reaching into chunk (cx, cy), at rest, into a chunk canvas (world px).
-    // `groundOnly`: just the ground layer (the trees are drawn live).
-    paintChunk(ctx, grd, cx, cy, groundOnly = false){
-      const I = index(grd), A = pixelArt(), c = cy * I.ncx + cx, st = states(grd), tiles = grd.tiles;
-      if (cx < 0 || cy < 0 || cx >= I.ncx || cy >= I.ncy) return;
+    // Every tree reaching into the chunk of ct × ct tiles at tile (tx, ty), at rest, into a
+    // chunk canvas (world px from its corner). `groundOnly`: just the ground layer (the trees
+    // are drawn live).
+    paintChunk(ctx, grd, tx, ty, ct, groundOnly = false){
+      const I = index(grd), A = pixelArt(), st = states(grd), tiles = grd.tiles, T = G.CONFIG.TILE;
+      const X0 = tx * T, Y0 = ty * T, X1 = (tx + ct) * T, Y1 = (ty + ct) * T;
+      const cx0 = Math.max(0, Math.floor(X0 / I.CS)), cy0 = Math.max(0, Math.floor(Y0 / I.CS)), cx1 = Math.min(I.ncx - 1, Math.floor((X1 - 1) / I.CS)), cy1 = Math.min(I.ncy - 1, Math.floor((Y1 - 1) / I.CS));
+      if (cx0 > cx1 || cy0 > cy1) return;
       let count = 0, extras = false;
       // Painted below full size (middle zoom), small ground detail is under a pixel: left out.
-      const DEC = decorKinds(), small = Math.abs(ctx.getTransform().a) < 0.75;
+      const DEC = decorKinds(), small = Math.abs(ctx.getTransform().a) < 0.75, stamp = ++I.stamp;
+      const near = j => I.X[j] >= X0 - REACH && I.X[j] <= X1 + REACH && I.Y[j] >= Y0 - REACH && I.Y[j] <= Y1 + REACH;
       const take = j => { if (visible(I, j, st, tiles) && !(groundOnly && layer(I.EK[j])) && !(small && DEC[I.EK[j]])){ I.ids[count++] = j; I.dx[j] = 0; I.step[j] = 0; } };
-      for (let p = I.start[c]; p < I.start[c + 1]; p++) take(I.list[p]);
-      const x0 = cx * I.CS - REACH, x1 = (cx + 1) * I.CS + REACH, y0 = cy * I.CS - REACH, y1 = (cy + 1) * I.CS + REACH;
-      for (const j of I.extraAt.values()) if (I.X[j] >= x0 && I.X[j] <= x1 && I.Y[j] >= y0 && I.Y[j] <= y1){ extras = true; take(j); }
+      // (Index cells list everything reaching into them, so a tree can be in several.)
+      for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++){
+        const c = cy * I.ncx + cx;
+        for (let p = I.start[c]; p < I.start[c + 1]; p++){ const j = I.list[p]; if (I.seen[j] === stamp) continue; I.seen[j] = stamp; if (near(j)) take(j); }
+      }
+      for (const j of I.extraAt.values()) if (near(j)){ extras = true; take(j); }
       if (!count) return;
       sortIds(I, count, extras);
-      ctx.save(); ctx.translate(-cx * I.CS, -cy * I.CS);   // the chunk canvas starts at its own corner
+      ctx.save(); ctx.translate(-X0, -Y0);   // the chunk canvas starts at its own corner
       if (A) drawPixel(ctx, I, count, A); else drawClassic(ctx, I, count);
       ctx.restore();
     },

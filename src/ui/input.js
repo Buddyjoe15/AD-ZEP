@@ -20,6 +20,7 @@
         const p = this.p(e), c = G.State.camera, w = G.worldFromScreen(p.x, p.y);
         c.z = G.clamp(c.z * (e.deltaY < 0 ? 1.13 : 1 / 1.13), C.ZOOM_MIN, C.ZOOM_MAX);
         c.x = w.x - p.x / c.z; c.y = w.y - p.y / c.z; G.clampCamera();
+        this.zoomedAt = performance.now(); this.zoomAnchor = p;
       }, { passive: false });
       cv.addEventListener('pointerdown', e => this.down(e));
       cv.addEventListener('pointermove', e => this.move(e));
@@ -226,6 +227,7 @@
         const a = [...this.ptr.values()], d = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), mx = (a[0].x + a[1].x) / 2, my = (a[0].y + a[1].y) / 2, c = G.State.camera;
         c.z = G.clamp(this.pinch.z * d / Math.max(10, this.pinch.d), G.CONFIG.ZOOM_MIN, G.CONFIG.ZOOM_MAX);
         c.x = this.pinch.anchor.x - mx / c.z; c.y = this.pinch.anchor.y - my / c.z; G.clampCamera();
+        this.zoomedAt = performance.now(); this.zoomAnchor = { x: mx, y: my };
         return;
       }
       if (this.box){ this.box.x1 = p.x; this.box.y1 = p.y; }
@@ -325,7 +327,23 @@
       this.inspect = null;
     },
     // Keyboard camera pan, driven by real frame time.
+    // Pixel-perfect zoom: once the zoom has been left alone for a moment, close up (where a
+    // pixel of art covers about one to five screen pixels) it eases to the nearest zoom at which
+    // every art pixel covers a whole number of screen pixels, keeping the point under the
+    // cursor still, so pixel art stays crisp and even instead of shimmering.
+    snapZoom(dt){
+      const c = G.State.camera, P = G.PixelArt, dpr = G.Renderer.dpr || 1;
+      if (!P.enabled || !this.zoomedAt || this.pinch || performance.now() - this.zoomedAt < 180) return;
+      const apw = P.tileArt() / G.CONFIG.TILE, s = c.z * dpr / apw;   // screen px per art px
+      if (s < 0.9 || s > 5.5){ this.zoomedAt = 0; return; }
+      const target = G.clamp(Math.max(1, Math.round(s)) * apw / dpr, G.CONFIG.ZOOM_MIN, G.CONFIG.ZOOM_MAX);
+      const a = this.zoomAnchor || { x: G.Renderer.w / 2, y: G.Renderer.h / 2 }, w = G.worldFromScreen(a.x, a.y);
+      const z = Math.abs(target - c.z) < 0.002 ? target : c.z + (target - c.z) * Math.min(1, dt * 14);
+      c.z = z; c.x = w.x - a.x / z; c.y = w.y - a.y / z; G.clampCamera();
+      if (z === target) this.zoomedAt = 0;
+    },
     update(dt){
+      if (dt > 0) this.snapZoom(dt);
       if (G.State.paused || !this.keys.size || !(dt > 0)) return;
       const k = this.keys, c = G.State.camera, s = 700 / c.z;
       if (k.has('a') || k.has('arrowleft')) c.x -= s * dt;

@@ -78,14 +78,14 @@
   G.Ground = {
     // Textures the chunk of ct × ct tiles at tile (x0, y0), drawn into ctx in chunk space. One
     // texel covers two world px (four when the chunk is painted smaller).
-    paintChunk(ctx, grd, x0, y0, ct){
+    paintChunk(ctx, grd, x0, y0, ct, r0 = 0, r1 = ct){
       const T = G.CONFIG.TILE, cols = grd.cols, rows = grd.rows, tiles = grd.tiles, KD = kinds();
-      const tex = Math.abs(ctx.getTransform().a) >= 0.75 ? 2 : 4, per = T / tex, N = ct * per;
+      const sc = Math.abs(ctx.getTransform().a), tex = sc >= 2 ? 1 : sc >= 0.75 ? 2 : 4, per = T / tex, N = ct * per;
       const s = image(N), d = new Uint32Array(s.img.data.buffer);
-      d.fill(0);
+      d.fill(0, r0 * per * N, r1 * per * N);
       const kindAt = (gx, gy) => KD[tiles[Math.min(rows - 1, Math.max(0, gy)) * cols + Math.min(cols - 1, Math.max(0, gx))]];
       const w = new Float32Array(6);
-      for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
+      for (let ly = r0; ly < r1; ly++) for (let lx = 0; lx < ct; lx++){
         const gx = x0 + lx, gy = y0 + ly, k0 = kindAt(gx, gy);
         let uniform = true;
         for (let dy = -1; dy <= 1 && uniform; dy++) for (let dx = -1; dx <= 1; dx++) if (kindAt(gx + dx, gy + dy) !== k0){ uniform = false; break; }
@@ -143,10 +143,10 @@
           if (c) d[(ly * per + ty) * N + lx * per + tx] = c;
         }
       }
-      s.g.putImageData(s.img, 0, 0);
+      s.g.putImageData(s.img, 0, 0, 0, r0 * per, N, (r1 - r0) * per);
       const smooth = ctx.imageSmoothingEnabled;
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(s.cv, 0, 0, N, N, 0, 0, ct * T, ct * T);
+      ctx.drawImage(s.cv, 0, r0 * per, N, (r1 - r0) * per, 0, r0 * T, ct * T, (r1 - r0) * T);
       ctx.imageSmoothingEnabled = smooth;
     }
   };
