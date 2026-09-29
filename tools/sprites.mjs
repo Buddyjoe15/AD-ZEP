@@ -125,10 +125,12 @@ function unitFrames(def){
 // up-right facings are composed from the parts; the other six are lossless 90° turns of those.
 // The art keeps its own lighting and outline, so it is not shaded or outlined again.
 export const IMAGE_UNITS = {
-  spider: { size: 49, dir: 'art/adzep-asset/utility_spider', shadow: [2, 4], elevation: 'ground' }
+  // 62 world px (124 on the map): the Spider's art is mostly legs, so it needs more room than
+  // the drawn units to read at the same body size. The unit atlas holds up to 64.
+  spider: { size: 62, dir: 'art/adzep-asset/utility_spider', shadow: [2, 4], elevation: 'ground' }
 };
 function imageFrames(def){
-  const N = def.size * SPRITE_RES, r = imageUnitFrames(path.join(ROOT, def.dir), N, [0, DIAG], SPRITE_RES);
+  const N = def.size * SPRITE_RES, r = imageUnitFrames(path.join(ROOT, def.dir), N, [0, DIAG], 1);
   return { ...r, rows: FACINGS.map((_, i) => r.facings[i % 2].map(g => rotate(g, i >> 1))) };
 }
 

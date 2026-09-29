@@ -6,7 +6,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { PALETTE, Grid } from './pixelart.mjs';
+import { PALETTE, Grid, outline } from './pixelart.mjs';
+
+const SHARPEN = 0.6;   // unsharp amount after downsampling
 
 // Minimal PNG reader: 8-bit RGB or RGBA, not interlaced (what the pipeline writes).
 export function readPNG(file){
@@ -46,47 +48,69 @@ function nearest(r, g, b){
   return best;
 }
 
-const SS = 4;   // samples per axis per frame pixel
-
 // Frames for facings `angles` (radians, clockwise from up) of the unit in `dir`, in an n × n
-// frame. Returns { anims: { name: { start, frames, fps } }, facings: [[Grid per frame]], muzzle, scale }:
+// frame. Uses the high-resolution cut in `dir/hires` when there is one (same cut as `parts/`,
+// cut at a larger size), so each frame is one area-averaged downsample of the source art.
+// Returns { anims: { name: { start, frames, fps } }, facings: [[Grid per frame]], muzzle, scale }:
 // `muzzle` is the first muzzle's distance ahead of the pivot in frame px, `scale` frame px per
-// part px. Art stays inside the inscribed circle less `margin` frame px.
+// part px. Every pose of every facing fits in the frame less `margin` frame px on each side,
+// plus the 1 px outline added round the silhouette.
 export function imageUnitFrames(dir, n, angles, margin){
-  const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
   const unit = JSON.parse(fs.readFileSync(path.join(dir, 'unit.json'), 'utf8'));
-  const S = meta.size, P = f => readPNG(path.join(dir, 'parts', f));
-  const core = P(fs.existsSync(path.join(dir, 'parts', 'core.png')) ? 'core.png' : 'body.png');
-  const turret = fs.existsSync(path.join(dir, 'parts', 'turret.png')) ? P('turret.png') : null;
+  const demoSize = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8')).size;   // unit.json is in the demo parts' px
+  const src = fs.existsSync(path.join(dir, 'hires', 'meta.json')) ? path.join(dir, 'hires') : dir;
+  const meta = JSON.parse(fs.readFileSync(path.join(src, 'meta.json'), 'utf8'));
+  const S = meta.size, P = f => readPNG(path.join(src, 'parts', f)), has = f => fs.existsSync(path.join(src, 'parts', f));
+  const core = P(has('core.png') ? 'core.png' : 'body.png'), turret = has('turret.png') ? P('turret.png') : null;
   const legs = (meta.legs || []).map(l => ({ ...l, img: P(l.n + '.png'), side: l.px > S / 2 ? 1 : -1 }));
-  const swing = unit.swing ?? 0.24, lift = unit.idleLift ?? 0, muzzle = (unit.muzzles || [[0, 0]])[0];
-  // Fit: the farthest opaque part pixel (legs swung out included) lands inside the circle.
-  let far = 0;
-  for (const im of [core, turret, ...legs.map(l => l.img)]) if (im)
-    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (im.rgba[(y * S + x) * 4 + 3] > 127) far = Math.max(far, Math.hypot(x + 0.5 - S / 2, y + 0.5 - S / 2));
-  const k = (n / 2 - margin) / (far * (1 + lift) + 1);
+  const swing = unit.swing ?? 0.24, lift = unit.idleLift ?? 0, muzzle = (unit.muzzles || [[0, 0]])[0].map(v => v * S / demoSize);
   const at = (im, x, y) => { const xi = Math.floor(x), yi = Math.floor(y); return xi < 0 || yi < 0 || xi >= S || yi >= S ? -1 : (yi * S + xi) * 4; };
+  const legPose = (swingA, bs) => legs.map(l => { const r = -l.side * swingA * (l.g === 'A' ? 1 : -1); return { l, r, c: Math.cos(-r), s: Math.sin(-r), hx: (l.px - S / 2) * bs, hy: (l.py - S / 2) * bs }; });
 
-  // One pose: body scale `bs` (idle breathing), leg swing per gait group.
+  // Fit: the widest reach, over the facings, of any opaque part pixel in any pose (body at
+  // full breath, legs swung both ways), measured along the frame's axes.
+  const pts = [];
+  const opaque = (im, fn) => { for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (im.rgba[(y * S + x) * 4 + 3] > 127) fn(x + 0.5 - S / 2, y + 0.5 - S / 2); };
+  for (const im of [core, turret]) if (im) opaque(im, (x, y) => pts.push(x * (1 + lift), y * (1 + lift)));
+  for (const w of [swing, -swing]) for (const t of legPose(w, 1 + lift)){
+    const c = Math.cos(t.r), s = Math.sin(t.r), px = t.l.px - S / 2, py = t.l.py - S / 2;
+    opaque(t.l.img, (x, y) => { const vx = x - px, vy = y - py; pts.push(vx * c - vy * s + t.hx, vx * s + vy * c + t.hy); });
+  }
+  let reach = 0;
+  for (const a of angles){
+    const ca = Math.cos(a), sa = Math.sin(a);
+    for (let i = 0; i < pts.length; i += 2){ const x = pts[i] * ca - pts[i + 1] * sa, y = pts[i] * sa + pts[i + 1] * ca; reach = Math.max(reach, Math.abs(x) + 0.5, Math.abs(y) + 0.5); }
+  }
+  const k = (n / 2 - margin - 1) / reach, SS = Math.max(2, Math.min(6, Math.ceil(1.5 / k)));   // samples per axis per frame px
+
+  // One pose: body scale `bs` (idle breathing), leg swing per gait group. Each frame pixel
+  // averages the part pixels under it; the result is sharpened a little (the average softens
+  // edges inside the art), mapped onto the palette and outlined like the rest of the game's art.
   function pose(angle, bs, swingA){
-    const ca = Math.cos(angle), sa = Math.sin(angle), g = new Grid(n, n);
-    const legT = legs.map(l => { const r = -l.side * swingA * (l.g === 'A' ? 1 : -1); return { l, c: Math.cos(-r), s: Math.sin(-r), hx: (l.px - S / 2) * bs, hy: (l.py - S / 2) * bs }; });
+    const ca = Math.cos(angle), sa = Math.sin(angle), legT = legPose(swingA, bs), rgb = new Float32Array(n * n * 3), on = new Uint8Array(n * n);
     for (let oy = 0; oy < n; oy++) for (let ox = 0; ox < n; ox++){
       let r = 0, gg = 0, b = 0, hits = 0;
       for (let sy = 0; sy < SS; sy++) for (let sx = 0; sx < SS; sx++){
         const dx = ox + (sx + 0.5) / SS - n / 2, dy = oy + (sy + 0.5) / SS - n / 2;
         const ux = (dx * ca + dy * sa) / k, uy = (-dx * sa + dy * ca) / k;   // part px about the pivot, unit facing up
         let i = -1, im = null;
-        for (const src of [turret, core]) if (src && i < 0){ const j = at(src, ux / bs + S / 2, uy / bs + S / 2); if (j >= 0 && src.rgba[j + 3] > 127){ i = j; im = src; } }
+        for (const s of [turret, core]) if (s && i < 0){ const j = at(s, ux / bs + S / 2, uy / bs + S / 2); if (j >= 0 && s.rgba[j + 3] > 127){ i = j; im = s; } }
         if (i < 0) for (const t of legT){
           const vx = ux - t.hx, vy = uy - t.hy, j = at(t.l.img, vx * t.c - vy * t.s + t.l.px, vx * t.s + vy * t.c + t.l.py);
           if (j >= 0 && t.l.img.rgba[j + 3] > 127){ i = j; im = t.l.img; break; }
         }
         if (i >= 0){ r += im.rgba[i]; gg += im.rgba[i + 1]; b += im.rgba[i + 2]; hits++; }
       }
-      if (hits * 2 >= SS * SS) g.p[oy * n + ox] = nearest(r / hits, gg / hits, b / hits);
+      const o = oy * n + ox;
+      if (hits * 2 >= SS * SS){ on[o] = 1; rgb[o * 3] = r / hits; rgb[o * 3 + 1] = gg / hits; rgb[o * 3 + 2] = b / hits; }
     }
-    return g;
+    const g = new Grid(n, n);
+    for (let o = 0; o < n * n; o++) if (on[o]){
+      const x = o % n, near = [o - 1, o + 1, o - n, o + n].filter((q, j) => q >= 0 && q < n * n && on[q] && (j > 1 || Math.floor(q / n) === Math.floor(o / n)));
+      const c = [0, 1, 2].map(ch => { const v = rgb[o * 3 + ch], m = near.length ? near.reduce((s, q) => s + rgb[q * 3 + ch], 0) / near.length : v; return Math.max(0, Math.min(255, v + SHARPEN * (v - m))); });
+      g.p[o] = nearest(c[0], c[1], c[2]);
+    }
+    return outline(g);
   }
 
   const breath = f => 1 + lift * (0.5 + 0.5 * Math.sin(f / 4 * Math.PI * 2));

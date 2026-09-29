@@ -1,10 +1,10 @@
 {
   "name": "spider",
-  "frameWidth": 196,
-  "frameHeight": 196,
+  "frameWidth": 248,
+  "frameHeight": 248,
   "origin": [
-    97.5,
-    97.5
+    123.5,
+    123.5
   ],
   "worldPxPerArtPx": 0.5,
   "rows": "facing",
@@ -37,7 +37,7 @@
       "fps": 2.2
     }
   },
-  "muzzle": 11.6,
+  "muzzle": 15.4,
   "shadow": {
     "drawnBy": "engine",
     "offset": [
@@ -47,6 +47,6 @@
     "elevation": "ground"
   },
   "image": "spider.png",
-  "sheetWidth": 1960,
-  "sheetHeight": 1568
+  "sheetWidth": 2480,
+  "sheetHeight": 1984
 }
