@@ -919,3 +919,41 @@ test('caves are underground: click the entrance to look inside or send units in,
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });
+
+test('houses: a unit walks in through the door and the roof comes off to show the room; it goes back on when he leaves', { skip, timeout: 90000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await page.goto(pathToFileURL(path.join(ROOT, 'index.html')).href);
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'mainMenu');
+    await page.click('[data-home="new"]'); await page.click('[data-new-slot="1"]');
+    if (await page.$('#confirmOverwriteBtn')) await page.click('#confirmOverwriteBtn');
+    await page.fill('#ezSeedInput', '72491'); await page.selectOption('#ezMapInput', 'genesis');
+    await page.click('#launchVance'); await page.click('#introSkipBtn');
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.State.introCamera, null, { timeout: 15000 });
+    // The first intact house with more than one floor tile; Vance at its door step, sent inside.
+    const H = await page.evaluate(() => {
+      GW.Fog.set(false);
+      const g = GW.CaveView.terrainGrid(), T = 48;
+      let H = null;
+      for (let i = 0; i < g.size && !H; i++){ const h = GW.Structures.houseInside(g, i % g.cols, (i / g.cols) | 0); if (h && h.w > 3 && h.h > 3) H = h; }
+      const d = H.door, out = d.y === H.y + H.h - 1 ? [0, 1] : d.y === H.y ? [0, -1] : d.x === H.x ? [-1, 0] : [1, 0];
+      const h = GW.Units.hero();
+      h.x = (d.x + out[0] + 0.5) * T; h.y = (d.y + out[1] + 0.5) * T; GW.Units.clearOrders(h); GW.rebuildSpatial();
+      GW.centerCamera((H.x + H.w / 2) * T, (H.y + H.h / 2) * T, 1.5);
+      GW.Orders.move([h], (H.x + H.w / 2) * T, (H.y + H.h / 2) * T);
+      return { x: H.x, y: H.y, w: H.w, h: H.h, door: d, out };
+    });
+    await page.waitForFunction(H => {
+      const h = GW.Units.hero(), in_ = GW.Structures.houseInside(GW.CaveView.terrainGrid(), Math.floor(h.x / 48), Math.floor(h.y / 48));
+      return in_ && in_.x === H.x && in_.y === H.y && in_.roofOff === 1;
+    }, H, { timeout: 20000 });
+    await page.screenshot({ path: path.join(OUT, 'house-inside.png') });
+    // Out again: the roof goes back on.
+    await page.evaluate(H => { const T = 48; GW.Orders.move([GW.Units.hero()], (H.door.x + H.out[0] * 3 + 0.5) * T, (H.door.y + H.out[1] * 3 + 0.5) * T); }, H);
+    await page.waitForFunction(H => { const h = GW.Units.hero(); return !GW.Structures.houseInside(GW.CaveView.terrainGrid(), Math.floor(h.x / 48), Math.floor(h.y / 48)) && !GW.Structures.open.size; }, H, { timeout: 20000 });
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});

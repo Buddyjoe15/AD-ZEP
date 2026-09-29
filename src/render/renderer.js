@@ -181,6 +181,9 @@
         if (live && live.size) TA.drawLive(g, TG, v, t, (cx, cy) => live.has(cy * 4096 + cx));
       }
 
+      // Houses with a unit inside have their roof off, showing the room.
+      if (!inCave && !far) G.Structures.interiors(g, TG, S.units.filter(u => !u.isShip && here(u) && (u.team === 'blue' || !G.Fog.enabled || G.Fog.visibleAt(u.x, u.y))), inView);
+
       // Resource nodes.
       for (const n of S.resourceNodes){
         if (n.remaining <= 0 || !inView(n.x, n.y, 30) || !here(n)) continue;

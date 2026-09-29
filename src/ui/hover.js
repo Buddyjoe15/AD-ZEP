@@ -25,7 +25,7 @@
     cave_floor: 'Inside a cave. Dark: keep an eye out for nests.',
     wildflowers: 'A meadow in flower.',
     reeds: 'Reeds by the water. Slows units.',
-    wall: 'A building wall. Impassable.', floor: 'Inside a building. Impassable.', door: 'A doorway. Impassable.', log_wall: 'A log wall. Impassable.',
+    wall: 'A building wall. Impassable.', floor: 'Inside a building: the roof comes off while a unit is in.', door: 'A doorway into a building.', log_wall: 'A log wall. Impassable.',
     clearing: 'Cleared, level ground: good for building.'
   };
 

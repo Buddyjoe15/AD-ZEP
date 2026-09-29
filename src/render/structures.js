@@ -188,6 +188,55 @@
     return b.canvas();
   }
 
+  // An intact house seen with its roof off, while a unit is inside: an empty room, a wooden
+  // floor of lit and shaded boards, walls all round (masonry or logs) and a gap at the door.
+  // It also covers the roof's eaves round the walls (EAVE art px) with plain ground.
+  const EAVE = 7;
+  function interior(H){
+    const TH = 24, E = EAVE, W = H.w * 96 + E * 2, Hh = H.h * 96 + E * 2, b = buffer(W, Hh), seed = H.x * 173 + H.y * 29;
+    const x1 = E + H.w * 96, y1 = E + H.h * 96;
+    // Door gap: the middle of the door tile's outer wall.
+    let gap = null;
+    if (H.door){
+      const dx = E + (H.door.x - H.x) * 96, dy = E + (H.door.y - H.y) * 96;
+      gap = H.door.y === H.y || H.door.y === H.y + H.h - 1 ? { x0: dx + 22, x1: dx + 74, y0: dy, y1: dy + 96, ns: true } : { x0: dx, x1: dx + 96, y0: dy + 22, y1: dy + 74, ns: false };
+    }
+    const inGap = (x, y) => gap && x >= gap.x0 && x < gap.x1 && y >= gap.y0 && y < gap.y1;
+    for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++){
+      const dt = dith(x, y), n = vn(x, y, seed);
+      if (x < E || y < E || x >= x1 || y >= y1){
+        // Ground under the eaves: grass, in the shade of the walls on the south and east.
+        b.set(x, y, (x >= x1 || y >= y1) ? (dt < 0.5 ? PX.leaf1 : PX.grass1) : n + dt * 0.3 > 0.75 ? PX.grass2 : PX.grass1);
+        continue;
+      }
+      // d: how far into the wall band (0 = the outer face).
+      const d = Math.min(x - E, y - E, x1 - 1 - x, y1 - 1 - y);
+      if (d < TH && !inGap(x, y)){
+        if (d === 0 || d === TH - 1){ b.set(x, y, PX.outline); continue; }
+        if (H.log){
+          const across = (x - E === d || x1 - 1 - x === d) ? x : y, ring = (across + 3) % 7;
+          b.set(x, y, ring === 0 ? PX.dust0 : ring === 1 ? PX.dust4 : ring === 2 ? PX.dust3 : n > 0.6 ? PX.dust2 : PX.dust1);
+        } else {
+          const row = Math.floor(y / 6), joint = (x + row * 7 + Math.floor(h3(row, 5, seed) * 9)) % 11 === 0, mortar = y % 6 === 0 || joint;
+          b.set(x, y, d < 3 ? PX.plate1 : d > TH - 5 ? PX.char1 : mortar ? PX.dust1 : n + dt * 0.3 > 0.72 ? PX.plate0 : h3(x >> 3, row, seed) > 0.5 ? PX.dust4 : PX.dust3);
+        }
+        continue;
+      }
+      // Floorboards, running the long way of the room; a threshold board across the doorway.
+      const along = H.w >= H.h ? x : y, acr = H.w >= H.h ? y : x;
+      const board = Math.floor(acr / 8), seam = acr % 8 === 0, off = Math.floor(h3(board, 7, seed) * 40), end = (along + off) % 52 === 0;
+      const shade = h3(board, Math.floor((along + off) / 52), seed + 11);
+      let c = seam || end ? PX.dust1 : shade > 0.7 ? PX.dust5 : shade > 0.3 ? PX.dust4 : PX.dust3;
+      if (!seam && !end && (along + acr * 5) % 23 === 0) c = PX.dust2;   // grain
+      if (inGap(x, y) && d < TH) c = (gap.ns ? y : x) % 5 === 0 ? PX.dust0 : PX.dust2;
+      b.set(x, y, c);
+      // The walls' shadow on the floor, along the north and west sides (light from the upper left).
+      const sn = y - (E + TH), sw = x - (E + TH);
+      if ((sn >= 0 && sn < 8) || (sw >= 0 && sw < 8)) if (dt < 0.75 - Math.min(sn < 0 ? 99 : sn, sw < 0 ? 99 : sw) * 0.08) b.shade(x, y);
+    }
+    return b.canvas();
+  }
+
   // A ruin: walls standing in places round plank floors. `of` maps tiles to houses.
   function ruin(H, grd, of){
     const T = G.CONFIG.TILE, k = ids(), cols = grd.cols, tiles = grd.tiles, W = (H.w * T + PAD * 2) * 2, Hh = (H.h * T + PAD * 2) * 2, b = buffer(W, Hh), O = PAD * 2, seed = H.x * 131 + H.y * 17;
@@ -443,6 +492,42 @@
     },
     // True when tile i belongs to a house drawn here (its tile art is left as grass).
     houseAt(grd, i){ return houses(grd).of[i] >= 0; },
+    // The intact house whose floor or doorway tile (gx, gy) is, or null.
+    houseInside(grd, gx, gy){
+      if (!grd || !grd.art || !grd.inBounds(gx, gy)) return null;
+      const Hs = houses(grd), i = gy * grd.cols + gx, h = Hs.of[i], k = ids(), t = grd.tiles[i];
+      return h >= 0 && Hs.list[h].intact && (t === k.floor || t === k.door) ? Hs.list[h] : null;
+    },
+    // Takes the roof off every intact house with one of `units` inside (on its floor or in its
+    // doorway), fading it out and back in, and draws the empty room in its place.
+    interiors(g, grd, units, inView){
+      if (!grd || !grd.art) return;
+      const Hs = houses(grd), T = G.CONFIG.TILE, clock = performance.now();
+      const dt = Math.min(0.25, (clock - (this.lastClock || clock)) / 1000);
+      this.lastClock = clock;
+      const occupied = new Set();
+      for (const u of units){
+        const H = this.houseInside(grd, Math.floor(u.x / T), Math.floor(u.y / T));
+        if (H) occupied.add(H);
+      }
+      const open = this.open || (this.open = new Set());
+      for (const H of occupied) open.add(H);
+      if (!open.size) return;
+      const smooth = g.imageSmoothingEnabled;
+      g.imageSmoothingEnabled = G.PixelArt.shrinks(g, T, 96);
+      for (const H of [...open]){
+        if (Hs.list[H.id] !== H){ open.delete(H); continue; }   // the houses were rebuilt
+        H.roofOff = G.clamp((H.roofOff || 0) + (occupied.has(H) ? dt : -dt) * 5, 0, 1);
+        if (!H.roofOff){ open.delete(H); continue; }
+        if (!inView((H.x + H.w / 2) * T, (H.y + H.h / 2) * T, Math.max(H.w, H.h) * T)) continue;
+        if (!H.inside) H.inside = interior(H);
+        const e = EAVE / 2;
+        g.globalAlpha = H.roofOff;
+        g.drawImage(H.inside, H.x * T - e, H.y * T - e, H.w * T + e * 2, H.h * T + e * 2);
+      }
+      g.globalAlpha = 1;
+      g.imageSmoothingEnabled = smooth;
+    },
     // Draws the structures reaching into the chunk of ct × ct tiles at tile (x0, y0).
     paintChunk(ctx, grd, x0, y0, ct){
       const T = G.CONFIG.TILE, k = ids(), cols = grd.cols, tiles = grd.tiles, Hs = houses(grd), smooth = ctx.imageSmoothingEnabled;
