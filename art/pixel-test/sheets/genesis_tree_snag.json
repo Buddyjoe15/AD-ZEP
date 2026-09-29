@@ -1,10 +1,10 @@
 {
   "name": "genesis_tree_snag",
-  "frameWidth": 168,
-  "frameHeight": 168,
+  "frameWidth": 336,
+  "frameHeight": 336,
   "origin": [
-    83.5,
-    83.5
+    167.5,
+    167.5
   ],
   "worldPxPerArtPx": 0.25,
   "rows": [
@@ -13,9 +13,9 @@
     "large"
   ],
   "frameSizes": [
-    96,
-    128,
-    168
+    192,
+    256,
+    336
   ],
   "crownWorldPx": [
     18,
@@ -50,6 +50,6 @@
     "elevation": "prop"
   },
   "image": "genesis_tree_snag.png",
-  "sheetWidth": 336,
-  "sheetHeight": 504
+  "sheetWidth": 672,
+  "sheetHeight": 1008
 }

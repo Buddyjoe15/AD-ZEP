@@ -1,10 +1,10 @@
 {
   "name": "genesis_tree_birch",
-  "frameWidth": 184,
-  "frameHeight": 184,
+  "frameWidth": 368,
+  "frameHeight": 368,
   "origin": [
-    91.5,
-    91.5
+    183.5,
+    183.5
   ],
   "worldPxPerArtPx": 0.25,
   "rows": [
@@ -13,9 +13,9 @@
     "large"
   ],
   "frameSizes": [
-    104,
-    144,
-    184
+    208,
+    288,
+    368
   ],
   "crownWorldPx": [
     20,
@@ -50,6 +50,6 @@
     "elevation": "prop"
   },
   "image": "genesis_tree_birch.png",
-  "sheetWidth": 1104,
-  "sheetHeight": 552
+  "sheetWidth": 2208,
+  "sheetHeight": 1104
 }

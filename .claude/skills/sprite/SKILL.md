@@ -5,7 +5,7 @@ description: Turn a short description into an AD-ZEP pixel-art sprite, straight 
 
 # /sprite: from a description to a tested sprite
 
-The user gives a short description, for example `/sprite a salvage crawler that strips wrecks for metal`. You turn it into a sprite that fits Abyssal Dawn: Zero Earth Protocol, render it straight top-down at the required size (192 × 192 art px per tile) and publish a test page they can open.
+The user gives a short description, for example `/sprite a salvage crawler that strips wrecks for metal`. You turn it into a sprite that fits Abyssal Dawn: Zero Earth Protocol, render it straight top-down at the required size (192 × 192 art px per tile of its size on the map: a unit or structure shown at twice its modelled size is rendered at 8 art px per modelled px, never stretched; see `art/PIXEL_ART_RULES.md` 2.1) and publish a test page they can open.
 
 ## 1. Read first
 

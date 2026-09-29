@@ -1,10 +1,10 @@
 {
   "name": "genesis_tree_maple",
-  "frameWidth": 248,
-  "frameHeight": 248,
+  "frameWidth": 496,
+  "frameHeight": 496,
   "origin": [
-    123.5,
-    123.5
+    247.5,
+    247.5
   ],
   "worldPxPerArtPx": 0.25,
   "rows": [
@@ -13,9 +13,9 @@
     "large"
   ],
   "frameSizes": [
-    120,
-    184,
-    248
+    240,
+    368,
+    496
   ],
   "crownWorldPx": [
     24,
@@ -50,6 +50,6 @@
     "elevation": "prop"
   },
   "image": "genesis_tree_maple.png",
-  "sheetWidth": 1488,
-  "sheetHeight": 744
+  "sheetWidth": 2976,
+  "sheetHeight": 1488
 }

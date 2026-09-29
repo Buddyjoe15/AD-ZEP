@@ -1,5 +1,5 @@
 // Genesis tree props (map type `genesis`): five species in three sizes, straight top-down at
-// 2 art px per world px, drawn to the crown diameters in src/data/trees.js (GW.TREES; a test
+// 4 art px per world px on the map, drawn to the crown diameters in src/data/trees.js (GW.TREES; a test
 // checks the two match). Each variant has 3 leaf-rustle frames; a snag has one. Leaning in
 // the wind is a shift of the whole crown, done by the engine, so it needs no frames of its
 // own. Outline and top-left light come from the pipeline (finish); the engine draws the
@@ -9,11 +9,15 @@
 // Frames are stored run-length encoded (see rle), since a fallen tree's frame is mostly empty.
 import { C, Grid, rng, finish } from './pixelart.mjs';
 
-// Art px per world px: 4, so trees and props hold their detail up close (the renderer reads
-// it from the data as `k`).
-const K = 4, TAU = Math.PI * 2;
-// Trees and dead wood are shown at twice the size they are drawn at (see genesisTrees()).
+// Art px per world px on the map: 4 (192 per tile, art/PIXEL_ART_RULES.md), so trees and props
+// hold their detail up close (the renderer reads it from the data as `k`).
+const MAP_K = 4, TAU = Math.PI * 2;
+// Trees and dead wood stand at TREE_SIZE times the size their shapes are drawn at (in drawn
+// world px). They are drawn at MAP_K × TREE_SIZE art px per drawn px, so on the map they still
+// have MAP_K art px per world px: bigger, with the full resolution, never stretched.
 const TREE_SIZE = 2, SCALED = new Set(['spruce', 'pine', 'birch', 'maple', 'snag', 'stump_cut', 'stump_broken', 'log']);
+// Art px per drawn world px for what is being drawn now (set per kind by genesisTrees()).
+let K = MAP_K;
 export const GENESIS_SIZES = ['small', 'medium', 'large'];
 export const GENESIS_CROWN = {
   spruce: [18, 28, 38], pine: [22, 34, 46], birch: [20, 30, 40], maple: [24, 40, 56], snag: [18, 26, 36]
@@ -577,7 +581,7 @@ Object.assign(PROP_DRAW, {
     b.disc(-R * 0.2, -R * 0.2, R * 0.2, 'water2'); b.disc(-R * 0.25, -R * 0.3, 0.6, 'water3');
   }
 });
-const propSize = spec => spec.length ? 4 * Math.ceil(spec.length / 2 + spec.width * 2.2 + 3) : 4 * Math.ceil(spec.r * 1.6 + 3);
+const propSize = spec => spec.length ? K * Math.ceil(spec.length / 2 + spec.width * 2.2 + 3) : K * Math.ceil(spec.r * 1.6 + 3);
 function propFrame(kind, spec, seed, angle, v = 0){
   const N = propSize(spec), g = new Grid(N, N);
   PROP_DRAW[kind](brush(g), rng(seed), spec, angle, v);
@@ -590,13 +594,14 @@ function propFrame(kind, spec, seed, angle, v = 0){
 export function genesisTrees(){
   const art = {}, sheets = {};
   for (const kind of GENESIS_KINDS){
+    K = SCALED.has(kind) ? MAP_K * TREE_SIZE : MAP_K;
     const sets = GENESIS_SIZES.map((_, z) => Array.from({ length: VARIANTS }, (_, v) => variantFrames(kind, z, v)));
     art[kind] = sets.map(vs => vs.map(({ n, frames }) => ({ n, frames: frames.map(f => rle(f.encode())) })));
     const cell = Math.max(...sets.flat().map(s => s.n));
     const pad = (f, n) => { const o = new Grid(cell, cell), off = (cell - n) / 2; for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) o.set(x + off, y + off, f.get(x, y)); return o; };
     sheets['genesis_tree_' + kind] = {
       meta: {
-        name: 'genesis_tree_' + kind, frameWidth: cell, frameHeight: cell, origin: [(cell - 1) / 2, (cell - 1) / 2], worldPxPerArtPx: 1 / K,
+        name: 'genesis_tree_' + kind, frameWidth: cell, frameHeight: cell, origin: [(cell - 1) / 2, (cell - 1) / 2], worldPxPerArtPx: 1 / MAP_K,
         rows: GENESIS_SIZES, frameSizes: sets.map(vs => vs[0].n), crownWorldPx: GENESIS_CROWN[kind],
         columns: `${VARIANTS} variants × ${kind === 'snag' ? 1 : RUSTLES} rustle frames, each frame centred in its cell`,
         animations: { rustle: { frames: kind === 'snag' ? 1 : RUSTLES, fps: 'set by the weather' }, lean: 'crown shifted downwind by the engine' },
@@ -608,6 +613,7 @@ export function genesisTrees(){
   // Stumps: per kind and size, STUMP_VARIANTS frames. Fallen trees: per size, every angle
   // (angle × LOG_VARIANTS + variant), crown end pointing along the angle, clockwise from east.
   for (const [kind, specs] of Object.entries(GENESIS_PROPS)){
+    K = SCALED.has(kind) ? MAP_K * TREE_SIZE : MAP_K;
     const log = kind === 'log', count = log ? LOG_ANGLES * LOG_VARIANTS : PROP_VARIANTS[kind] || STUMP_VARIANTS;
     const sets = specs.map((spec, z) => Array.from({ length: count }, (_, k) => {
       const angle = log ? Math.floor(k / LOG_VARIANTS) / LOG_ANGLES * TAU : 0, v = log ? k % LOG_VARIANTS : k;
@@ -618,7 +624,7 @@ export function genesisTrees(){
     const pad = ({ n, g }) => { const o = new Grid(cell, cell), off = (cell - n) / 2; for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) o.set(x + off, y + off, g.get(x, y)); return o; };
     sheets['genesis_' + kind] = {
       meta: {
-        name: 'genesis_' + kind, frameWidth: cell, frameHeight: cell, origin: [(cell - 1) / 2, (cell - 1) / 2], worldPxPerArtPx: 1 / K,
+        name: 'genesis_' + kind, frameWidth: cell, frameHeight: cell, origin: [(cell - 1) / 2, (cell - 1) / 2], worldPxPerArtPx: 1 / MAP_K,
         rows: specs.map(sp => JSON.stringify(sp)), frameSizes: sets.map(fs => fs[0].n),
         columns: log ? `${LOG_ANGLES} angles clockwise from east (crown end) × ${LOG_VARIANTS} variants, each frame centred in its cell` : `${count} variants`,
         shadow: { drawnBy: 'engine', offset: PROP_SHADOW[kind], elevation: 'ground prop' }
@@ -626,12 +632,12 @@ export function genesisTrees(){
       rows: sets.map(fs => fs.map(pad))
     };
   }
-  // On the map trees and dead wood stand at TREE_SIZE times the size they are drawn at: their
-  // art is K art px per drawn world px, so K / TREE_SIZE per world px on the map. `scale`
-  // gives it per kind; the crown and prop sizes in the data are the sizes on the map (a test
-  // checks they match GW.TREES).
-  const scale = Object.fromEntries([...GENESIS_KINDS, ...Object.keys(GENESIS_PROPS)].map(k => [k, SCALED.has(k) ? TREE_SIZE : 1]));
+  K = MAP_K;
+  // Every frame is MAP_K art px per world px on the map, so `scale` (how much bigger than its
+  // art a kind is drawn) is 1 for all; the crown and prop sizes in the data are the sizes on
+  // the map (a test checks they match GW.TREES).
+  const scale = Object.fromEntries([...GENESIS_KINDS, ...Object.keys(GENESIS_PROPS)].map(k => [k, 1]));
   const crown = Object.fromEntries(GENESIS_KINDS.map(k => [k, GENESIS_CROWN[k].map(d => d * TREE_SIZE)]));
   const props = Object.fromEntries(Object.entries(GENESIS_PROPS).map(([k, specs]) => [k, SCALED.has(k) ? specs.map(sp => Object.fromEntries(Object.entries(sp).map(([f, v]) => [f, v * TREE_SIZE]))) : specs]));
-  return { data: { encoding: 'rle', k: K, scale, kinds: GENESIS_KINDS, sizes: GENESIS_SIZES, crown, shadow: GENESIS_SHADOW.map(o => o.map(v => v * TREE_SIZE)), props, propShadow: PROP_SHADOW, logAngles: LOG_ANGLES, art }, sheets };
+  return { data: { encoding: 'rle', k: MAP_K, scale, kinds: GENESIS_KINDS, sizes: GENESIS_SIZES, crown, shadow: GENESIS_SHADOW.map(o => o.map(v => v * TREE_SIZE)), props, propShadow: PROP_SHADOW, logAngles: LOG_ANGLES, art }, sheets };
 }

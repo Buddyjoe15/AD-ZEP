@@ -1,10 +1,10 @@
 {
   "name": "genesis_log",
-  "frameWidth": 308,
-  "frameHeight": 308,
+  "frameWidth": 616,
+  "frameHeight": 616,
   "origin": [
-    153.5,
-    153.5
+    307.5,
+    307.5
   ],
   "worldPxPerArtPx": 0.25,
   "rows": [
@@ -12,8 +12,8 @@
     "{\"length\":108,\"width\":9}"
   ],
   "frameSizes": [
-    212,
-    308
+    424,
+    616
   ],
   "columns": "16 angles clockwise from east (crown end) × 2 variants, each frame centred in its cell",
   "shadow": {
@@ -25,6 +25,6 @@
     "elevation": "ground prop"
   },
   "image": "genesis_log.png",
-  "sheetWidth": 9856,
-  "sheetHeight": 616
+  "sheetWidth": 19712,
+  "sheetHeight": 1232
 }

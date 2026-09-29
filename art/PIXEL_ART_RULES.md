@@ -88,11 +88,17 @@ Save change: none | <what and why>
 
 - **Straight top-down.** Not isometric and not three-quarter view. The camera looks straight down.
 - **Units, structures, trees and props: 4 art px per world px** (a 48 world px tile is **192 × 192 art px**). **Terrain tiles: 2 art px per world px** (96 × 96 per tile).
+- **The resolution is measured on the map, never stretched.** 4 art px per world px means 4 art px for every world px the thing covers *as the game draws it*. When something is shown bigger than it is modelled or drawn (units and structures stand at twice their modelled size, Genesis trees at twice their drawn size), render it at 4 × that factor art px per modelled px, so it still has 4 art px per world px on the map:
+  - shown at 1× (walls, gates, props, rocks, cave floors): 4 art px per modelled world px;
+  - shown at 2× (units, structures, trees and dead wood): **8 art px per modelled world px**. A one-tile model is then 384 × 384 art px and covers 2 × 2 tiles, 192 × 192 per tile.
+
+  Never make art bigger by scaling up its frames (a `scale` above 1 in the data, or a `worldPxPerArtPx` above 0.25 for sprites): render it again from the model or drawing at the size it is shown.
+- **Where things stand:** terrain tiles are at 2 (by design). Genesis trees, stumps and fallen trees are rendered at 8 per drawn px and shown at 2×, so 4 on the map (`tools/genesis-trees.mjs`, `TREE_SIZE`). Walls, gates and every landscaping prop are at 4. Units and structures other than walls and gates are still their 4-per-px renders stretched to twice the size (2 art px per world px on the map, `SIZE` in `tools/sprites.mjs`); they are to be rendered again at 8 per modelled px.
 - **Terrain** tiles and terrain props such as Woodlands trees are 96 × 96. Size their features in world px and draw them at twice that in art px. Keep seams, joints, blades and cracks one art px wide, so they come out finer. The data's top-level `worldPxPerArtPx` is 0.5.
-- **Units and structures** are drawn the same way. A Spider is 49 world px across and **98 × 98 art px**; its metadata says `worldPxPerArtPx: 0.5`.
+- **Units and structures** are drawn in world px of their modelled size and rendered at the resolution above (`SPRITE_RES` art px per modelled px, shown at `SIZE` ×, in `tools/sprites.mjs`). Their metadata's `worldPxPerArtPx` is world px on the map per art px: 0.25 when they meet the rule.
   - Draw them in world px, with the painter at scale 2 (`painter(g, angle, origin, 2)`). Each shape is rasterised at double resolution, so curves and diagonals come out smoother.
   - The shading and outline passes still work per art px, so edges and outlines come out half as thick as the terrain's.
-- History: the first test set used 2 world px per art px (24 × 24 per tile). Everything was redrawn at 1 world px per art px, then units and structures were doubled again to 2 art px per world px, then terrain and trees too (96 × 96 per tile). Then units, structures, Genesis trees and props went to 4 art px per world px (192 × 192 per tile), rendered again from their models and drawings; terrain tiles stayed at 2. Don't change a scale again without redrawing every asset that uses it.
+- History: the first test set used 2 world px per art px (24 × 24 per tile). Everything was redrawn at 1 world px per art px, then units and structures were doubled again to 2 art px per world px, then terrain and trees too (96 × 96 per tile). Then units, structures, Genesis trees and props went to 4 art px per world px (192 × 192 per tile), rendered again from their models and drawings; terrain tiles stayed at 2. Then units, structures (except walls and gates) and Genesis trees were shown at twice their size; trees and dead wood were rendered again at 8 art px per drawn px, so they keep 4 per world px on the map. Don't change a scale again without redrawing every asset that uses it.
 - Up close the engine draws the art nearest-neighbour, at whole art pixels. When art lands on fewer screen pixels than it has (zoomed out, or terrain in a 1× chunk), the engine averages it instead so fine detail doesn't shimmer. Never draw sub-pixel detail or anti-aliasing.
 
 ### 2.2 Palette: 37 colours, nothing else
@@ -137,9 +143,9 @@ Save change: none | <what and why>
 
 ### 2.4 Units
 
-- **Square frames at 4 art px per world px.** The unit's size is given in world px (odd, so it has a centre) and the frame is four times that. The origin (the unit's position) is the frame's centre, between its four middle pixels: `(N - 1) / 2` in the metadata. Sizes in use:
-  - **49 world px (98 × 98 art px)** for Spider-sized units (about 1 tile).
-  - **33 world px (66 × 66 art px)** for drone-sized units.
+- **Square frames at 4 art px per world px on the map.** The unit's size is given in world px (odd, so it has a centre) and the frame is four times its size on the map. The origin (the unit's position) is the frame's centre, between its four middle pixels: `(N - 1) / 2` in the metadata. Units are modelled at these sizes and shown at twice them (2.1):
+  - **49 world px modelled, 98 on the map (392 × 392 art px)** for Spider-sized units.
+  - **33 world px modelled, 66 on the map (264 × 264 art px)** for drone-sized units.
 
   Pick one of these unless the spec says otherwise.
 - **Keep all art within the frame's inscribed circle, minus 1 world px** for the outline: radius 23 world px for Spider-sized units, 15 for drone-sized ones. Otherwise the 45° facing clips at the corners.
@@ -214,6 +220,7 @@ Inside this repository:
 - Semi-transparent pixels, baked shadows, or directional light painted into unit art.
 - Colours outside the palette, magenta used for anything but team colour, or real team colours in the art.
 - Isometric or angled views, or a different art-pixel scale.
+- Art stretched to show it bigger than it was rendered (fewer than 4 art px per world px on the map, terrain tiles aside). Render it again at the size it is shown.
 - Unit art outside the inscribed circle, or even-sized unit frames.
 - Hand-drawing the six rotated facings, or resampling `up` to make `up-right`.
 - Terrain variants that don't match at the edges or differ in tone, or linear variant picking.
@@ -221,7 +228,7 @@ Inside this repository:
 
 ## 5. Sprite lab and `/sprite`
 
-The sprite lab (`art/sprite-lab/`) makes test sprites from 3D models built in code. It renders them straight top-down at 96 art px per tile, checks them against these rules, and writes a test page. In Claude Code, `/sprite <short description>` runs the whole process (`.claude/skills/sprite/SKILL.md`), for example `/sprite a salvage crawler that strips wrecks for metal`.
+The sprite lab (`art/sprite-lab/`) makes test sprites from 3D models built in code. It renders them straight top-down at 192 art px per tile of their size on the map, checks them against these rules, and writes a test page. In Claude Code, `/sprite <short description>` runs the whole process (`.claude/skills/sprite/SKILL.md`), for example `/sprite a salvage crawler that strips wrecks for metal`.
 
 ### 5.1 Lore and style check
 

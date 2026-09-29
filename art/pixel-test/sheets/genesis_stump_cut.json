@@ -1,10 +1,10 @@
 {
   "name": "genesis_stump_cut",
-  "frameWidth": 52,
-  "frameHeight": 52,
+  "frameWidth": 104,
+  "frameHeight": 104,
   "origin": [
-    25.5,
-    25.5
+    51.5,
+    51.5
   ],
   "worldPxPerArtPx": 0.25,
   "rows": [
@@ -12,8 +12,8 @@
     "{\"r\":6}"
   ],
   "frameSizes": [
-    40,
-    52
+    80,
+    104
   ],
   "columns": "3 variants",
   "shadow": {
@@ -25,6 +25,6 @@
     "elevation": "ground prop"
   },
   "image": "genesis_stump_cut.png",
-  "sheetWidth": 156,
-  "sheetHeight": 104
+  "sheetWidth": 312,
+  "sheetHeight": 208
 }
