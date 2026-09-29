@@ -922,7 +922,16 @@
     return { caves: out, props };
   }
 
+  // The ship comes down in a corner of the map (one of the four, picked by the seed), unless a
+  // landing site was asked for. Woodlands keeps it LANDING_MARGIN tiles from the edges and
+  // off water, so it settles on the nearest dry ground to that corner.
+  function defaultLanding(seed){
+    const W = G.CONFIG.COLS, H = G.CONFIG.ROWS, c = Math.floor(G.hashRandom(seed >>> 0, 0xc0) * 4) & 3;
+    return { x: c & 1 ? W - 1 : 0, y: c & 2 ? H - 1 : 0 };   // clamped inward by MapGen.landing
+  }
+
   function genesis(seed, opts = {}){
+    if (!opts.landing) opts = { ...opts, landing: G.MapGen.landing(defaultLanding(seed)) };
     const grid = G.MapGen.woodlands(seed, opts);
     grid.art.generator = 'genesis';
     grid.art.version = VERSION;
@@ -938,5 +947,5 @@
   }
 
   G.MapGen.genesis = genesis;
-  G.MapGen.types.genesis = { name: 'Genesis v' + VERSION, generate: genesis, clearLanding: true };
+  G.MapGen.types.genesis = { name: 'Genesis v' + VERSION, generate: genesis, clearLanding: true, defaultLanding };
 })();

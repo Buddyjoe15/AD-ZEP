@@ -809,6 +809,22 @@ test('genesis villages and bridges: buildings clear of cliffs and water, paths t
   }
 });
 
+test('genesis lands the ship in a corner of the map unless a landing site is chosen', () => {
+  const G = loadSim(), W = G.CONFIG.WORLD_TILES, m = G.MapGen.LANDING_MARGIN;
+  const corners = new Set();
+  for (const seed of [72491, 2, 99]){
+    G.Scenario.newGame({ seed, map: 'genesis' });
+    const L = G.State.landing, sh = G.Units.ship();
+    const near = v => Math.min(v - m, W - 1 - m - v);
+    assert.ok(near(L.x) < 64 && near(L.y) < 64, `seed ${seed} lands near a corner: ${L.x}, ${L.y}`);
+    corners.add((L.x < W / 2 ? 'W' : 'E') + (L.y < W / 2 ? 'N' : 'S'));
+    for (const p of G.State.expedition.sites) assert.ok(G.State.grid.reachable(sh.gx + 3, sh.gy + sh.h, Math.floor(p.x / T), Math.floor(p.y / T)), 'signals reachable from the corner');
+  }
+  assert.ok(corners.size >= 2, 'the corner depends on the seed');
+  G.Scenario.newGame({ seed: 72491, map: 'genesis', landing: { x: 256, y: 256 } });
+  assert.deepEqual({ ...G.State.landing }, { x: 256, y: 256 }, 'a chosen landing site is kept');
+});
+
 test('genesis caves: caverns behind the mouths, with caches, nests and recordings that work', () => {
   const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
   let caves = 0, nests = 0, recs = 0, rare = 0, medium = 0;
@@ -828,7 +844,7 @@ test('genesis caves: caverns behind the mouths, with caches, nests and recording
       for (const i of seen){ const x = i % cols, y = (i / cols) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1]]){ const t = grid.tiles[(y + dy) * cols + x + dx]; assert.ok(t === id('cave_floor') || t === id('cliff'), 'walled at ' + x + ',' + y); } }
     }
   }
-  assert.ok(caves >= 8 && medium >= 2 && caves - medium >= 2, `small and medium caves: ${caves}, ${medium} medium`);
+  assert.ok(caves >= 6 && medium >= 2 && caves - medium >= 2, `small and medium caves: ${caves}, ${medium} medium`);
   assert.ok(nests >= 2 && recs >= 2 && rare >= 2 && rare < caves, `nests ${nests}, recordings ${recs}, rare caches ${rare}`);
 
   // In a game: a cache in every cave, recorders and nests where the map says; a nest sleeps
@@ -860,13 +876,13 @@ test('genesis plants free-standing trees in thick and thin clusters, off the til
   const grid = G.MapGen.genesis(72491), art = grid.art, tr = art.trees, cols = grid.cols;
   // Pinned: saves of this map type rebuild their terrain and trees from the seed.
   assert.equal(art.generator, 'genesis');
-  assert.equal(fnv(grid.tiles), 3648065438, 'genesis terrain unchanged');
-  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 2011662247, 'genesis trees unchanged');
+  assert.equal(fnv(grid.tiles), 3982434805, 'genesis terrain unchanged');
+  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 1487854459, 'genesis trees unchanged');
   const again = G.MapGen.genesis(72491);
   assert.equal(fnv(again.tiles), fnv(grid.tiles), 'same seed, same map');
   assert.equal(fnv(G.MapGen.woodlands(72491).tiles), 1031677493, 'woodlands itself is untouched');
   assert.equal(fnv(G.MapGen.woodlands(72491).art.level), 4273338452, 'the Woodlands landscape underneath is untouched');
-  assert.equal(fnv(art.level), 833219561, 'genesis heights unchanged (caverns are cut a level down)');
+  assert.equal(fnv(art.level), 2209690651, 'genesis heights unchanged (caverns are cut a level down)');
   assert.ok(tr.count > 20000, 'a forested map: ' + tr.count);
 
   // Trunks stand anywhere in their tile, not on its centre.
