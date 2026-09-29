@@ -693,6 +693,10 @@ test('building walls: press and drag builds a row in the direction dragged, prev
     });
     // Placement centres a structure on the pointer: point at the middle of a 2 × 2 wall section.
     const cellCentre = async (gx, gy) => screen(page, (gx + 1) * 48, (gy + 1) * 48);
+    // Hovering (no button) shows the outline where the section would go.
+    const h = await cellCentre(at.gx + 2, at.gy + 2);
+    await page.mouse.move(h.x - 30, h.y); await page.mouse.move(h.x, h.y, { steps: 3 });
+    assert.deepEqual(await page.evaluate(() => { const p = GW.State.buildPreview; return p && [p.gx, p.gy, p.sx, p.sy]; }), [at.gx + 2, at.gy + 2, 0, 0], 'the outline follows the mouse');
     // Drag east 8 tiles (and a little south): a row of 5 east-west.
     let a = await cellCentre(at.gx, at.gy), b = await cellCentre(at.gx + 8, at.gy + 1);
     await page.mouse.move(a.x, a.y); await page.mouse.down();

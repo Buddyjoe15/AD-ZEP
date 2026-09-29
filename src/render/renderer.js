@@ -417,7 +417,7 @@
           g.beginPath(); g.arc(s.x2, s.y2, missile ? 70 : 40, 0, TAU); g.fill();
         }
       }
-      if (S.buildPreview) this.drawBuildGrid(g, z, S.buildPreview);
+      if (S.buildMode && S.buildMode.active && S.buildMode.key) this.drawBuildGrid(g, z);
       if (S.buildPreview){
         const bp = S.buildPreview, d = G.Defs.buildables.get(bp.key) || { w: 1, h: 1, cost: {} }, builder = !!G.Construction.builder(S.buildMode.builderId);
         const cell = (o, ok) => {
@@ -447,28 +447,34 @@
         });
       }
     },
-    // The building grid while placing a structure, around the preview: tile lines, the
-    // quarter-tile cells inside them (when zoomed in enough to see them), and ground nothing
-    // can be built on (cliffs, water, trees) shaded red. It fades out with distance.
-    drawBuildGrid(g, z, bp){
-      const S = G.State, grid = S.grid, T = G.CONFIG.TILE, K = G.Buildings.SUB, R = 9;
-      const d = G.Defs.buildables.get(bp.key) || { w: 1, h: 1 };
-      const cx = G.Buildings.fx(bp) + d.w / 2, cy = G.Buildings.fy(bp) + d.h / 2;
-      const x0 = Math.max(0, Math.floor(cx - R)), y0 = Math.max(0, Math.floor(cy - R)), x1 = Math.min(grid.cols, Math.ceil(cx + R)), y1 = Math.min(grid.rows, Math.ceil(cy + R));
-      const fine = T / K * z >= 5;
+    // The building grid while a structure is picked for placing, over the whole view: tile
+    // lines, the quarter-tile cells inside them (when zoomed in enough to see them), ground
+    // nothing can be built on (cliffs, water, trees) shaded red, and the footprint of every
+    // structure and site, so it is clear which cells each one takes.
+    drawBuildGrid(g, z){
+      const S = G.State, grid = S.grid, T = G.CONFIG.TILE, K = G.Buildings.SUB, c = S.camera;
+      if (z < 0.3) return;
+      const x0 = Math.max(0, Math.floor(c.x / T)), y0 = Math.max(0, Math.floor(c.y / T));
+      const x1 = Math.min(grid.cols, Math.ceil((c.x + this.w / z) / T)), y1 = Math.min(grid.rows, Math.ceil((c.y + this.h / z) / T));
       g.save();
-      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++){
-        const f = 1 - Math.hypot(x + 0.5 - cx, y + 0.5 - cy) / R;
-        if (f <= 0) continue;
-        if (!grid.terrainPassable(x, y)){ g.fillStyle = `rgba(220,60,50,${(0.32 * f).toFixed(3)})`; g.fillRect(x * T, y * T, T, T); }
-        g.strokeStyle = `rgba(230,240,225,${(0.28 * f).toFixed(3)})`; g.lineWidth = 1 / z;
-        g.strokeRect(x * T, y * T, T, T);
-        if (fine){
-          g.strokeStyle = `rgba(230,240,225,${(0.2 * f).toFixed(3)})`; g.beginPath();
-          for (let i = 1; i < K; i++){ g.moveTo(x * T + i * T / K, y * T); g.lineTo(x * T + i * T / K, (y + 1) * T); g.moveTo(x * T, y * T + i * T / K); g.lineTo((x + 1) * T, y * T + i * T / K); }
-          g.stroke();
-        }
+      g.fillStyle = 'rgba(220,60,50,.3)';
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (!grid.terrainPassable(x, y)) g.fillRect(x * T, y * T, T, T);
+      const lines = (step, style) => {
+        g.strokeStyle = style; g.lineWidth = 1 / z; g.beginPath();
+        for (let x = x0 * T; x <= x1 * T; x += step){ g.moveTo(x, y0 * T); g.lineTo(x, y1 * T); }
+        for (let y = y0 * T; y <= y1 * T; y += step){ g.moveTo(x0 * T, y); g.lineTo(x1 * T, y); }
+        g.stroke();
+      };
+      if (T / K * z >= 5) lines(T / K, 'rgba(230,240,225,.13)');
+      lines(T, 'rgba(230,240,225,.3)');
+      // Footprints of what is already there.
+      g.strokeStyle = 'rgba(255,236,150,.55)'; g.lineWidth = 1.5 / z; g.setLineDash([4 / z, 3 / z]); g.beginPath();
+      for (const o of [...S.buildings, ...S.constructionSites]){
+        const x = G.Buildings.fx(o) * T, y = G.Buildings.fy(o) * T;
+        if (x + o.w * T < x0 * T || y + o.h * T < y0 * T || x > x1 * T || y > y1 * T) continue;
+        g.rect(x, y, o.w * T, o.h * T);
       }
+      g.stroke(); g.setLineDash([]);
       g.restore();
     },
     drawMinimap(){

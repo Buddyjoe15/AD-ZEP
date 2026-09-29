@@ -203,6 +203,8 @@
     },
     move(e){
       const o = this.ptr.get(e.pointerId);
+      // A mouse hovering in build mode: the outline of the structure follows the pointer.
+      if (!o && e.pointerType === 'mouse' && G.BuildUI.placing() && !G.State.paused){ const p = this.p(e), q = G.worldFromScreen(p.x, p.y); G.BuildUI.previewAt(q.x, q.y); return; }
       if (!o) return;
       const p = this.p(e), dist = Math.hypot(p.x - o.sx, p.y - o.sy);
       if (this.editGesture && this.editGesture.id === e.pointerId){
