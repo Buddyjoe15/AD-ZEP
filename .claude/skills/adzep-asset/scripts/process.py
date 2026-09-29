@@ -14,9 +14,12 @@ Subcommands
   turret   IMG --meta M --pivot PX PY --scale S --out F
            turret PIVOT (source px, usually the middle of its base plate) lands on the
            body center; S = turret size relative to the body source image.
-  legs     IMG --meta M --outdir D [--core-radius R] [--angles a1 a2 ...]
+  legs     IMG --meta M --outdir D [--core-radius R] [--angles a1 a2 ...] [--max-half DEG]
            split radial legs off a body image: writes core.png + leg0..N.png, hip
            pivots and alternating gait groups into META. Auto-detects if not given.
+           Each leg takes the wedge half-way to its neighbours; within 1.5 R it is
+           capped at DEG, so hull parts beside the hips (a hopper, a nose) stay on
+           the core. Everything outside the leg wedges stays on the core.
   preview  --meta M --parts D --out F   rest pose (+ two gait poses if legs) at 3x
   check    DIR [--meta M]                confirm every PNG is the META size (default 192)
 """
@@ -117,12 +120,12 @@ def cmd_legs(a):
         h = np.convolve(np.r_[h[-2:], h, h[:2]], np.ones(5)/5, 'same')[2:-2]
         angles = [i*5+2.5 for i in range(72) if h[i] > 0.25*h.max() and h[i] >= h[i-1] and h[i] >= h[(i+1) % 72]]
     angles = sorted(angles); n = len(angles)
-    core = d.copy(); core[r > R] = 0
-    frame(Image.fromarray(core), cx, cy, half).save(os.path.join(a.outdir, 'core.png'))
-    legs = []
+    legs = []; taken = np.zeros(op.shape, bool)
     for i, c in enumerate(angles):
         gap = min((angles[(i+1) % n]-c) % 360, (c-angles[i-1]) % 360) / 2
-        sec = np.abs((ang - c + 180) % 360 - 180) <= gap
+        dev = np.abs((ang - c + 180) % 360 - 180); sec = dev <= gap
+        if a.max_half: sec &= (dev <= a.max_half) | (r > R*1.5)  # narrow near the hull only
+        taken |= sec & (r > R)
         leg = d.copy(); leg[~(sec & (r >= R-45))] = 0
         ring = sec & op & (r > R-10) & (r < R+35)
         if ring.any(): py, px = yy[ring].mean(), xx[ring].mean()
@@ -130,6 +133,9 @@ def cmd_legs(a):
         name = f"leg{i}"
         frame(Image.fromarray(leg), cx, cy, half).save(os.path.join(a.outdir, name + '.png'))
         legs.append({'n': name, 'angle': round(float(c), 1), 'px': round(float(px-(cx-half))*k, 2), 'py': round(float(py-(cy-half))*k, 2)})
+    # the core keeps everything outside the leg wedges (a hopper or nose past R stays on the body)
+    core = d.copy(); core[taken] = 0
+    frame(Image.fromarray(core), cx, cy, half).save(os.path.join(a.outdir, 'core.png'))
     for j, l in enumerate(sorted(legs, key=lambda l: l['angle'])): l['g'] = 'A' if j % 2 == 0 else 'B'
     m.update({'core_radius_src': int(R), 'legs': legs}); wmeta(a.meta, m)
     print(f"core radius={R}  legs={[(l['n'], l['angle'], l['g']) for l in legs]}")
@@ -165,7 +171,7 @@ p.add_argument('--center', nargs=2, type=int); p.add_argument('--half', type=int
 p = sp.add_parser('turret'); p.add_argument('img'); p.add_argument('--meta', required=True); p.add_argument('--out', required=True)
 p.add_argument('--pivot', nargs=2, type=float, required=True); p.add_argument('--scale', type=float, default=1.0)
 p = sp.add_parser('legs'); p.add_argument('img'); p.add_argument('--meta', required=True); p.add_argument('--outdir', required=True)
-p.add_argument('--core-radius', type=int); p.add_argument('--angles', nargs='+', type=float)
+p.add_argument('--core-radius', type=int); p.add_argument('--angles', nargs='+', type=float); p.add_argument('--max-half', type=float)
 p = sp.add_parser('preview'); p.add_argument('--meta', required=True); p.add_argument('--parts', required=True); p.add_argument('--out', required=True)
 p = sp.add_parser('check'); p.add_argument('dir'); p.add_argument('--meta')
 a = ap.parse_args()
