@@ -1,0 +1,166 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>__TITLE__</title>
+<style>
+:root{--bg:#1b2026;--panel:#262d35;--ink:#dfe6ea;--dim:#8d99a3;--cyan:#39e6f0;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1b2026}}
+:root[data-theme="dark"]{--bg:#1b2026}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.4 "Trebuchet MS",system-ui,sans-serif}
+body{display:flex;flex-direction:column}
+header{padding:12px 16px 4px}h1{font-size:18px;margin:0}
+p{margin:2px 0 0;color:var(--dim);font-size:13px}
+#wrap{flex:1;min-height:0;position:relative}
+canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+.bar{display:flex;gap:8px;flex-wrap:wrap;padding:10px 16px 14px}
+button{background:var(--panel);color:var(--ink);border:1px solid #3a444f;border-radius:6px;padding:9px 12px;font:inherit;font-size:14px}
+button[aria-pressed="true"]{border-color:var(--cyan);color:var(--cyan)}
+button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+</style></head><body>
+<header><h1 id="ttl"></h1><p id="sub"></p></header>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div class="bar">
+<button id="fire" aria-pressed="true">Firing</button>
+<button id="grid" aria-pressed="true">Grid</button>
+<button id="zoom">Zoom 1×</button>
+<button id="add">Add target</button>
+</div>
+<script>
+/* ---- unit config, injected by build_demo.py ----
+ U.body        data URI (body or leg-less core), 192x192, front = up
+ U.turret      data URI or null (192x192, pivot at center, barrels up)
+ U.legs        [{img,px,py,g}] hip pivots in sprite px, gait group A/B
+ U.move        "legs" | "hover" | "wheels"
+ U.speed       px/s    U.turnRate rad/s   U.turretRate rad/s
+ U.weapon      "bullets" | "laser" | "none"   U.fireInterval s   U.range px
+ U.muzzles     [[x,y]] relative to pivot, turret pointing up (body if no turret)
+ U.exhausts    [[x,y]] smoke points relative to center, body pointing up
+ U.swing       leg swing (rad)   U.stride px per gait radian            */
+const U=/*UNIT*/null;
+const TILE=96,SPRITE=192;
+document.getElementById('ttl').textContent=U.name;
+document.getElementById('sub').textContent='Tap to move.'+(U.weapon!=='none'?' It attacks the nearest target.':'');
+const c=document.getElementById('c'),x=c.getContext('2d');
+let W,H,DPR,zoom=1;
+function resize(){DPR=devicePixelRatio||1;W=c.clientWidth;H=c.clientHeight;c.width=W*DPR;c.height=H*DPR}
+addEventListener('resize',resize);resize();
+const load=s=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=s});
+// cyan light pixels -> glow points, found automatically
+function findLights(img){
+  const k=document.createElement('canvas');k.width=img.width;k.height=img.height;
+  const g=k.getContext('2d');g.drawImage(img,0,0);const d=g.getImageData(0,0,k.width,k.height).data;
+  const pts=[],seen=new Uint8Array(k.width*k.height),w=k.width;
+  const cy=i=>d[i*4+3]>200&&d[i*4+2]>170&&d[i*4+1]>160&&d[i*4]<120;
+  for(let i=0;i<seen.length;i++){if(seen[i]||!cy(i))continue;
+    let st=[i],sx=0,sy=0,n=0;seen[i]=1;
+    while(st.length){const j=st.pop(),px=j%w,py=(j/w)|0;sx+=px;sy+=py;n++;
+      for(const[a,b]of[[1,0],[-1,0],[0,1],[0,-1]]){const qx=px+a,qy=py+b;if(qx<0||qy<0||qx>=w||qy>=k.height)continue;
+        const q=qy*w+qx;if(!seen[q]&&cy(q)){seen[q]=1;st.push(q)}}}
+    if(n>=2)pts.push({x:sx/n,y:sy/n,r:Math.sqrt(n),ph:Math.random()*6})}
+  return pts}
+const S={x:0,y:0,tx:0,ty:0,bodyAng:-Math.PI/2,turAng:-Math.PI/2,walk:0,gait:0,cool:0,barrel:0,spin:0,beam:0,t:0};
+let targets=[],bullets=[],flashes=[],sparks=[],smoke=[],firing=U.weapon!=='none',grid=true,body,tur,legs=[],bL=[],tL=[],beamTarget=null;
+function addTarget(){const a=Math.random()*6.28,r=260+Math.random()*120;
+  targets.push({x:S.x+Math.cos(a)*r,y:S.y+Math.sin(a)*r,a:Math.random()*6.28,s:0.4+Math.random()*0.5,hp:30,hit:0})}
+const btn=(id,f)=>document.getElementById(id).onclick=f;
+btn('fire',e=>{firing=!firing;e.target.setAttribute('aria-pressed',firing);e.target.textContent=firing?'Firing':'Hold fire'});
+btn('grid',e=>{grid=!grid;e.target.setAttribute('aria-pressed',grid)});
+btn('zoom',e=>{zoom=zoom===1?2:zoom===2?0.5:1;e.target.textContent='Zoom '+zoom+'×'});
+btn('add',addTarget);
+if(U.weapon==='none'){document.getElementById('fire').remove();document.getElementById('add').remove()}
+c.addEventListener('pointerdown',e=>{const r=c.getBoundingClientRect();
+  S.tx=(e.clientX-r.left-W/2)/zoom+S.x;S.ty=(e.clientY-r.top-H/2)/zoom+S.y});
+const angDiff=(a,b)=>Math.atan2(Math.sin(b-a),Math.cos(b-a));
+const turn=(a,want,rate,dt)=>{const d=angDiff(a,want);return a+Math.sign(d)*Math.min(Math.abs(d),rate*dt)};
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+// rotate a sprite-space point (front=up) into world space around the unit
+function toWorld(px,py,ang){const ca=Math.cos(ang+Math.PI/2),sa=Math.sin(ang+Math.PI/2);return[S.x+px*ca-py*sa,S.y+px*sa+py*ca]}
+let last=0;
+function step(t){const dt=Math.min(0.05,(t-last)/1000||0);last=t;S.t=t/1000;update(dt);draw();requestAnimationFrame(step)}
+function update(dt){
+  const dx=S.tx-S.x,dy=S.ty-S.y,dist=Math.hypot(dx,dy),moving=dist>4;
+  let stepped=0;
+  if(moving){const want=Math.atan2(dy,dx),before=S.bodyAng;S.bodyAng=turn(S.bodyAng,want,U.turnRate,dt);
+    stepped+=Math.abs(angDiff(before,S.bodyAng))*6;
+    if(Math.abs(angDiff(S.bodyAng,want))<0.6){const v=Math.min(U.speed*dt,dist);S.x+=Math.cos(S.bodyAng)*v;S.y+=Math.sin(S.bodyAng)*v;stepped+=v/U.stride}}
+  S.walk+=stepped;S.moving=moving;
+  S.gait+=((moving?1:0)-S.gait)*Math.min(1,dt*(moving?8:5));
+  // engine smoke
+  if(U.exhausts.length&&!reduced){const rate=moving?40:12;
+    for(const e of U.exhausts)if(Math.random()<rate*dt){const[wx,wy]=toWorld(e[0],e[1],S.bodyAng);
+      smoke.push({x:wx,y:wy,vx:-Math.cos(S.bodyAng)*20+(Math.random()-.5)*10,vy:-Math.sin(S.bodyAng)*20+(Math.random()-.5)*10,life:1,r:3})}}
+  for(const s of smoke){s.x+=s.vx*dt;s.y+=s.vy*dt;s.life-=dt*0.9;s.r+=dt*9}smoke=smoke.filter(s=>s.life>0);
+  if(U.weapon==='none')return;
+  for(const g of targets){g.a+=dt*g.s;g.x+=Math.cos(g.a)*40*dt;g.y+=Math.sin(g.a*1.3)*40*dt;g.hit=Math.max(0,g.hit-dt*6)}
+  if(targets.length<2)addTarget();
+  let best=null,bd=U.range;for(const g of targets){const d=Math.hypot(g.x-S.x,g.y-S.y);if(d<bd){bd=d;best=g}}
+  const aimAng=tur?S.turAng:S.bodyAng;
+  if(tur){S.turAng=turn(S.turAng,best?Math.atan2(best.y-S.y,best.x-S.x):S.bodyAng,U.turretRate,dt)}
+  const aimed=best&&Math.abs(angDiff(aimAng,Math.atan2(best.y-S.y,best.x-S.x)))<0.12;
+  S.cool-=dt;beamTarget=null;S.beam=Math.max(0,S.beam-dt*3);
+  if(firing&&aimed){S.spin=Math.min(1,S.spin+dt*3);
+    if(U.weapon==='bullets'&&S.cool<=0&&S.spin>0.5){S.cool=U.fireInterval;S.barrel=(S.barrel+1)%U.muzzles.length;
+      const m=U.muzzles[S.barrel],[mx,my]=toWorld(m[0],m[1],aimAng),sp=(Math.random()-.5)*0.06;
+      bullets.push({x:mx,y:my,vx:Math.cos(aimAng+sp)*900,vy:Math.sin(aimAng+sp)*900,life:0.5});
+      flashes.push({x:mx,y:my,a:aimAng,life:0.05})}
+    if(U.weapon==='laser'){ // charge up, then a beam pulse
+      if(S.cool<=0){S.cool=U.fireInterval;S.beam=1;best.hp-=8;best.hit=1;
+        for(let i=0;i<10;i++)sparks.push({x:best.x,y:best.y,vx:(Math.random()-.5)*260,vy:(Math.random()-.5)*260,life:0.4})}
+      if(S.beam>0)beamTarget=best}}
+  else S.spin=Math.max(0,S.spin-dt*1.5);
+  for(const b of bullets){b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;
+    for(const g of targets)if(Math.hypot(g.x-b.x,g.y-b.y)<16){b.life=0;g.hp--;g.hit=1;
+      for(let i=0;i<3;i++)sparks.push({x:b.x,y:b.y,vx:(Math.random()-.5)*200,vy:(Math.random()-.5)*200,life:0.25})}}
+  for(const g of targets)if(g.hp<=0)for(let i=0;i<24;i++)sparks.push({x:g.x,y:g.y,vx:(Math.random()-.5)*320,vy:(Math.random()-.5)*320,life:0.6});
+  targets=targets.filter(g=>g.hp>0);bullets=bullets.filter(b=>b.life>0);
+  for(const f of flashes)f.life-=dt;flashes=flashes.filter(f=>f.life>0);
+  for(const s of sparks){s.x+=s.vx*dt;s.y+=s.vy*dt;s.vx*=0.9;s.vy*=0.9;s.life-=dt}sparks=sparks.filter(s=>s.life>0)}
+function glow(px,py,r,a){const g=x.createRadialGradient(px,py,0,px,py,r);g.addColorStop(0,`rgba(90,240,255,${a})`);g.addColorStop(1,'rgba(90,240,255,0)');x.fillStyle=g;x.fillRect(px-r,py-r,r*2,r*2)}
+function lights(pts,ox,oy,scale,a){x.globalCompositeOperation='lighter';for(const p of pts)glow(p.x-ox,p.y-oy,p.r*scale,a(p));x.globalCompositeOperation='source-over'}
+function draw(){const T=S.t;
+  x.setTransform(DPR,0,0,DPR,0,0);x.fillStyle='#2a2f28';x.fillRect(0,0,W,H);
+  x.translate(W/2,H/2);x.scale(zoom,zoom);x.translate(-S.x,-S.y);x.imageSmoothingEnabled=false;
+  const l=S.x-W/2/zoom,t=S.y-H/2/zoom,r=S.x+W/2/zoom,b=S.y+H/2/zoom;
+  if(grid){x.strokeStyle='rgba(255,255,255,0.07)';x.lineWidth=1/zoom;x.beginPath();
+    for(let gx=Math.floor(l/TILE)*TILE;gx<r;gx+=TILE){x.moveTo(gx,t);x.lineTo(gx,b)}
+    for(let gy=Math.floor(t/TILE)*TILE;gy<b;gy+=TILE){x.moveTo(l,gy);x.lineTo(r,gy)}x.stroke()}
+  if(S.moving){x.strokeStyle='rgba(57,230,240,0.5)';x.lineWidth=2/zoom;x.beginPath();x.arc(S.tx,S.ty,10+Math.sin(T*6)*2,0,6.28);x.stroke()}
+  for(const g of targets){x.fillStyle=g.hit?'#fff':'#c0483a';x.beginPath();x.arc(g.x,g.y,12,0,6.28);x.fill();
+    x.fillStyle='#000a';x.fillRect(g.x-14,g.y-22,28,4);x.fillStyle='#e05a45';x.fillRect(g.x-14,g.y-22,28*Math.max(0,g.hp)/30,4)}
+  for(const s of smoke){x.fillStyle=`rgba(150,150,145,${s.life*0.35})`;x.beginPath();x.arc(s.x,s.y,s.r,0,6.28);x.fill()}
+  const amp=reduced?S.gait*0.5:S.gait;
+  let bob=0,sway=0,hover=0;
+  if(U.move==='legs'){bob=Math.abs(Math.sin(S.walk))*1.0*amp;sway=Math.sin(S.walk)*0.015*amp}
+  if(U.move==='hover'&&!reduced){hover=Math.sin(T*2.2)*1.5;sway=Math.sin(T*1.3)*0.02}
+  // shadow (further away when hovering)
+  x.save();x.translate(S.x,S.y);x.fillStyle=U.move==='hover'?'rgba(0,0,0,0.25)':'rgba(0,0,0,0.35)';
+  const so=U.move==='hover'?12+hover:4;x.beginPath();x.ellipse(so,so+2,62,58,0,0,6.28);x.fill();x.restore();
+  x.save();x.translate(S.x,S.y);x.rotate(S.bodyAng+Math.PI/2+sway);x.translate(0,bob+hover);
+  for(const L of legs){const ph=L.g==='A'?S.walk:S.walk+Math.PI;
+    const sw=Math.sin(ph)*U.swing*amp,lift=1+(Math.cos(ph)>0?Math.cos(ph)*0.06*amp:0),side=L.px>SPRITE/2?1:-1;
+    x.save();x.translate(L.px-SPRITE/2,L.py-SPRITE/2-bob);x.rotate(-side*sw);x.scale(lift,lift);x.translate(-L.px,-L.py);
+    x.drawImage(L.img,0,0);lights(L.lights,0,0,2.2,p=>reduced?0.5:0.35+0.3*Math.sin(T*3+p.ph));x.restore()}
+  x.drawImage(body,-SPRITE/2,-SPRITE/2);
+  lights(bL,SPRITE/2,SPRITE/2,2.2,p=>reduced?0.5:0.35+0.3*Math.sin(T*3+p.ph));
+  x.restore();
+  if(tur){const kick=U.weapon==='bullets'&&S.cool>U.fireInterval/2?1.5:0;
+    x.save();x.translate(S.x,S.y);x.rotate(S.turAng+Math.PI/2);x.translate(0,bob+hover+kick);
+    x.drawImage(tur,-SPRITE/2,-SPRITE/2);
+    lights(tL,SPRITE/2,SPRITE/2,2.5,p=>0.5+0.4*S.spin*Math.abs(Math.sin(T*20)));x.restore()}
+  x.globalCompositeOperation='lighter';
+  if(U.weapon==='laser'){const aim=tur?S.turAng:S.bodyAng,m=U.muzzles[0],[mx,my]=toWorld(m[0],m[1],aim);
+    if(S.spin>0&&S.cool>0&&!beamTarget){const ch=1-S.cool/U.fireInterval;glow(mx,my,4+ch*14,0.3+ch*0.6)}
+    if(beamTarget){x.lineCap='round';for(const[w,a]of[[10,0.25*S.beam],[4,0.8*S.beam],[1.5,S.beam]]){
+      x.strokeStyle=`rgba(${w<2?'230,255,255':'90,240,255'},${a})`;x.lineWidth=w;x.beginPath();x.moveTo(mx,my);x.lineTo(beamTarget.x,beamTarget.y);x.stroke()}}}
+  x.lineCap='round';for(const b of bullets){x.strokeStyle='rgba(255,220,120,0.9)';x.lineWidth=2;x.beginPath();x.moveTo(b.x,b.y);x.lineTo(b.x-b.vx*0.02,b.y-b.vy*0.02);x.stroke()}
+  for(const f of flashes){x.save();x.translate(f.x,f.y);x.rotate(f.a);
+    const g=x.createRadialGradient(4,0,0,4,0,14);g.addColorStop(0,'rgba(255,250,200,1)');g.addColorStop(0.4,'rgba(255,190,80,0.8)');g.addColorStop(1,'rgba(255,120,40,0)');
+    x.fillStyle=g;x.beginPath();x.ellipse(6,0,14,6,0,0,6.28);x.fill();x.restore()}
+  for(const s of sparks){x.fillStyle=`rgba(255,200,110,${s.life*3})`;x.fillRect(s.x-1,s.y-1,2,2)}
+  x.globalCompositeOperation='source-over'}
+Promise.all([load(U.body),U.turret?load(U.turret):null,...U.legs.map(l=>load(l.img))]).then(([a,b,...ls])=>{
+  body=a;tur=b;bL=findLights(a);if(b)tL=findLights(b);
+  legs=U.legs.map((l,i)=>({...l,img:ls[i],lights:findLights(ls[i])}));
+  if(U.weapon!=='none'){addTarget();addTarget()}requestAnimationFrame(step)});
+</script></body></html>
