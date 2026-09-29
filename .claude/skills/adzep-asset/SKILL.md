@@ -93,6 +93,12 @@ Work in `/home/claude/<unit_slug>/`. Scripts are in this skill's `scripts/` fold
 Write `unit.json` (only keys that differ from defaults; see `scripts/build_demo.py`):
 - `name`, `move` (legs/hover/wheels), `speed` px/s (slow ~45–60, fast ~110+), `turnRate`
 - `weapon` (bullets/laser/none), `fireInterval` s (rapid 0.07, slow laser 1.2–2), `range`
+- `beam` for a laser: `pulse` (default) or `steady` (continuous, `dps` damage per second;
+  suits mining and building lasers)
+- `idleLift` (e.g. 0.02) and `idlePeriod` s: the body and turret rise and settle while
+  standing still (drawn slightly larger, shadow further off); legs stay planted
+- `speed` matching the game: world px/s from `src/data/units.js` × 4 (4 art px per world px);
+  raise `stride` with it so the legs don't blur (Utility Spider: speed 528, stride 48)
 - `muzzles`: barrel tips relative to the pivot with the gun pointing up, in sprite px.
   `meta.json` has a `muzzle_guess`; read the real tips off the preview (multi-barrel
   guns: one entry per barrel, they fire in rotation).

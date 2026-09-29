@@ -13,6 +13,7 @@ DEFAULTS = {
     "name": "Unit", "move": "legs", "speed": 55, "turnRate": 2.5, "turretRate": 5,
     "weapon": "bullets", "fireInterval": 0.07, "range": 420,
     "muzzles": [[0, -68]], "exhausts": [], "swing": 0.24, "stride": 9,
+    "beam": "pulse", "dps": 12, "idleLift": 0, "idlePeriod": 1.8,
 }
 HERE = os.path.dirname(os.path.abspath(__file__))
 

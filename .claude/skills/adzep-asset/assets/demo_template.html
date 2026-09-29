@@ -37,7 +37,10 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
  U.weapon      "bullets" | "laser" | "none"   U.fireInterval s   U.range px
  U.muzzles     [[x,y]] relative to pivot, turret pointing up (body if no turret)
  U.exhausts    [[x,y]] smoke points relative to center, body pointing up
- U.swing       leg swing (rad)   U.stride px per gait radian            */
+ U.swing       leg swing (rad)   U.stride px per gait radian
+ U.beam        laser only: "pulse" (one pulse per fireInterval) | "steady" (continuous, U.dps per s)
+ U.idleLift    idle breathing: body + turret rise and settle by this fraction of their size
+ U.idlePeriod  seconds per idle breath; legs stay planted, fades out while walking */
 const U=/*UNIT*/null;
 const TILE=192,SPRITE=U.size||192,K=SPRITE/192;
 document.getElementById('ttl').textContent=U.name;
@@ -105,7 +108,10 @@ function update(dt){
       const m=U.muzzles[S.barrel],[mx,my]=toWorld(m[0],m[1],aimAng),sp=(Math.random()-.5)*0.06;
       bullets.push({x:mx,y:my,vx:Math.cos(aimAng+sp)*900,vy:Math.sin(aimAng+sp)*900,life:0.5});
       flashes.push({x:mx,y:my,a:aimAng,life:0.05})}
-    if(U.weapon==='laser'){ // charge up, then a beam pulse
+    if(U.weapon==='laser'&&U.beam==='steady'){ // continuous beam while on target
+      S.beam=Math.min(1,S.beam+dt*11);beamTarget=best;best.hp-=U.dps*dt;best.hit=Math.max(best.hit,0.4);
+      if(Math.random()<dt*30)sparks.push({x:best.x,y:best.y,vx:(Math.random()-.5)*220,vy:(Math.random()-.5)*220,life:0.3})}
+    else if(U.weapon==='laser'){ // charge up, then a beam pulse
       if(S.cool<=0){S.cool=U.fireInterval;S.beam=1;best.hp-=8;best.hit=1;
         for(let i=0;i<10;i++)sparks.push({x:best.x,y:best.y,vx:(Math.random()-.5)*260,vy:(Math.random()-.5)*260,life:0.4})}
       if(S.beam>0)beamTarget=best}}
@@ -134,19 +140,21 @@ function draw(){const T=S.t;
   let bob=0,sway=0,hover=0;
   if(U.move==='legs'){bob=Math.abs(Math.sin(S.walk))*1.0*amp;sway=Math.sin(S.walk)*0.015*amp}
   if(U.move==='hover'&&!reduced){hover=Math.sin(T*2.2)*1.5;sway=Math.sin(T*1.3)*0.02}
+  // idle breathing: the frame rises (drawn slightly larger, shadow further off) and settles
+  const lift=reduced?0:U.idleLift*(1-S.gait)*(0.5+0.5*Math.sin(T*6.2832/U.idlePeriod)),bs=1+lift;
   // shadow (further away when hovering)
   x.save();x.translate(S.x,S.y);x.fillStyle=U.move==='hover'?'rgba(0,0,0,0.25)':'rgba(0,0,0,0.35)';
-  const so=U.move==='hover'?12+hover:4;x.beginPath();x.ellipse(so,so+2,62*K,58*K,0,0,6.28);x.fill();x.restore();
+  const so=(U.move==='hover'?12+hover:4)+lift*120;x.beginPath();x.ellipse(so,so+2,62*K,58*K,0,0,6.28);x.fill();x.restore();
   x.save();x.translate(S.x,S.y);x.rotate(S.bodyAng+Math.PI/2+sway);x.translate(0,bob+hover);
   for(const L of legs){const ph=L.g==='A'?S.walk:S.walk+Math.PI;
     const sw=Math.sin(ph)*U.swing*amp,lift=1+(Math.cos(ph)>0?Math.cos(ph)*0.06*amp:0),side=L.px>SPRITE/2?1:-1;
-    x.save();x.translate(L.px-SPRITE/2,L.py-SPRITE/2-bob);x.rotate(-side*sw);x.scale(lift,lift);x.translate(-L.px,-L.py);
+    x.save();x.translate((L.px-SPRITE/2)*bs,(L.py-SPRITE/2)*bs-bob);x.rotate(-side*sw);x.scale(lift,lift);x.translate(-L.px,-L.py);
     x.drawImage(L.img,0,0);lights(L.lights,0,0,2.2,p=>reduced?0.5:0.35+0.3*Math.sin(T*3+p.ph));x.restore()}
-  x.drawImage(body,-SPRITE/2,-SPRITE/2);
+  x.scale(bs,bs);x.drawImage(body,-SPRITE/2,-SPRITE/2);
   lights(bL,SPRITE/2,SPRITE/2,2.2,p=>reduced?0.5:0.35+0.3*Math.sin(T*3+p.ph));
   x.restore();
   if(tur){const kick=U.weapon==='bullets'&&S.cool>U.fireInterval/2?1.5:0;
-    x.save();x.translate(S.x,S.y);x.rotate(S.turAng+Math.PI/2);x.translate(0,bob+hover+kick);
+    x.save();x.translate(S.x,S.y);x.rotate(S.turAng+Math.PI/2);x.translate(0,bob+hover+kick);x.scale(bs,bs);
     x.drawImage(tur,-SPRITE/2,-SPRITE/2);
     lights(tL,SPRITE/2,SPRITE/2,2.5,p=>0.5+0.4*S.spin*Math.abs(Math.sin(T*20)));x.restore()}
   x.globalCompositeOperation='lighter';
