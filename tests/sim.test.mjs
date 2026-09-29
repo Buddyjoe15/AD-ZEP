@@ -877,6 +877,24 @@ test('caves are underground: units go in and out through the entrance, carry on 
   assert.equal(G.Buildings.canPlace(cave.inside.x, cave.inside.y, 1, 1), false);
 });
 
+test('genesis bridges are square decks two or three tiles wide, and one-level banks are mostly grassy slopes', () => {
+  const G = loadSim(), id = k => G.Defs.terrain.get(k).id, B = id('bridge'), CLIFF = id('cliff'), SLOPE = id('slope');
+  for (const seed of [72491, 1, 3, 4, 5]){
+    const g = G.MapGen.genesis(seed), W = g.cols, seen = new Uint8Array(g.size);
+    let cliffs = 0, slopes = 0;
+    for (let s = 0; s < g.size; s++){
+      if (g.tiles[s] === CLIFF) cliffs++; else if (g.tiles[s] === SLOPE) slopes++;
+      if (g.tiles[s] !== B || seen[s]) continue;
+      const q = [s]; seen[s] = 1; let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+      for (let h = 0; h < q.length; h++){ const i = q[h], x = i % W, y = (i / W) | 0; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]){ const j = (y + dy) * W + x + dx; if (g.tiles[j] === B && !seen[j]){ seen[j] = 1; q.push(j); } } }
+      const w = x1 - x0 + 1, h = y1 - y0 + 1;
+      assert.ok(q.length === w * h && Math.min(w, h) >= 2 && Math.min(w, h) <= 3 && Math.max(w, h) <= 15, `seed ${seed}: bridge at ${x0},${y0} is ${w}×${h} (${q.length} tiles)`);
+    }
+    assert.ok(cliffs < slopes, `seed ${seed}: fewer cliff tiles (${cliffs}) than grassy slope (${slopes})`);
+  }
+});
+
 test('genesis lands the ship in a corner of the map unless a landing site is chosen', () => {
   const G = loadSim(), W = G.CONFIG.WORLD_TILES, m = G.MapGen.LANDING_MARGIN;
   const corners = new Set();
@@ -960,7 +978,7 @@ test('genesis plants free-standing trees in thick and thin clusters, off the til
   const grid = G.MapGen.genesis(72491), art = grid.art, tr = art.trees, cols = grid.cols;
   // Pinned: saves of this map type rebuild their terrain and trees from the seed.
   assert.equal(art.generator, 'genesis');
-  assert.equal(fnv(grid.tiles), 4122279449, 'genesis terrain unchanged');
+  assert.equal(fnv(grid.tiles), 3167226598, 'genesis terrain unchanged');
   assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 1122145741, 'genesis trees unchanged');
   const again = G.MapGen.genesis(72491);
   assert.equal(fnv(again.tiles), fnv(grid.tiles), 'same seed, same map');

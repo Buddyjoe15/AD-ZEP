@@ -395,12 +395,30 @@
 
 
 
+  // Share of one-level banks that are grassy slopes rather than cliff (noise below this).
+  const SOFT_BANKS = 0.62;
   // One-level banks: Woodlands mixes grassy slopes and short pieces of cliff along the same
   // edge, which reads as grass growing down a rock face. First each stretch of bank is made
   // one or the other, then long slopes become cliff with ramps cut through it (below).
-  function banks(grid){
+  function banks(grid, s = 0){
     const W = grid.cols, H = grid.rows, tiles = grid.tiles, lvl = grid.art.level, id = k => G.Defs.terrain.get(k).id;
-    const CLIFF = id('cliff'), SLOPE = id('slope');
+    const CLIFF = id('cliff'), SLOPE = id('slope'), CAVE = id('cave'), FALLS = id('waterfall');
+    // Fewer cliffs: in broad stretches (a low noise field, about two thirds of the map) a bank
+    // one level high is a grassy slope rather than rock. Drops of two levels or more, and the
+    // rock round cave mouths and waterfalls, stay cliff.
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++){
+      const i = y * W + x;
+      if (tiles[i] !== CLIFF || vnoise(x / 38, y / 38, s + 1501) > SOFT_BANKS) continue;
+      let low = lvl[i], keep = false;
+      for (let dy = -2; dy <= 2 && !keep; dy++) for (let dx = -2; dx <= 2; dx++){
+        const xx = x + dx, yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+        const j = yy * W + xx, t = tiles[j];
+        if (t === CAVE || t === FALLS){ keep = true; break; }
+        if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) low = Math.min(low, lvl[j]);
+      }
+      if (!keep && lvl[i] - low === 1) tiles[i] = SLOPE;
+    }
     for (let pass = 0; pass < 2; pass++){
       const flip = [];
       for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++){
@@ -420,10 +438,10 @@
       for (const [i, t] of flip) tiles[i] = t;
     }
     // Then, as in Factorio, the cliff runs on unbroken and ramps are gaps cut in it: each run
-    // of slope keeps a ramp three tiles wide every RAMP_EVERY tiles along it (at least one,
+    // of slope keeps a ramp 2 × RAMP_HALF + 1 tiles wide every RAMP_EVERY tiles along it (at least one,
     // in its middle, so every way up it gave stays), and the rest becomes cliff. Slope beside
     // a trail or carved steps stays, so trails keep their way through.
-    const RAMP_EVERY = 16, PATH = id('path'), STAIRS = id('steps'), cut = [];
+    const RAMP_EVERY = 10, RAMP_HALF = 3, PATH = id('path'), STAIRS = id('steps'), cut = [];
     const seen = new Uint8Array(W * H), D8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
     const bfs = (start, cells) => {
       const dist = new Map([[start, 0]]), q = [start];
@@ -442,7 +460,7 @@
       const n = Math.max(1, Math.round(len / RAMP_EVERY)), centres = Array.from({ length: n }, (_, k) => Math.round((k + 0.5) * len / n - 0.5));
       for (const i of cells){
         const d = along.get(i), x = i % W, y = (i / W) | 0;
-        if (centres.some(c => Math.abs(d - c) <= 1)) continue;
+        if (centres.some(c => Math.abs(d - c) <= RAMP_HALF)) continue;
         let trail = false;
         for (const [dx, dy] of D8){ const t = tiles[(y + dy) * W + x + dx]; if (t === PATH || t === STAIRS) trail = true; }
         if (!trail){ tiles[i] = CLIFF; cut.push(i); }
@@ -498,6 +516,13 @@
     const at = (x, y) => inb(x, y) ? tiles[y * W + x] : -1;
     const wetT = t => t === WATER || t === DEEP || t === BOG;
     const seen = new Uint8Array(N), out = [];
+    // A deck is fine as it is when it fills a rectangle two or three tiles wide.
+    const straight = cells => {
+      let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+      for (const i of cells){ const x = i % W, y = (i / W) | 0; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      const w = x1 - x0 + 1, h = y1 - y0 + 1;
+      return cells.length === w * h && Math.min(w, h) >= 2 && Math.min(w, h) <= 3;
+    };
     for (let s0 = 0; s0 < N; s0++){
       if (tiles[s0] !== BRIDGE || seen[s0]) continue;
       const st = [s0], cells = [];
@@ -518,78 +543,104 @@
           if (dx){ if (land) sEW++; else sNS++; } else { if (land) sNS++; else sEW++; }
         }
       }
-      if (nearFalls) continue;
+      // A deck that can't be made a straight crossing (by a waterfall, too long, or its trails
+      // can't be joined up) becomes an earthen causeway: a trail on land, not a heap of planks.
+      const causeway = () => { for (const i of cells){ tiles[i] = PATH; grid.art.detail[i] = 0; } };
+      if (nearFalls){ if (!straight(cells)) causeway(); continue; }
       const ew = sEW >= sNS, water = [...under].sort((a, b) => b[1] - a[1])[0]?.[0] ?? WATER;
       // In (u, v): u along the way over, v across it.
       const X = (u, v) => ew ? u : v, Y = (u, v) => ew ? v : u;
       const U = i => ew ? i % W : (i / W) | 0, V = i => ew ? (i / W) | 0 : i % W;
       const v0 = Math.round(cells.reduce((a, i) => a + V(i), 0) / cells.length - 0.5);
-      let u0 = Math.min(...cells.map(U)), u1 = Math.max(...cells.map(U));
+      // Two ways to lay the new deck are tried: straight across where the old one was centred (how
+      // wide the water is there), then over the whole length the old deck ran (a trail along a
+      // bank leaves a long one, whose trails may only reach its ends). The first whose trails all
+      // join up is kept; if neither, the old deck becomes a causeway (unless already square).
       const crossable = (u) => [v0, v0 + 1].some(v => { const t = at(X(u, v), Y(u, v)); return t === BRIDGE || wetT(t); });
-      while (crossable(u0 - 1) && u0 > 1) u0--;
-      while (crossable(u1 + 1) && u1 < (ew ? W : H) - 2) u1++;
-      // Long causeways (a trail along a lake shore or over the fen) stay as they are.
-      if (u1 - u0 > 12 || cells.length > 40) continue;
-      // Where trails meet out on the water (another bridge beside the new deck), leave it be.
-      const own = new Set(cells);
-      let joined = false;
-      for (let u = u0 - 1; u <= u1 + 1 && !joined; u++) for (let v = v0 - 1; v <= v0 + 2; v++){ const x = X(u, v), y = Y(u, v); if (at(x, y) === BRIDGE && !own.has(y * W + x)){ joined = true; break; } }
-      if (joined) continue;
-      const L = lvl[s0];
-      // Where the trails came onto the old deck, to reconnect them.
-      const oldEnds = [];
-      for (const i of cells){ const x = i % W, y = (i / W) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){ const t = at(x + dx, y + dy); if (t === PATH || t === STAIRS) oldEnds.push((y + dy) * W + x + dx); } }
-      const saved = new Map(), put = (i, t) => { if (!saved.has(i)) saved.set(i, tiles[i]); tiles[i] = t; };
-      // The old deck goes back to water, the new one goes down.
-      for (const i of cells) put(i, water);
-      for (let u = u0; u <= u1; u++) for (const v of [v0, v0 + 1]){ const x = X(u, v), y = Y(u, v); if (inb(x, y)){ put(y * W + x, BRIDGE); seen[y * W + x] = 1; } }
-      // The river runs square under the deck and bends gently back into its own course over
-      // the next few tiles either side (so a diagonal river doesn't become a square pool): in
-      // the row beside the deck the water spans the deck exactly, and each row further out
-      // moves a third of the way back towards where the river really runs.
-      const cU = Math.round((u0 + u1) / 2), wetAt = (u, v) => { const x = X(u, v), y = Y(u, v); return inb(x, y) && wetT(tiles[y * W + x]) && lvl[y * W + x] === L; };
-      const runAt = v => {
-        for (let d = 0; d <= 10; d++) for (const u of [cU - d, cU + d]){
-          if (!wetAt(u, v)) continue;
-          let a = u, b = u;
-          while (a > u - 20 && wetAt(a - 1, v)) a--;
-          while (b < u + 20 && wetAt(b + 1, v)) b++;
-          return [a, b];
+      const span = (a, b) => { while (crossable(a - 1) && a > 1) a--; while (crossable(b + 1) && b < (ew ? W : H) - 2) b++; return [a, b]; };
+      const mid = Math.round(cells.reduce((a, i) => a + U(i), 0) / cells.length), tries = [];
+      if (crossable(mid)) tries.push(span(mid, mid));
+      tries.push(span(Math.min(...cells.map(U)), Math.max(...cells.map(U))));
+      const attempt = (u0, u1) => {
+        // Where trails meet out on the water (another bridge beside the new deck), leave it be.
+        const own = new Set(cells);
+        let joined = false;
+        for (let u = u0 - 1; u <= u1 + 1 && !joined; u++) for (let v = v0 - 1; v <= v0 + 2; v++){ const x = X(u, v), y = Y(u, v); if (at(x, y) === BRIDGE && !own.has(y * W + x)){ joined = true; break; } }
+        if (joined) return 'joined';
+        const L = lvl[s0];
+        // Where the trails came onto the old deck, to reconnect them.
+        const oldEnds = [];
+        for (const i of cells){ const x = i % W, y = (i / W) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){ const t = at(x + dx, y + dy); if (t === PATH || t === STAIRS) oldEnds.push((y + dy) * W + x + dx); } }
+        const saved = new Map(), put = (i, t) => { if (!saved.has(i)) saved.set(i, tiles[i]); tiles[i] = t; };
+        // The old deck goes back to water, the new one goes down.
+        for (const i of cells) put(i, water);
+        for (let u = u0; u <= u1; u++) for (const v of [v0, v0 + 1]){ const x = X(u, v), y = Y(u, v); if (inb(x, y)){ put(y * W + x, BRIDGE); seen[y * W + x] = 1; } }
+        // The river runs square under the deck and bends gently back into its own course over
+        // the next few tiles either side (so a diagonal river doesn't become a square pool): in
+        // the row beside the deck the water spans the deck exactly, and each row further out
+        // moves a third of the way back towards where the river really runs.
+        const cU = Math.round((u0 + u1) / 2), wetAt = (u, v) => { const x = X(u, v), y = Y(u, v); return inb(x, y) && wetT(tiles[y * W + x]) && lvl[y * W + x] === L; };
+        const runAt = v => {
+          for (let d = 0; d <= 10; d++) for (const u of [cU - d, cU + d]){
+            if (!wetAt(u, v)) continue;
+            let a = u, b = u;
+            while (a > u - 20 && wetAt(a - 1, v)) a--;
+            while (b < u + 20 && wetAt(b + 1, v)) b++;
+            return [a, b];
+          }
+          return null;
+        };
+        for (const side of [-1, 1]) for (let k = 1; k <= 3; k++){
+          const v = side < 0 ? v0 - k : v0 + 1 + k, run = runAt(v), t = (k - 1) / 3;
+          const a = run ? Math.round(u0 + (run[0] - u0) * t) : u0, b = run ? Math.round(u1 + (run[1] - u1) * t) : u1;
+          if (!run && k > 1) continue;
+          for (let u = a; u <= b; u++){ const x = X(u, v), y = Y(u, v), i = y * W + x; if (inb(x, y) && NATURAL.has(tiles[i]) && lvl[i] === L) put(i, water); }
+          const lo = Math.min(a, run ? run[0] : a) - 2, hi = Math.max(b, run ? run[1] : b) + 2;
+          for (let u = lo; u <= hi; u++){ if (u >= a && u <= b) continue; const x = X(u, v), y = Y(u, v), i = y * W + x; if (inb(x, y) && wetT(tiles[i]) && lvl[i] === L) put(i, GRASS); }
         }
-        return null;
+        // The trail meets it head on.
+        const approach = new Set();
+        for (const u of [u0 - 1, u0 - 2, u0 - 3, u1 + 1, u1 + 2, u1 + 3]) for (const v of [v0, v0 + 1]){
+          const x = X(u, v), y = Y(u, v), i = y * W + x;
+          if (inb(x, y) && (NATURAL.has(tiles[i]) || wetT(tiles[i])) && lvl[i] === L){ put(i, PATH); approach.add(i); }
+        }
+        // Every trail that came onto the old bridge must reach the new one over land (paved
+        // straight to it); if one can't, the bridge stays as it was.
+        const walk = (i, j) => { const t = tiles[j]; return !grid.solidTerrain[t] && !wetT(t) && t !== BRIDGE && Math.abs(lvl[j] - lvl[i]) <= 1; };
+        const links = [];
+        let ok = approach.size > 0;
+        for (const e of oldEnds){
+          if (!ok) break;
+          if (approach.has(e) || tiles[e] === BRIDGE) continue;
+          if (wetT(tiles[e])) continue;   // under the new water: the approach replaces it
+          const p = route(W, H, [e], i => approach.has(i), walk, 40);
+          if (p) links.push(p); else ok = false;
+        }
+        if (!ok){ for (const [i, t] of saved) tiles[i] = t; return false; }
+        for (const i of saved.keys()) grid.art.detail[i] = 0;
+        for (const p of links) for (const i of p) if (NATURAL.has(tiles[i])){ tiles[i] = PATH; grid.art.detail[i] = 0; }
+        out.push({ ew, u0, u1, v0, ends: [[X(u0 - 3, v0), Y(u0 - 3, v0)], [X(u1 + 3, v0), Y(u1 + 3, v0)]] });
+        return true;
       };
-      for (const side of [-1, 1]) for (let k = 1; k <= 3; k++){
-        const v = side < 0 ? v0 - k : v0 + 1 + k, run = runAt(v), t = (k - 1) / 3;
-        const a = run ? Math.round(u0 + (run[0] - u0) * t) : u0, b = run ? Math.round(u1 + (run[1] - u1) * t) : u1;
-        if (!run && k > 1) continue;
-        for (let u = a; u <= b; u++){ const x = X(u, v), y = Y(u, v), i = y * W + x; if (inb(x, y) && NATURAL.has(tiles[i]) && lvl[i] === L) put(i, water); }
-        const lo = Math.min(a, run ? run[0] : a) - 2, hi = Math.max(b, run ? run[1] : b) + 2;
-        for (let u = lo; u <= hi; u++){ if (u >= a && u <= b) continue; const x = X(u, v), y = Y(u, v), i = y * W + x; if (inb(x, y) && wetT(tiles[i]) && lvl[i] === L) put(i, GRASS); }
+      let done = false;
+      for (const [a, b] of tries){
+        if (b - a > 14) continue;   // too wide to bridge (a trail out along a lake shore or over the fen)
+        const r = attempt(a, b);
+        if (r){ done = r; break; }
       }
-      // The trail meets it head on.
-      const approach = new Set();
-      for (const u of [u0 - 1, u0 - 2, u0 - 3, u1 + 1, u1 + 2, u1 + 3]) for (const v of [v0, v0 + 1]){
-        const x = X(u, v), y = Y(u, v), i = y * W + x;
-        if (inb(x, y) && (NATURAL.has(tiles[i]) || wetT(tiles[i])) && lvl[i] === L){ put(i, PATH); approach.add(i); }
-      }
-      // Every trail that came onto the old bridge must reach the new one over land (paved
-      // straight to it); if one can't, the bridge stays as it was.
-      const walk = (i, j) => { const t = tiles[j]; return !grid.solidTerrain[t] && !wetT(t) && t !== BRIDGE && Math.abs(lvl[j] - lvl[i]) <= 1; };
-      const links = [];
-      let ok = approach.size > 0;
-      for (const e of oldEnds){
-        if (!ok) break;
-        if (approach.has(e) || tiles[e] === BRIDGE) continue;
-        if (wetT(tiles[e])) continue;   // under the new water: the approach replaces it
-        const p = route(W, H, [e], i => approach.has(i), walk, 40);
-        if (p) links.push(p); else ok = false;
-      }
-      if (!ok){ for (const [i, t] of saved) tiles[i] = t; continue; }
-      for (const i of saved.keys()) grid.art.detail[i] = 0;
-      for (const p of links) for (const i of p) if (NATURAL.has(tiles[i])){ tiles[i] = PATH; grid.art.detail[i] = 0; }
-      out.push({ ew, u0, u1, v0, ends: [[X(u0 - 3, v0), Y(u0 - 3, v0)], [X(u1 + 3, v0), Y(u1 + 3, v0)]] });
+      if (done === 'joined') continue;   // where trails meet out on the water, left as it is
+      if (!done && !straight(cells)) causeway();
     }
     grid.touch();
+    // Anything left that isn't a square deck (scraps where trails met out on the water) becomes
+    // an earthen causeway too.
+    const left = new Uint8Array(N);
+    for (let s1 = 0; s1 < N; s1++){
+      if (tiles[s1] !== BRIDGE || left[s1]) continue;
+      const q = [s1]; left[s1] = 1;
+      for (let h = 0; h < q.length; h++){ const i = q[h], x = i % W, y = (i / W) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]){ const j = (y + dy) * W + x + dx; if (at(x + dx, y + dy) === BRIDGE && !left[j]){ left[j] = 1; q.push(j); } } }
+      if (!straight(q)) for (const i of q){ tiles[i] = PATH; grid.art.detail[i] = 0; }
+    }
     return out;
   }
 
@@ -946,7 +997,7 @@
     const grid = G.MapGen.woodlands(seed, opts);
     grid.art.generator = 'genesis';
     grid.art.version = VERSION;
-    banks(grid);
+    banks(grid, (seed | 0) ^ 0xba5);
     grid.art.bridges = bridges(grid, (seed | 0) ^ 0xb1d);
     const town = towns(grid, (seed | 0) ^ 0x70e);
     grid.art.barns = town.barns;
