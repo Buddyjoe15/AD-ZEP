@@ -48,6 +48,12 @@
       G.Events.emit('art:changed', on);
     },
     unitSprite(def){ return this.enabled && def ? this.UNITS[def.visual] || null : null; },
+    // Pixel-art units are drawn UNIT_SCALE times the size their sprite gives (the atlas frame is
+    // stretched, nearest-neighbour). Presentation only: collision, reach and ranges are unchanged.
+    UNIT_SCALE: 2,
+    unitScale(u){ return u && !u.isShip && this.unitSprite(G.Defs.units.get(u.type)) ? this.UNIT_SCALE : 1; },
+    // How far from its centre a unit's art reaches, for picking and markers (world px).
+    unitReach(u){ return u.radius * this.unitScale(u); },
     buildingSprite(type){ return this.enabled ? this.BUILDINGS[type] || null : null; },
     sprite(name){ return D.sprites[name]; },
     // World px per art px of sprite `sp` (terrain and tiles use the data's top-level value).

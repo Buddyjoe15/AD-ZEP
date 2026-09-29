@@ -272,7 +272,7 @@
       // routes, beams, gunfire, previews) goes on a 2D overlay canvas. Without WebGL2 the
       // same content is drawn here with Canvas 2D.
       const visible = [];
-      for (const u of S.units) if (inView(u.x, u.y, u.isShip ? 340 : 80) && here(u) && (u.team === 'blue' || inCave || Fog.visibleAt(u.x, u.y))) visible.push(u);
+      for (const u of S.units) if (inView(u.x, u.y, u.isShip ? 340 : 80 * G.PixelArt.unitScale(u)) && here(u) && (u.team === 'blue' || inCave || Fog.visibleAt(u.x, u.y))) visible.push(u);
       const gpu = G.GPU.ok, sprites = [], bars = [];
       for (const u of visible){
         if (u.isShip) G.Visuals.drawUnit(g, u, z, t);
@@ -375,7 +375,7 @@
       if (lod) return;
       for (const u of visible){
         if (u.isShip || !(u.hp < u.maxHp || S.selected.has(u.id))) continue;
-        const off = G.Defs.units.get(u.type)?.barOffset || 34;
+        const off = (G.Defs.units.get(u.type)?.barOffset || 34) * G.PixelArt.unitScale(u);
         G.Visuals.bar(g, u.x, u.y - off, 32, u.hp / u.maxHp, u.hp / u.maxHp > 0.45 ? '#5fd16b' : '#e85e55');
       }
     },
@@ -402,7 +402,7 @@
         g.fillStyle = 'rgba(115,190,255,.025)'; g.strokeStyle = 'rgba(145,210,255,.12)'; g.lineWidth = 1 / z;
         g.beginPath(); for (const u of sel) if (u.range > 0){ g.moveTo(u.x + u.range, u.y); g.arc(u.x, u.y, u.range, 0, TAU); } g.fill(); g.stroke();
         g.strokeStyle = '#fff6a5'; g.lineWidth = 2 / z;
-        g.beginPath(); for (const u of sel){ const r = u.radius + 8; g.moveTo(u.x + r, u.y); g.arc(u.x, u.y, r, 0, TAU); } g.stroke();
+        g.beginPath(); for (const u of sel){ const r = G.PixelArt.unitReach(u) + 8; g.moveTo(u.x + r, u.y); g.arc(u.x, u.y, r, 0, TAU); } g.stroke();
       }
       for (const u of visible) if (u.isShip) G.Visuals.bar(g, u.x, u.gy * T - 15, u.w * T * 0.72, u.hp / u.maxHp, '#6fd27a');
       // Spider cargo gauges (the atlas art shows an empty hold).
@@ -414,7 +414,7 @@
         if (u.command === 'follow'){
           const tu = G.Units.alive(u.followId);
           if (tu){ g.strokeStyle = 'rgba(112,227,221,.75)'; g.lineWidth = 1.5 / z; g.setLineDash([4 / z, 6 / z]); g.beginPath(); g.moveTo(u.x, u.y); g.lineTo(tu.x, tu.y); g.stroke(); g.setLineDash([]);
-            g.beginPath(); g.arc(tu.x, tu.y, tu.radius + 12, 0, TAU); g.stroke(); }
+            g.beginPath(); g.arc(tu.x, tu.y, G.PixelArt.unitReach(tu) + 12, 0, TAU); g.stroke(); }
         }
         if (u.path.length){
           g.strokeStyle = '#f1df73'; g.lineWidth = 1.5 / z; g.setLineDash([10 / z, 8 / z]); g.beginPath(); g.moveTo(u.x, u.y);
@@ -422,7 +422,7 @@
           g.stroke(); g.setLineDash([]);
         }
         if (!u.isHero && u.command && u.command !== 'idle'){
-          g.fillStyle = '#fff2a8'; g.font = (11 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(u.command.toUpperCase(), u.x, u.y - 40);
+          g.fillStyle = '#fff2a8'; g.font = (11 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(u.command.toUpperCase(), u.x, u.y - 40 * G.PixelArt.unitScale(u));
         }
       }
       // Rally points: a flag for every building that produces units (red for spawners,

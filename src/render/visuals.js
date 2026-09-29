@@ -332,7 +332,7 @@
       if (!target || G.Defs.units.get(u.type)?.beam === false) continue;   // cuts with tools, not a laser
       // From the pixel-art sprite's emitter (along the facing it is drawn at), else 21 px ahead.
       const P = G.PixelArt, name = P.unitSprite(G.Defs.units.get(u.type)), m = name && P.sprite(name).muzzle;
-      const a = m ? Math.round((u.heading + Math.PI / 2) / (Math.PI / 4)) * (Math.PI / 4) - Math.PI / 2 : u.heading, d = m || 21;
+      const a = m ? Math.round((u.heading + Math.PI / 2) / (Math.PI / 4)) * (Math.PI / 4) - Math.PI / 2 : u.heading, d = m ? m * P.UNIT_SCALE : 21;
       const sx = u.x + Math.cos(a) * d, sy = u.y + Math.sin(a) * d;
       const tx = target.x + Math.sin(t * 7) * 4, ty = target.y + Math.cos(t * 11) * 4, col = target.mode === 'mine' ? '#72e9ff' : '#f1cc78';
       g.save();

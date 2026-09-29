@@ -64,12 +64,14 @@
     radius(){ return 28 / G.State.camera.z; },
     // Units hidden by fog of war can't be picked unless `ignoreFog` (debug inspection).
     unitAt(wx, wy, anyTeam = false, ignoreFog = false){
-      const S = G.State, r = this.radius();
-      let best = null, bd = r;
-      for (const u of S.spatial.query(wx, wy, r + 20)){
+      const S = G.State, r = this.radius(), P = G.PixelArt;
+      let best = null, bd = Infinity;
+      // Within the pick radius, or on the unit's drawn body (pixel-art units are drawn larger);
+      // the nearest centre wins.
+      for (const u of S.spatial.query(wx, wy, Math.max(r, 34 * P.UNIT_SCALE) + 20)){
         if (u.hp <= 0 || u.isShip || (!anyTeam && u.team !== 'blue') || (!ignoreFog && !G.Fog.canSee(u)) || !G.CaveView.here(u)) continue;
         const d = Math.hypot(u.x - wx, u.y - wy);
-        if (d < bd){ bd = d; best = u; }
+        if (d < Math.max(r, P.unitReach(u)) && d < bd){ bd = d; best = u; }
       }
       if (best) return best;
       const sh = G.Units.ship(), T = G.CONFIG.TILE;

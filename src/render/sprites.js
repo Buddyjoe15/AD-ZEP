@@ -172,12 +172,12 @@
       const key = 'px:' + sprite + '|' + team, A = this;
       let e = A.cells.get(key);
       if (e) return e;
-      const P = G.PixelArt, sp = P.sprite(sprite), k = P.worldPerArt(sp), w = sp.frameWidth, h = sp.frameHeight;
-      const res = PIXEL_DENSITY * k;   // atlas px per art px
+      const P = G.PixelArt, sp = P.sprite(sprite), k = P.worldPerArt(sp), w = sp.frameWidth, h = sp.frameHeight, D = P.UNIT_SCALE;
+      const res = PIXEL_DENSITY * k;   // atlas px per art px (the frame is stored at its own size and drawn D times larger)
       const pad = [Math.floor((SLOT - w * res) / 2), Math.floor((SLOT - h * res) / 2)];
-      e = { pixel: true, upright: true, anims: sp.animations, variants: sp.variants || null, facings: [], at: [], scale: PIXEL_DENSITY,
-        shadow: sp.shadow.offset.map(v => v * k),
-        rect: { x: -(sp.origin[0] + 0.5) * k, y: -(sp.origin[1] + 0.5) * k, w: w * k, h: h * k } };
+      e = { pixel: true, upright: true, anims: sp.animations, variants: sp.variants || null, facings: [], at: [], scale: PIXEL_DENSITY / D,
+        shadow: sp.shadow.offset.map(v => v * k * D),
+        rect: { x: -(sp.origin[0] + 0.5) * k * D, y: -(sp.origin[1] + 0.5) * k * D, w: w * k * D, h: h * k * D } };
       e.src = []; e.team = team; e.w = w; e.h = h; e.res = res; e.pad = pad;
       for (const row of sp.frames){
         const list = [];
