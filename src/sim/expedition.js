@@ -69,53 +69,65 @@
         }
       }
       E.waveAt = rules.firstWave;
+      G.Caves.populate();
     },
-    // Tile near (wx, wy) where a deposit can take a 3×3 Mine Building: the whole block is
-    // open, reachable ground away from other deposits.
+    // Tile near (wx, wy) where a deposit can take a Mine Building (the extractor's footprint,
+    // placed as the build menu centres it on the deposit): the whole block is open, reachable
+    // ground away from other deposits.
     mineSite(wx, wy, region){
       const S = G.State, T = G.CONFIG.TILE, cx = Math.floor(wx / T), cy = Math.floor(wy / T);
+      const ex = G.Defs.buildables.all().find(d => d.placeOnNode === 'deposit'), fw = ex ? ex.w : 3, fh = ex ? ex.h : 3, ox = Math.floor(fw / 2), oy = Math.floor(fh / 2);
       const ok = (x, y) => {
-        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){
+        for (let dy = -oy; dy < fh - oy; dy++) for (let dx = -ox; dx < fw - ox; dx++){
           if (!S.grid.passable(x + dx, y + dy) || (region && S.grid.regionAt(x + dx, y + dy) !== region)) return false;
         }
-        return !S.resourceNodes.some(n => Math.abs((n.gx ?? Math.floor(n.x / T)) - x) < 5 && Math.abs((n.gy ?? Math.floor(n.y / T)) - y) < 5);
+        return !S.resourceNodes.some(n => Math.abs((n.gx ?? Math.floor(n.x / T)) - x) < fw + 2 && Math.abs((n.gy ?? Math.floor(n.y / T)) - y) < fh + 2);
       };
       for (let r = 0; r <= 14; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++){
         if (Math.max(Math.abs(dx), Math.abs(dy)) === r && ok(cx + dx, cy + dy)) return { x: cx + dx, y: cy + dy };
       }
       return null;
     },
-    // One of every buildable and item, left of the ship, for testing, plus a metal deposit
-    // with a working Mine Building beneath the grid. The grid has 3-tile cells, so
-    // structures larger than 2×2 go in the bottom row beside the mine instead.
+    // One of every buildable and item, left of the ship, for testing (except those in the
+    // rules' testSkip, which the player builds). The grid has 6-tile cells, so structures
+    // larger than 4×4 go in rows below it, beside a Mine Building on a metal deposit when
+    // the extractor isn't skipped.
     testingZone(){
-      const S = G.State, sh = G.Units.ship(), T = G.CONFIG.TILE, north = new Set(R().testNorth || []);
+      const S = G.State, sh = G.Units.ship(), T = G.CONFIG.TILE, north = new Set(R().testNorth || []), skip = new Set(R().testSkip || []), CELL = 6;   // grid cells, tiles
       // Turned twins (vertical gates, `listed: false`) are left out: one of each structure.
-      const small = d => d.w <= 2 && d.h <= 2 && !north.has(d.key) && d.listed !== false, large = d => !small(d) && !north.has(d.key) && d.listed !== false;
+      const shown = d => !north.has(d.key) && !skip.has(d.key) && d.listed !== false;
+      const small = d => d.w <= CELL - 2 && d.h <= CELL - 2 && shown(d), large = d => !small(d) && shown(d);
       const entries = [
-        ...G.Defs.buildables.all().filter(d => !d.placeOnNode && small(d)).map(d => ({ kind: 'building', key: d.key })),
-        ...G.Defs.items.keys().map(key => ({ kind: 'item', key }))
+        // (Not the cave nest, which would wake beside the ship, nor the recordings, found in caves.)
+        ...G.Defs.buildables.all().filter(d => !d.placeOnNode && small(d) && d.key !== 'cave_nest').map(d => ({ kind: 'building', key: d.key })),
+        ...G.Defs.items.keys().filter(key => G.Defs.items.get(key).kind !== 'recording').map(key => ({ kind: 'item', key }))
       ];
-      const cols = 4, x0 = sh.gx - 16, y0 = sh.gy + 1, rows = Math.ceil(entries.length / cols);
-      if (G.MapGen.types[S.map].clearLanding) this.editTerrain(x0 - 1, y0 - 2, cols * 3 + 1, rows * 3 + 6);
+      const cols = 4, x0 = sh.gx - cols * CELL - 4, y0 = sh.gy + 1, rows = Math.ceil(entries.length / cols);
+      // The mine and the large structures go in rows under the grid, wrapping at its width.
+      const mine = G.Defs.buildables.all().find(d => d.placeOnNode === 'deposit' && !skip.has(d.key)), below = [];
+      let lx = x0 + (mine ? mine.w + 2 : 0), ly = y0 + rows * CELL, rowH = mine ? mine.h : 0;
+      for (const d of G.Defs.buildables.all().filter(d => !d.placeOnNode && large(d))){
+        if (lx > x0 && lx + d.w > x0 + cols * CELL){ lx = x0; ly += rowH + 2; rowH = 0; }
+        below.push({ key: d.key, gx: lx, gy: ly });
+        lx += d.w + 2; rowH = Math.max(rowH, d.h);
+      }
+      if (G.MapGen.types[S.map].clearLanding) this.editTerrain(x0 - 1, y0 - 2, cols * CELL + 1, ly + rowH + 2 - (y0 - 2));
       entries.forEach((e, i) => {
-        const gx = x0 + (i % cols) * 3, gy = y0 + Math.floor(i / cols) * 3, x = (gx + 0.5) * T, y = (gy + 0.5) * T;
+        const gx = x0 + (i % cols) * CELL, gy = y0 + Math.floor(i / cols) * CELL, x = (gx + 0.5) * T, y = (gy + 0.5) * T;
         if (e.kind === 'item'){ G.Containers.groundItem(x, y, G.Items.create(e.key), { gx, gy, testZone: true }); return; }
         const d = G.Defs.buildables.get(e.key);
         if (d.container){ G.Containers.create(x, y, [], { opened: true, built: true, gx, gy, capacity: d.container.capacity, name: 'Test ' + d.name, testZone: true }); return; }
         G.Buildings.add(e.key, gx, gy, { id: 'test-' + G.newId(), extra: { testZone: true } });
       });
-      for (const d of G.Defs.buildables.all().filter(d => d.placeOnNode === 'deposit')){
+      for (const d of mine ? [mine] : []){
         const node = G.Defs.nodes.all().find(n => n.kind === 'deposit' && n.building === d.key);
         if (!node) continue;
-        const gx = x0, gy = y0 + rows * 3;
+        const gx = x0, gy = y0 + rows * CELL;
         G.Gather.addNode(node.key, (gx + Math.floor(d.w / 2) + 0.5) * T, (gy + Math.floor(d.h / 2) + 0.5) * T);
         G.Buildings.add(d.key, gx, gy, { id: 'test-' + G.newId(), extra: { testZone: true } });
         break;
       }
-      G.Defs.buildables.all().filter(d => !d.placeOnNode && large(d)).forEach((d, i) => {
-        G.Buildings.add(d.key, x0 + 4 * (i + 1), y0 + rows * 3, { id: 'test-' + G.newId(), extra: { testZone: true } });
-      });
+      for (const e of below) G.Buildings.add(e.key, e.gx, e.gy, { id: 'test-' + G.newId(), extra: { testZone: true } });
       // Power structures stand in a row just north of the ship.
       let nx = sh.gx;
       for (const key of north){
@@ -201,10 +213,17 @@
       const climate = this.climate();
       if (climate.hazard && !G.Cheats.god && Math.hypot(h.x - sh.x, h.y - sh.y) > rules.hazardSafeRadius) h.hp -= climate.hazard * dt;
       if (climate.hostiles && E.elapsed >= E.waveAt){
+        const wave = Math.round((E.waveAt - rules.firstWave) / rules.waveInterval);
         E.waveAt += rules.waveInterval;
-        const n = Math.min(rules.waveMax, rules.waveBase + E.world);
-        for (let i = 0; i < n; i++){ const p = G.openPoint(sh.x - 650 + i * 90, sh.y + 1050); G.Units.spawn('hostile_machine', p.x, p.y); }
-        this.log('ARIA: Hostile machine signatures south of the landing zone.');
+        const n = Math.min(rules.waveMax, rules.waveBase + E.world), list = this.entries();
+        // Each wave comes in at one of the map's entry points, on the edge of the map, and
+        // marches in from there (hostiles advance on Vance down the swarm's flow field).
+        const at = list.length ? list[Math.floor(G.hashRandom(S.seed, E.world, wave) * list.length)] : null;
+        for (let i = 0; i < n; i++){
+          const p = at ? G.openPoint(at.x + (at.nx ? 0 : (i - (n - 1) / 2) * 40), at.y + (at.ny ? 0 : (i - (n - 1) / 2) * 40), at.region) : G.openPoint(sh.x - 650 + i * 90, sh.y + 1050);
+          G.Units.spawn('hostile_machine', p.x, p.y);
+        }
+        this.log(at ? `ARIA: Hostile machines entering from the ${at.side} edge of the map.` : 'ARIA: Hostile machine signatures south of the landing zone.');
       }
       for (const u of S.units){
         if (!u.recallPoint || u.team !== 'blue' || u.hp <= 0) continue;
@@ -220,6 +239,53 @@
         }
       }
       if (E.auto >= G.CONFIG.AUTOSAVE_SECONDS){ E.auto = 0; G.Events.emit('expedition:autosave'); }
+    },
+    // Where hostiles enter the map: on its outer edge, where a trail leaves it (or, on a map
+    // without trails to the edge, the middle of each side), on ground connected to the ship
+    // and at least ENTRY_MIN_TILES from it. Each is { x, y (world px), gx, gy, side, nx, ny
+    // (the inward direction), region }. Rebuilt from the terrain when it changes; not saved.
+    ENTRY_MIN_TILES: 90,
+    entries(){
+      const S = G.State, grid = S.grid, sh = G.Units.ship();
+      if (!grid || !sh) return [];
+      if (grid._entries && grid._entries.version === grid.version && grid._entries.ship === sh.id) return grid._entries.list;
+      const W = grid.cols, H = grid.rows, T = G.CONFIG.TILE, region = grid.regionAt(sh.gx + 3, sh.gy + sh.h);
+      const PATHS = new Set(['path', 'bridge', 'steps'].map(k => G.Defs.terrain.get(k)?.id).filter(v => v != null));
+      const sides = [
+        { side: 'north', n: W, at: i => [i, 0], nx: 0, ny: 1 }, { side: 'south', n: W, at: i => [i, H - 1], nx: 0, ny: -1 },
+        { side: 'west', n: H, at: i => [0, i], nx: 1, ny: 0 }, { side: 'east', n: H, at: i => [W - 1, i], nx: -1, ny: 0 }
+      ];
+      const trails = [], mids = [];
+      for (const sd of sides){
+        // Runs of open edge tiles in the ship's region; a run with trail tiles gives an entry
+        // at the middle of its trail, and the longest run on the side is the fallback.
+        let run = null, best = null;
+        const close = () => {
+          if (!run) return;
+          if (run.path.length) trails.push({ sd, i: run.path[Math.floor(run.path.length / 2)] });
+          if (!best || run.len > best.len) best = run;
+          run = null;
+        };
+        for (let i = 0; i < sd.n; i++){
+          const [x, y] = sd.at(i), open = grid.passable(x, y) && (!region || grid.regionAt(x, y) === region);
+          if (!open){ close(); continue; }
+          if (!run) run = { start: i, len: 0, path: [] };
+          run.len++;
+          if (PATHS.has(grid.tiles[y * W + x])) run.path.push(i);
+        }
+        close();
+        if (best) mids.push({ sd, i: best.start + Math.floor(best.len / 2) });
+      }
+      const make = ({ sd, i }) => { const [gx, gy] = sd.at(i); return { gx, gy, x: (gx + 0.5) * T, y: (gy + 0.5) * T, side: sd.side, nx: sd.nx, ny: sd.ny, region }; };
+      const far = e => Math.hypot(e.gx - sh.gx, e.gy - sh.gy) >= this.ENTRY_MIN_TILES;
+      let list = (trails.length ? trails : mids).map(make).filter(far);
+      if (!list.length) list = mids.map(make).filter(far);
+      if (!list.length) list = mids.map(make);
+      // One entry per trail: drop any within 16 tiles of one already kept.
+      const kept = [];
+      for (const e of list) if (!kept.some(k => Math.abs(k.gx - e.gx) + Math.abs(k.gy - e.gy) < 16)) kept.push(e);
+      grid._entries = { version: grid.version, ship: sh.id, list: kept };
+      return kept;
     },
     // Signals progress while a surveyor stands nearby or a sensor structure covers them.
     studySignals(dt){

@@ -13,7 +13,7 @@
     }
     if (u.targetId != null && S.time < u.targetNextScan){
       const t = G.Units.alive(u.targetId);
-      if (t && t.team !== u.team){
+      if (t && t.team !== u.team && G.Caves.same(u, t)){
         const d = Math.sqrt(G.dist2(u, t));
         if (d <= u.sight * 1.15) return { t, d };
       }
@@ -21,13 +21,17 @@
     let best = null, bd = u.sight * u.sight;
     for (const [team, hash] of Object.entries(S.teamSpatial)){
       if (team === u.team || !hash.count) continue;
-      const v = hash.nearest(u.x, u.y, u.sight);
+      const v = hash.nearest(u.x, u.y, u.sight, sameLayer(u));   // (not through a cave's rock)
       if (v){ const d = G.dist2(u, v); if (d <= bd){ bd = d; best = v; } }
     }
     u.targetId = best ? best.id : null;
     u.targetNextScan = S.time + 0.18 + (u.id % 7) * 0.015;
     return best ? { t: best, d: Math.sqrt(bd) } : null;
   }
+
+  // Filter for spatial queries: units on the same layer as `u` (all of them off Genesis maps).
+  const sameLayer = u => G.State.grid?.art?.caveOf ? v => G.Caves.same(u, v) : undefined;
+  G.Combat = Object.assign(G.Combat || {}, { sameLayer });
 
   function fire(u, t, S){
     let dmg = u.damage;

@@ -191,8 +191,8 @@
       }
       if (e.kind === 'building'){
         const d = G.Defs.buildables.get(e.key), at = G.Buildings.placementAt(e.key, wx, wy);
-        if (!G.Buildings.canPlaceKey(e.key, at.gx, at.gy)){ G.notify(d.placeOnNode === 'deposit' ? 'Place it on a free resource deposit' : 'Tile is occupied'); return false; }
-        G.Buildings.add(e.key, at.gx, at.gy, { id: 'debug-' + G.newId() });
+        if (!G.Buildings.canPlaceKey(e.key, at.gx, at.gy, at.sx, at.sy)){ G.notify(d.placeOnNode === 'deposit' ? 'Place it on a free resource deposit' : 'Tile is occupied'); return false; }
+        G.Buildings.add(e.key, at.gx, at.gy, { id: 'debug-' + G.newId(), sx: at.sx, sy: at.sy });
       } else if (e.kind === 'item'){
         if (!free()){ G.notify('Tile is occupied'); return false; }
         G.Containers.groundItem(cx, cy, G.Items.create(e.key), { gx, gy });

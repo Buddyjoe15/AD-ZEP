@@ -95,7 +95,7 @@
     const D = G.Defs, problems = [];
     for (const u of D.units.all()){
       if (u.fabricator && !(u.fabricator.queueMax > 0)) problems.push(`unit ${u.key}: fabricator.queueMax`);
-      if (u.gathers && !u.gathers.every(k => ['scavenge', 'deposit'].includes(k))) problems.push(`unit ${u.key}: gathers must list scavenge or deposit`);
+      if (u.gathers && !u.gathers.every(k => ['scavenge', 'deposit', 'tree'].includes(k))) problems.push(`unit ${u.key}: gathers must list scavenge, deposit or tree`);
       if (u.gatherRate !== undefined && !(u.gatherRate > 0)) problems.push(`unit ${u.key}: gatherRate must be above 0`);
     }
     for (const r of D.recipes.all()){

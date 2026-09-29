@@ -1,0 +1,30 @@
+{
+  "name": "genesis_tallgrass",
+  "frameWidth": 108,
+  "frameHeight": 108,
+  "origin": [
+    53.5,
+    53.5
+  ],
+  "worldPxPerArtPx": 0.25,
+  "rows": [
+    "{\"r\":11}",
+    "{\"r\":15}"
+  ],
+  "frameSizes": [
+    84,
+    108
+  ],
+  "columns": "3 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      2,
+      2
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_tallgrass.png",
+  "sheetWidth": 324,
+  "sheetHeight": 216
+}

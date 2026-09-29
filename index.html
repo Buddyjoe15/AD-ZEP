@@ -19,18 +19,12 @@
     <canvas id="overlay" aria-hidden="true"></canvas>
 
     <div id="mainMenuOverlay">
-      <div class="space-art">
-        <div class="star-layer stars-a"></div><div class="star-layer stars-b"></div>
-        <div class="twinkle-star t1"></div><div class="twinkle-star t2"></div><div class="twinkle-star t3"></div><div class="twinkle-star t4"></div><div class="twinkle-star t5"></div>
-        <div class="moon-orb"></div>
-        <div class="earth-wrap"><div class="earth-orb"><div class="earth-clouds"></div></div>
-          <div class="ship-orbit"><div class="menu-ship"><i></i><i></i><i></i></div></div>
-        </div>
-      </div>
-      <div class="main-menu-title">ZERO EARTH PROTOCOL <span class="version-label"></span></div>
+      <img class="main-logo" src="assets/logo.webp" alt="Abyssal Dawn: Zero Earth Protocol">
+      <div class="main-version version-label"></div>
       <button id="mainMenuBackBtn" class="main-back hidden">← Back</button>
       <div id="mainMenuPanel"></div>
     </div>
+    <div id="mapLoading" class="hidden" role="progressbar" aria-label="Loading the map"><b>Mapping the terrain</b><div class="map-loading-bar"><i></i></div><small>0%</small></div>
     <div id="wormholeIntro" class="hidden">
       <div class="wormhole-core"></div><div class="wormhole-flash f1"></div><div class="wormhole-flash f2"></div><div class="wormhole-flash f3"></div>
       <button id="introSkipBtn">Skip</button>
@@ -49,6 +43,8 @@
     <div id="status" aria-live="polite"></div>
     <button id="ezToggle" aria-expanded="false">Expedition log</button>
     <div id="topRightControls">
+      <div id="dayClock" class="day-clock hidden" title="Time of day"><span class="day-icon"></span><b class="day-time"></b><small class="day-num"></small></div>
+      <div id="zoomPct" class="zoom-pct" title="Zoom: 0% is as far out as the camera goes, 100% as close">Zoom <b>0%</b></div>
       <button id="performanceBtn" title="Performance statistics">FPS</button>
       <button id="fullscreenBtn" title="Fullscreen">⛶</button>
       <button id="menuBtn" title="Game Menu">Menu</button>
@@ -56,9 +52,11 @@
 
     <div id="catalogPanel" class="panel catalog hidden"></div>
     <div id="selectionPanel" class="panel"></div>
+    <div id="hoverInfo" class="panel hover-info hidden" aria-live="off"></div>
     <div id="targetPanel" class="panel hidden" aria-label="Enemy info"></div>
     <div id="miniSideControls"><button id="inventoryBtn">Inventory</button></div>
     <canvas id="minimap" width="220" height="220" aria-label="Minimap"></canvas>
+    <div id="miniZoom"><button id="miniZoomIn" title="Zoom the minimap in">+</button><button id="miniZoomOut" title="Zoom the minimap out">−</button></div>
     <button id="pauseBtn" class="mini-pause">Pause</button>
     <div id="inventoryPanel" class="panel rpg hidden"></div>
     <div id="chestPanel" class="panel rpg hidden"></div>
@@ -105,9 +103,11 @@
   <script src="src/data/items.js"></script>
   <script src="src/data/buildables.js"></script>
   <script src="src/data/world.js"></script>
+  <script src="src/data/trees.js"></script>
   <script src="src/world/grid.js"></script>
   <script src="src/world/mapgen.js"></script>
   <script src="src/world/woodlands.js"></script>
+  <script src="src/world/genesis.js"></script>
   <script src="src/world/spatial.js"></script>
   <script src="src/world/pathfinding.js"></script>
   <script src="src/sim/entities.js"></script>
@@ -121,9 +121,11 @@
   <script src="src/sim/movement.js"></script>
   <script src="src/sim/combat.js"></script>
   <script src="src/sim/gather.js"></script>
+  <script src="src/sim/trees.js"></script>
   <script src="src/sim/construction.js"></script>
   <script src="src/sim/fabrication.js"></script>
   <script src="src/sim/spawner.js"></script>
+  <script src="src/sim/caves.js"></script>
   <script src="src/sim/expedition.js"></script>
   <script src="src/sim/scenario.js"></script>
   <script src="src/sim/save.js"></script>
@@ -133,8 +135,16 @@
   <script src="src/render/pixelart.js"></script>
   <script src="src/render/visuals.js"></script>
   <script src="src/render/weather.js"></script>
+  <script src="src/render/trees.js"></script>
+  <script src="src/render/treefx.js"></script>
+  <script src="src/render/landscape.js"></script>
+  <script src="src/render/structures.js"></script>
+  <script src="src/render/ground.js"></script>
+  <script src="src/render/lighting.js"></script>
   <script src="src/render/woodlands.js"></script>
+  <script src="src/render/caveview.js"></script>
   <script src="src/render/terrain.js"></script>
+  <script src="src/render/worldpicture.js"></script>
   <script src="src/render/fog.js"></script>
   <script src="src/render/sprites.js"></script>
   <script src="src/render/gpu.js"></script>
@@ -149,6 +159,7 @@
   <script src="src/ui/mapeditor.js"></script>
   <script src="src/ui/mappreview.js"></script>
   <script src="src/ui/input.js"></script>
+  <script src="src/ui/hover.js"></script>
   <script src="src/ui/menu.js"></script>
   <script src="src/main.js"></script>
 </body>

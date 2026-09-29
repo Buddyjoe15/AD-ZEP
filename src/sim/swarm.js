@@ -59,7 +59,9 @@
           const nx = x + DX[d], ny = y + DY[d];
           if (!open(nx, ny)) continue;
           if (d >= 4 && (!open(x + DX[d], y) || !open(x, y + DY[d]))) continue;
-          const ni = ny * cols + nx, nc = key + STEP[d] * costTable[tiles[ni]] + dens[ni] * cc;
+          // (Rounded to the field's 32-bit floats before comparing: compared at full precision, a
+          // stored value that rounded up looks improvable forever, and far builds never finish.)
+          const ni = ny * cols + nx, nc = Math.fround(key + STEP[d] * costTable[tiles[ni]] + dens[ni] * cc);
           if (nc < work[ni]){ work[ni] = nc; heap.push(ni, nc); }
         }
         if (++n >= budget) return false;
@@ -113,7 +115,7 @@
       let best = null, bd = r * r;
       for (const [team, hash] of Object.entries(S.teamSpatial)){
         if (team === u.team || !hash.count) continue;
-        const v = hash.nearest(u.x, u.y, r);
+        const v = hash.nearest(u.x, u.y, r, G.Combat.sameLayer(u));
         if (v){ const d = G.dist2(u, v); if (d <= bd){ bd = d; best = v; } }
       }
       if (best || !def.attackStructures) return best;
@@ -123,7 +125,7 @@
       if (u.aiTargetId == null) return null;
       const t = G.Units.alive(u.aiTargetId) || G.State.buildings.find(b => b.id === u.aiTargetId && b.hp > 0);
       const leash = (def.aggroTiles || 10) * G.CONFIG.TILE * 1.3;
-      return t && t.team !== u.team && G.within(u, t, leash) ? t : null;
+      return t && t.team !== u.team && G.within(u, t, leash) && G.Caves.same(u, t) ? t : null;
     },
     think(u){
       const S = G.State, def = G.Defs.units.get(u.type);

@@ -40,6 +40,23 @@
       }
       if (this.rustles(gx, gy)) rustle = Math.floor(t * w.rustleFps + G.hashRandom3(gx, gy, 919) * 3) % 3;
       return { lean, rustle };
+    },
+    // The same for a free-standing tree (Genesis) with its trunk at world px (x, y), so trees
+    // sharing a tile move apart. Species `sp` (GW.TREES) scales it: `sway` how many lean,
+    // `rustle` how many rustle and how fast. Returns a shared object; copy what you keep.
+    _tree: { lean: 0, rustle: 0 },
+    treePose(x, y, t, sp){
+      const w = this.current(), h = G.hashRandom3, out = this._tree;
+      out.lean = 0; out.rustle = 0;
+      if (w.lean > 0 && h(x, y, 911) < w.swaying * sp.sway){
+        const gx = x / 48, gy = y / 48, phase = h(x, y, 913) * TAU;
+        const gust = 0.6 + 0.4 * Math.sin(TAU * t * w.speed * 0.3 - gx * 0.15 - gy * 0.05);
+        const s = 0.5 + 0.5 * Math.sin(TAU * t * w.speed + phase);
+        out.lean = Math.min(w.lean, Math.round(s * gust * (w.lean + 0.4)));
+      }
+      if (sp.rustle > 0 && h(x, y, 917) < w.rustle * sp.rustle)
+        out.rustle = Math.floor(t * w.rustleFps * (0.6 + 0.4 * sp.rustle) + h(x, y, 919) * 3) % 3;
+      return out;
     }
   };
 })();

@@ -1,5 +1,5 @@
 /* Build mode for units with the `build` capability: pick a structure from the catalog,
-   preview it on the grid, and confirm to hand the order to G.Construction. Walls build in
+   preview it on the building grid (a quarter of a tile per cell), and confirm to hand the order to G.Construction. Walls build in
    rows: press on the first tile and drag, and the row runs from there in the direction you
    drag (east–west or north–south, whichever is further), up to MAX_ROW tiles. */
 (function(){
@@ -37,7 +37,7 @@
       if (!d || !d.rotateTo) return false;
       this.mode.key = d.rotateTo;
       const pr = G.State.buildPreview;
-      if (pr) G.State.buildPreview = { key: this.mode.key, gx: pr.gx, gy: pr.gy, ok: G.Buildings.canPlaceKey(this.mode.key, pr.gx, pr.gy) };
+      if (pr) G.State.buildPreview = { key: this.mode.key, gx: pr.gx, gy: pr.gy, sx: pr.sx || 0, sy: pr.sy || 0, ok: G.Buildings.canPlaceKey(this.mode.key, pr.gx, pr.gy, pr.sx || 0, pr.sy || 0) };
       this.render();
       return true;
     },
@@ -55,11 +55,14 @@
       this.mode.anchor = G.Defs.buildables.get(this.mode.key).wall ? G.Buildings.placementAt(this.mode.key, wx, wy) : null;
       return this.previewAt(wx, wy);
     },
-    // The cells of a row from `a` toward `b`: along whichever axis b is further along.
+    // The placements of a row from `a` toward `b` (both { gx, gy, sx, sy }): along whichever
+    // axis b is further along, a footprint apart, on the building grid's cells.
     rowCells(a, b){
-      const dx = b.gx - a.gx, dy = b.gy - a.gy, across = Math.abs(dx) >= Math.abs(dy);
-      const n = Math.min(Math.max(Math.abs(dx), Math.abs(dy)), MAX_ROW - 1), step = Math.sign(across ? dx : dy);
-      return Array.from({ length: n + 1 }, (_, i) => across ? { gx: a.gx + i * step, gy: a.gy } : { gx: a.gx, gy: a.gy + i * step });
+      const B = G.Buildings, K = B.SUB, d = G.Defs.buildables.get(this.mode.key), fw = (d ? d.w : 1) * K, fh = (d ? d.h : 1) * K;
+      const ac = a.gx * K + (a.sx || 0), ar = a.gy * K + (a.sy || 0), dx = b.gx * K + (b.sx || 0) - ac, dy = b.gy * K + (b.sy || 0) - ar;
+      const across = Math.abs(dx) / fw >= Math.abs(dy) / fh;
+      const n = Math.min(Math.round(across ? Math.abs(dx) / fw : Math.abs(dy) / fh), MAX_ROW - 1), step = Math.sign(across ? dx : dy);
+      return Array.from({ length: n + 1 }, (_, i) => B.split(across ? ac + i * step * fw : ac, across ? ar : ar + i * step * fh));
     },
     previewAt(wx, wy){
       if (!this.placing()) return null;
@@ -69,14 +72,14 @@
         const d = G.Defs.buildables.get(key), cells = this.rowCells(this.mode.anchor, at);
         let n = 0;
         const marked = cells.map(c => {
-          const ok = G.Buildings.canPlaceKey(key, c.gx, c.gy);
+          const ok = G.Buildings.canPlaceKey(key, c.gx, c.gy, c.sx, c.sy);
           if (ok) n++;
           return { ...c, ok, afford: ok && G.Economy.canAfford(Object.fromEntries(Object.entries(d.cost).map(([k, v]) => [k, v * n]))) };
         });
-        G.State.buildPreview = { key, gx: cells[0].gx, gy: cells[0].gy, ok: marked.some(c => c.ok), cells: marked };
+        G.State.buildPreview = { key, gx: cells[0].gx, gy: cells[0].gy, sx: cells[0].sx, sy: cells[0].sy, ok: marked.some(c => c.ok), cells: marked };
         return G.State.buildPreview;
       }
-      G.State.buildPreview = { key, gx: at.gx, gy: at.gy, ok: G.Buildings.canPlaceKey(key, at.gx, at.gy) };
+      G.State.buildPreview = { key, gx: at.gx, gy: at.gy, sx: at.sx, sy: at.sy, ok: G.Buildings.canPlaceKey(key, at.gx, at.gy, at.sx, at.sy) };
       return G.State.buildPreview;
     },
     confirm(){
@@ -90,7 +93,7 @@
         if (sites.length) this.cancel(); else G.State.buildPreview = null;
         return sites.length > 0;
       }
-      const site = G.Construction.order(builder, this.mode.key, pr.gx, pr.gy);
+      const site = G.Construction.order(builder, this.mode.key, pr.gx, pr.gy, pr.sx || 0, pr.sy || 0);
       if (site) this.cancel();
       return !!site;
     },

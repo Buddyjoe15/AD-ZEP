@@ -1,11 +1,11 @@
 ---
 name: sprite
-description: Turn a short description into an AD-ZEP pixel-art sprite, straight top-down at 96 × 96 art px per tile. Checks the idea against the game's lore and art style, builds a 3D model in code in the sprite lab, renders and checks it, and publishes a test page. Use when the user types /sprite <description>, or asks to design, mock up or test a new unit, structure, prop or tree sprite.
+description: Turn a short description into an AD-ZEP pixel-art sprite, straight top-down at 192 × 192 art px per tile. Checks the idea against the game's lore and art style, builds a 3D model in code in the sprite lab, renders and checks it, and publishes a test page. Use when the user types /sprite <description>, or asks to design, mock up or test a new unit, structure, prop or tree sprite.
 ---
 
 # /sprite: from a description to a tested sprite
 
-The user gives a short description, for example `/sprite a salvage crawler that strips wrecks for metal`. You turn it into a sprite that fits Abyssal Dawn: Zero Earth Protocol, render it straight top-down at the required size (96 × 96 art px per tile) and publish a test page they can open.
+The user gives a short description, for example `/sprite a salvage crawler that strips wrecks for metal`. You turn it into a sprite that fits Abyssal Dawn: Zero Earth Protocol, render it straight top-down at the required size (192 × 192 art px per tile of its size on the map: a unit or structure shown at twice its modelled size is rendered at 8 art px per modelled px, never stretched; see `art/PIXEL_ART_RULES.md` 2.1) and publish a test page they can open.
 
 ## 1. Read first
 
@@ -60,7 +60,7 @@ Run `npm run sprite -- art/sprite-lab/specs/<key>.mjs --capture`.
   - on the first publish, `icon: "sprite"` and a one-sentence description;
   - on later rounds, publish the same path again so the link stays the same.
 - **The page is self-contained.** It shows:
-  - the fit report and the frame at 96 × 96 with guides;
+  - the fit report and the frame at 192 × 192 with guides;
   - the game zooms, the eight facings, the animations or states;
   - the sprite beside the Utility Spider the game draws today, and a crowd at ⅓ zoom;
   - the checks and the metadata.

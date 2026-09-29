@@ -1,4 +1,8 @@
-:root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+/* Montserrat (SIL Open Font License, assets/fonts/OFL-Montserrat.txt): the lettering of the logo's
+   "ZERO EARTH PROTOCOL", used for every menu and panel. One variable file covers all weights. */
+@font-face{font-family:Montserrat;src:url(../../assets/fonts/montserrat.woff2) format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+:root{color-scheme:dark;font-family:Montserrat,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+button,input,select,textarea{font-family:inherit}
 *{box-sizing:border-box}html,body,#app{margin:0;width:100%;height:100%;overflow:hidden;background:#111713;color:#e8eee8}
 body{touch-action:none;user-select:none}
 #game{position:absolute;inset:0;width:100%;height:100%;display:block;background:#40513c}
@@ -506,6 +510,25 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
   display:flex;gap:4px;z-index:31;pointer-events:auto
 }
 #topRightControls button{min-height:28px;padding:3px 7px;font-size:9px;min-width:34px}
+/* Camera zoom, 0% (furthest out) to 100% (closest in). */
+.zoom-pct{display:flex;align-items:center;gap:4px;min-height:28px;padding:2px 8px;border-radius:5px;background:#101713cc;border:1px solid #536054;
+  font-size:9px;color:#a8b5a9;white-space:nowrap;pointer-events:auto}
+.zoom-pct b{color:#e8e2c8;font-size:10px;min-width:30px;text-align:right;font-variant-numeric:tabular-nums}
+/* Minimap zoom buttons, placed over the minimap's top-left corner by the HUD. */
+#miniZoom{position:absolute;display:flex;flex-direction:column;gap:2px;z-index:21;pointer-events:auto}
+#miniZoom button{width:22px;height:22px;min-height:0;min-width:0;padding:0;font-size:14px;line-height:1;font-weight:700}
+#miniZoom button:disabled{opacity:.4}
+/* Time of day (maps with day and night): a sun or moon that rises and sets across the dial. */
+.day-clock{display:flex;align-items:center;gap:5px;min-height:28px;padding:2px 8px 2px 6px;border-radius:5px;
+  background:#101713cc;border:1px solid #536054;font-size:10px;color:#e8e2c8;pointer-events:auto;white-space:nowrap}
+.day-clock.hidden{display:none}
+.day-clock .day-icon{position:relative;width:26px;height:14px;overflow:hidden;border-bottom:1px solid #7d8a74}
+.day-clock .day-icon i{position:absolute;width:8px;height:8px;border-radius:50%;margin:-4px 0 0 -4px}
+.day-clock .day-icon i.sun{background:#f2c66a;box-shadow:0 0 5px #f2c66a}
+.day-clock .day-icon i.moon{background:#dfe8f0;box-shadow:inset -2px -1px 0 #8aa7b4, 0 0 4px #aef4ff88}
+.day-clock b{font-variant-numeric:tabular-nums;font-size:11px;letter-spacing:.03em}
+.day-clock small{color:#a8b5a9;font-size:8px}
+.day-clock.night{background:#0a1022cc;border-color:#3e4f6e}
 #miniSideControls{
   position:absolute;right:calc(max(6px,env(safe-area-inset-right)) + 156px);
   bottom:max(6px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:4px;z-index:22;pointer-events:auto
@@ -553,6 +576,7 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
   #gameTitle{font-size:8px;padding:2px 6px}
   #topRightControls button{min-height:25px;font-size:8px}
   #minimap{width:112px;height:112px;bottom:34px}
+  .zoom-pct{min-height:25px;font-size:8px}
   .mini-pause{width:112px;min-height:25px;font-size:8px}
   #miniSideControls{right:calc(max(5px,env(safe-area-inset-right)) + 117px)}
   #miniSideControls button{min-width:58px;min-height:26px;font-size:8px}
@@ -563,6 +587,8 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
 }
 @media (orientation:landscape) and (max-height:390px){
   #minimap{width:88px;height:88px;bottom:30px}
+  .zoom-pct{display:none}
+  #miniZoom button{width:18px;height:18px;font-size:12px}
   .mini-pause{width:88px;min-height:23px;padding:2px 5px}
   #miniSideControls{right:calc(max(4px,env(safe-area-inset-right)) + 92px)}
   #miniSideControls button{min-width:52px;min-height:23px;padding:2px 4px;font-size:7px}
@@ -806,3 +832,41 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
 .panel-drag-head h3{margin:0;flex:1}
 .rpg .panel-drag-head .panel-close{flex:0 0 auto;min-width:30px;min-height:30px;padding:0;font-size:18px;line-height:1;border-radius:6px;cursor:pointer}
 #inventoryPanel.dragging{opacity:.92;box-shadow:0 8px 28px #000b}
+
+/* Hover info (src/ui/hover.js): what is under the mouse, just above the selection panel. */
+.hover-info{position:absolute;left:max(6px,env(safe-area-inset-left));bottom:120px;z-index:21;max-width:280px;min-width:150px;padding:6px 9px;
+  font-size:11px;line-height:1.35;pointer-events:none;background:#101713e6;border:1px solid #536054;border-radius:6px;color:#dfe6d8}
+.hover-info.hidden{display:none}
+.hover-info small{display:block;font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:#a8b5a9}
+.hover-info b{display:block;font-size:12px;margin-bottom:2px}
+.hover-info div{color:#c3ccbd}
+.hover-info em{display:block;margin-top:3px;font-size:8px;font-style:normal;color:#76836f}
+.hover-info.friend{border-color:#4f7fa8}
+.hover-info.foe{border-color:#a8574f}
+
+/* Main menu: the logo top centre on black, the menu bottom middle. */
+#mainMenuOverlay{background:#000}
+#mainMenuOverlay .main-logo{position:absolute;left:50%;top:max(2%,env(safe-area-inset-top));transform:translateX(-50%);width:min(760px,86vw);max-height:44vh;object-fit:contain;pointer-events:none;user-select:none}
+#mainMenuOverlay .main-version{position:absolute;right:max(12px,env(safe-area-inset-right));bottom:max(10px,env(safe-area-inset-bottom));font-size:9px;letter-spacing:.2em;color:#8f96b3}
+#mainMenuOverlay #mainMenuPanel{left:50%;top:auto;bottom:max(3%,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(560px,90vw);max-height:50vh}
+#mainMenuOverlay #mainMenuPanel h2{font-weight:500;letter-spacing:.35em;text-transform:uppercase;color:#e9e6f5}
+#mainMenuOverlay .main-buttons{width:min(300px,80vw);gap:7px}
+#mainMenuOverlay .main-buttons button{min-height:34px;font-size:11px;font-weight:500;letter-spacing:.3em;text-transform:uppercase;background:#0a0814cc;border:1px solid #6d5bb466;color:#ecebf5}
+#mainMenuOverlay .main-buttons button:hover{border-color:#a78bfa;box-shadow:0 0 14px #8b5cf655}
+@media (orientation:landscape) and (max-height:520px){
+  #mainMenuOverlay .main-logo{width:min(520px,60vw);max-height:44vh}
+  #mainMenuOverlay #mainMenuPanel{max-height:50vh;bottom:3%}
+  #mainMenuOverlay .main-buttons button{min-height:28px;font-size:9px}
+}
+#mainMenuPanel .ezSeed input,#mainMenuPanel .ezSeed select{margin-left:auto;margin-right:auto}
+#caveReturnBtn{position:absolute;left:50%;top:78px;transform:translateX(-50%);z-index:40;padding:8px 18px;background:#0b1320e6;border:1px solid #8fd8f0;color:#e4f7ff;font-weight:600;letter-spacing:.12em;text-transform:uppercase;font-size:11px}
+#caveReturnBtn.hidden{display:none}
+
+/* Loading the whole-map picture before play. */
+#mapLoading{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  background:#000;color:#e8e2c8;font-family:Montserrat,sans-serif;pointer-events:auto}
+#mapLoading.hidden{display:none}
+#mapLoading b{font-size:13px;letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+.map-loading-bar{width:min(320px,70vw);height:6px;border-radius:3px;background:#1d2620;overflow:hidden;border:1px solid #3c4a3f}
+.map-loading-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#5d7a4f,#c9d4a0)}
+#mapLoading small{font-size:10px;color:#a8b5a9;font-variant-numeric:tabular-nums}

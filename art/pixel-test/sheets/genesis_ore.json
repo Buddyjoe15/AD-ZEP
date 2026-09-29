@@ -1,0 +1,28 @@
+{
+  "name": "genesis_ore",
+  "frameWidth": 92,
+  "frameHeight": 92,
+  "origin": [
+    45.5,
+    45.5
+  ],
+  "worldPxPerArtPx": 0.25,
+  "rows": [
+    "{\"r\":12}"
+  ],
+  "frameSizes": [
+    92
+  ],
+  "columns": "3 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      4,
+      4
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_ore.png",
+  "sheetWidth": 276,
+  "sheetHeight": 92
+}

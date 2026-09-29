@@ -165,8 +165,86 @@
     return v;
   }
 
-  // Keyed by the schema each step upgrades from; add { 8: migrate_8_to_9 } and so on.
-  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7, 7: migrate_7_to_8 };
+  // Schema 8 → schema 9: saves record the damage done to trees on maps with free-standing
+  // trees (Genesis): [index, state, damage] per tree touched. Older saves touched none.
+  function migrate_8_to_9(d){
+    const v = G.copy(d);
+    v.schema = 9;
+    v.trees = [];
+    return v;
+  }
+
+  // Schema 9 → schema 10: items in containers may be stacks ({ count } instead of durability:
+  // cave caches hold Cave Crystals and Salvaged Alloy). No schema-9 save holds a stack in a
+  // container, so nothing needs changing.
+  function migrate_9_to_10(d){
+    const v = G.copy(d);
+    v.schema = 10;
+    return v;
+  }
+
+  // Schema 10 → schema 11: units and structures are twice the size. Every structure and
+  // construction site stands on twice as many tiles each way from the same top-left tile (its
+  // centre moves to match; a neighbour may now overlap it, which only matters to the art), and
+  // every unit except the ship has twice its collision radius.
+  function migrate_10_to_11(d){
+    const v = G.copy(d), T = 48;
+    v.schema = 11;
+    for (const b of [...(v.buildings || []), ...(v.constructionSites || [])]){
+      const bottom = b.y + b.h / 2 * T, x = b.x;
+      // The Resource Extractor needs an odd footprint centred on its deposit: 3 × 3 becomes 7 × 7.
+      if (b.type === 'mine_building' && b.w === 3 && b.h === 3){ b.gx -= 2; b.gy -= 2; b.w = b.h = 7; }
+      else { b.w *= 2; b.h *= 2; }
+      b.x = (b.gx + b.w / 2) * T; b.y = (b.gy + b.h / 2) * T;
+      // Rally points keep their place relative to the building's bottom edge, so a default
+      // rally is still the default one, just below the larger footprint.
+      const move = r => r && typeof r.x === 'number' && typeof r.y === 'number' ? { x: r.x + b.x - x, y: r.y + b.y + b.h / 2 * T - bottom } : r;
+      if (b.rally) b.rally = move(b.rally);
+      if (b.spawner && b.spawner.rally) b.spawner.rally = move(b.spawner.rally);
+    }
+    for (const u of v.units || []) if (!u.isShip && u.radius > 0) u.radius *= 2;
+    return v;
+  }
+
+  // Schema 12: structures and construction sites sit on a building grid of quarter-tile
+  // cells, with `sx, sy` (0–3) the cell of their top-left corner within tile (gx, gy).
+  // Everything placed before stands squarely on its tiles.
+  function migrate_11_to_12(d){
+    const v = G.copy(d);
+    v.schema = 12;
+    for (const b of [...(v.buildings || []), ...(v.constructionSites || [])]){ b.sx = 0; b.sy = 0; }
+    return v;
+  }
+
+  // Schema 13: walls and gates are one tile thick again (a wall section 1 × 1, gates 2 × 1 to
+  // 4 × 1 and their vertical twins), half their schema-12 size. Each shrinks about its centre
+  // on the quarter-tile building grid, so it stays where it was drawn.
+  const FENCES = ['wood_wall', 'defensive_wall', 'reinforced_wall', 'gate', 'gate_v', 'gate_3', 'gate_3_v', 'gate_4', 'gate_4_v'];
+  function migrate_12_to_13(d){
+    const v = G.copy(d), T = 48, K = 4;
+    v.schema = 13;
+    for (const b of [...(v.buildings || []), ...(v.constructionSites || [])]){
+      if (!FENCES.includes(b.type) || b.w % 2 || b.h % 2) continue;
+      b.w /= 2; b.h /= 2;
+      const c = b.gx * K + (b.sx || 0) + b.w * K / 2, r = b.gy * K + (b.sy || 0) + b.h * K / 2;
+      b.gx = Math.floor(c / K); b.sx = c - b.gx * K; b.gy = Math.floor(r / K); b.sy = r - b.gy * K;
+      b.x = (b.gx + b.sx / K + b.w / 2) * T; b.y = (b.gy + b.sy / K + b.h / 2) * T;
+    }
+    return v;
+  }
+
+  // Schema 14: caves are underground (Genesis). A unit on its way through a cave's entrance
+  // records it (caveTransit: { cave, dir: 'in' | 'out', then }, and caveRetry, when it next
+  // asks for a route to the entrance). Older saves have nobody on the way through.
+  function migrate_13_to_14(d){
+    const v = G.copy(d);
+    v.schema = 14;
+    for (const u of v.units || []){ u.caveTransit = null; u.caveRetry = 0; }
+    return v;
+  }
+
+  // Keyed by the schema each step upgrades from; add { 14: migrate_14_to_15 } and so on.
+  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7, 7: migrate_7_to_8, 8: migrate_8_to_9, 9: migrate_9_to_10, 10: migrate_10_to_11, 11: migrate_11_to_12, 12: migrate_12_to_13, 13: migrate_13_to_14 };
 
   // Applies the steps in order until the save reaches G.SAVE_SCHEMA. A current save is
   // returned as is; anything newer or unknown is rejected.
@@ -191,6 +269,7 @@
     const list = (x, max = LIMITS.list) => Array.isArray(x) && x.length <= max;
     const W = (d && d.worldSize || 0) * C.TILE;
     const point = p => p && num(p.x) && num(p.y) && p.x >= 0 && p.y >= 0 && p.x <= W && p.y <= W;
+    const cell = o => [o.sx, o.sy].every(v => int(v) && v >= 0 && v < G.Buildings.SUB);   // building-grid cell within the tile
     const item = i => i && typeof i.id === 'string' && D.items.has(i.key) &&
       (D.items.get(i.key).stackable ? int(i.count) && i.count > 0 && i.count <= D.items.get(i.key).maxStack : num(i.durability) && num(i.maxDurability) && i.durability >= 0);
     const cost = o => o && typeof o === 'object' && Object.entries(o).every(([k, v]) => D.resources.has(k) && num(v) && v >= 0);
@@ -224,6 +303,9 @@
       if (u.team === 'red' && (u.isHero || u.isShip)) fail('hostile flags');
       for (const k of ['followId']) if (u[k] != null && !int(u[k])) fail('unit ' + k);
       for (const k of ['mineId', 'nodeId', 'spawnerId']) if (u[k] != null && typeof u[k] !== 'string') fail('unit ' + k);
+      const tr = u.caveTransit;
+      if (tr !== null && !(tr && int(tr.cave) && tr.cave >= 0 && ['in', 'out'].includes(tr.dir) && (tr.then === null || point(tr.then)))) fail('unit cave transit');
+      if (!num(u.caveRetry)) fail('unit caveRetry');
     }
     if (d.units.filter(u => u.isHero).length !== 1 || !d.units.some(u => u.isHero && u.id === d.heroId)) fail('commander');
     if (d.units.filter(u => u.isShip).length !== 1 || !d.units.some(u => u.isShip && u.id === d.shipId)) fail('ship');
@@ -234,8 +316,8 @@
     if (!d.camera || !point(d.camera) || !num(d.camera.z) || d.camera.z < C.ZOOM_MIN || d.camera.z > C.ZOOM_MAX) fail('camera');
     for (const k of ['containers', 'buildings', 'constructionSites', 'resourceNodes', 'terrainEdits']) if (!list(d[k])) fail(k);
     if (!d.containers.every(c => point(c) && typeof c.id === 'string' && list(c.items, 1000) && c.items.every(item) && num(c.capacity))) fail('container');
-    if (!d.buildings.every(b => point(b) && D.buildables.has(b.type) && num(b.hp) && num(b.maxHp) && [b.gx, b.gy, b.w, b.h].every(int) && (!b.fabQueue || queue(b.fabQueue)) && (!b.spawner || spawner(b.spawner)))) fail('building');
-    if (!d.constructionSites.every(s => point(s) && D.buildables.has(s.type) && num(s.remaining) && num(s.buildTime) && [s.gx, s.gy, s.w, s.h].every(int))) fail('construction site');
+    if (!d.buildings.every(b => point(b) && D.buildables.has(b.type) && num(b.hp) && num(b.maxHp) && [b.gx, b.gy, b.w, b.h].every(int) && cell(b) && (!b.fabQueue || queue(b.fabQueue)) && (!b.spawner || spawner(b.spawner)))) fail('building');
+    if (!d.constructionSites.every(s => point(s) && D.buildables.has(s.type) && num(s.remaining) && num(s.buildTime) && [s.gx, s.gy, s.w, s.h].every(int) && cell(s))) fail('construction site');
     if (!d.resourceNodes.every(n => point(n) && D.nodes.has(n.type) && num(n.remaining) && n.remaining >= 0 &&
       (D.nodes.get(n.type).kind !== 'deposit' || (int(n.gx) && int(n.gy))))) fail('resource node');
     if (!d.buildings.every(b => !b.fabQueue || b.rally === null || point(b.rally))) fail('building rally point');
@@ -247,6 +329,9 @@
       return typeof b.shieldOn === 'boolean' && num(b.shield) && b.shield >= 0 && b.shield <= sh.capacity;
     })) fail('building shield');
     if (!d.terrainEdits.every(e => [e.x, e.y, e.w, e.h, e.t].every(int) && e.w >= 0 && e.h >= 0 && e.w * e.h <= 1 << 20)) fail('terrain edit');
+    // Tree damage: [index, state (0 standing, 1 sawn stump, 2 snapped stump, 3 gone), damage], each tree once.
+    if (!list(d.trees, 1 << 20) || !d.trees.every(t => Array.isArray(t) && t.length === 3 && int(t[0]) && t[0] >= 0 && int(t[1]) && t[1] >= 0 && t[1] <= 3 && num(t[2]) && t[2] >= 0)) fail('trees');
+    if (new Set(d.trees.map(t => t[0])).size !== d.trees.length) fail('trees: a tree listed twice');
     const e = d.expedition;
     if (!e) fail('expedition');
     for (const k of ['world', 'readiness', 'repairs', 'elementP', 'elapsed', 'upgrades', 'auto', 'scans', 'built', 'waveAt']) if (!num(e[k]) || e[k] < 0) fail('expedition ' + k);
@@ -264,6 +349,7 @@
     G.setWorldSize(d.worldSize);
     const S = G.Scenario.createWorld(d.seed, { slot, map: d.map, landing: d.landing });
     for (const e of d.terrainEdits){ S.grid.fill(e.x, e.y, e.w, e.h, e.t); S.terrainEdits.push({ ...e }); }
+    G.Trees.apply(d.trees);   // after the edits, which already free the tiles of destroyed trees
     Object.assign(S, {
       time: d.time, nextId: d.nextId, heroId: d.heroId, shipId: d.shipId,
       formation: G.FORMATIONS.includes(d.formation) ? d.formation : 'square', formationAngle: num(d.formationAngle) ? d.formationAngle : 0,
@@ -303,7 +389,7 @@
         camera: { x: S.camera.x, y: S.camera.y, z: S.camera.z }, formation: S.formation, formationAngle: S.formationAngle,
         resources: G.copy(S.resources), inventory: G.copy(S.inventory), units,
         buildings: G.copy(S.buildings), constructionSites: G.copy(S.constructionSites), containers: G.copy(S.containers),
-        resourceNodes: G.copy(S.resourceNodes), terrainEdits: G.copy(S.terrainEdits || []), expedition: G.copy(S.expedition)
+        resourceNodes: G.copy(S.resourceNodes), terrainEdits: G.copy(S.terrainEdits || []), trees: G.Trees.serialize(), expedition: G.copy(S.expedition)
       };
     },
     // Rebuilds the world from save data. Throws, leaving the current game as it was, if

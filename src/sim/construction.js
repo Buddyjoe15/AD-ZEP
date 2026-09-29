@@ -24,22 +24,28 @@
       }
       return best || { x: (gx + 0.5) * T, y: (gy + h + 0.5) * T };
     },
+    // approachPoint around the tiles a structure or site touches.
+    approachFor(o, from){ const c = G.Buildings.cover(o); return this.approachPoint(c.gx, c.gy, c.w, c.h, from); },
+    // A new site record for `key` at tile (gx, gy), cell (sx, sy).
+    makeSite(key, d, gx, gy, sx, sy, builder){
+      const T = G.CONFIG.TILE, k = G.Buildings.SUB;
+      return {
+        id: 'site-' + G.newId(), type: key, team: 'blue', gx, gy, sx, sy, w: d.w, h: d.h,
+        x: (gx + sx / k + d.w / 2) * T, y: (gy + sy / k + d.h / 2) * T, buildTime: d.buildTime, remaining: d.buildTime, builderId: builder.id
+      };
+    },
     // Validates and queues a structure for `builder`. Returns the site or null.
-    order(builder, key, gx, gy){
+    order(builder, key, gx, gy, sx = 0, sy = 0){
       const d = G.Defs.buildables.get(key);
       if (!d) return null;
       if (!this.builder(builder && builder.id)){ G.notify('Utility Spider is unavailable'); return null; }
       if (builder.buildSiteId){ G.notify('Utility Spider is busy. Finish the job or recall first.'); return null; }
-      if (!G.Buildings.canPlaceKey(key, gx, gy)){ G.notify(d.placeOnNode === 'deposit' ? d.name + ' must be placed centred on a free resource deposit' : 'Cannot build there'); return null; }
-      const ap = this.approachPoint(gx, gy, d.w, d.h, builder);
+      if (!G.Buildings.canPlaceKey(key, gx, gy, sx, sy)){ G.notify(d.placeOnNode === 'deposit' ? d.name + ' must be placed centred on a free resource deposit' : 'Cannot build there'); return null; }
+      const ap = this.approachFor({ gx, gy, sx, sy, w: d.w, h: d.h }, builder);
       if (!G.State.paths.reachable(builder.x, builder.y, ap.x, ap.y)){ G.notify('No construction route. Choose a reachable tile.'); return null; }
       if (!G.Economy.canAfford(d.cost)){ G.notify('Need ' + G.Economy.describe(d.cost)); return null; }
       G.Economy.spend(d.cost, 'construction');
-      const T = G.CONFIG.TILE;
-      const site = {
-        id: 'site-' + G.newId(), type: key, team: 'blue', gx, gy, w: d.w, h: d.h,
-        x: (gx + d.w / 2) * T, y: (gy + d.h / 2) * T, buildTime: d.buildTime, remaining: d.buildTime, builderId: builder.id
-      };
+      const site = this.makeSite(key, d, gx, gy, sx, sy, builder);
       G.Units.clearOrders(builder);
       G.State.constructionSites.push(site);
       builder.command = 'build'; builder.buildSiteId = site.id;
@@ -52,22 +58,19 @@
     // Cells that can't be built on are skipped; the row stops where the resources run out.
     // Returns the queued sites (empty if none).
     orderRow(builder, key, cells){
-      const d = G.Defs.buildables.get(key), S = G.State, T = G.CONFIG.TILE;
+      const d = G.Defs.buildables.get(key), S = G.State;
       if (!d) return [];
       if (!this.builder(builder && builder.id)){ G.notify('Utility Spider is unavailable'); return []; }
       if (builder.buildSiteId){ G.notify('Utility Spider is busy. Finish the job or recall first.'); return []; }
       const sites = [];
       let skipped = 0, short = false;
-      for (const { gx, gy } of cells){
-        if (!G.Buildings.canPlaceKey(key, gx, gy)){ skipped++; continue; }
-        const ap = this.approachPoint(gx, gy, d.w, d.h, builder);
+      for (const { gx, gy, sx = 0, sy = 0 } of cells){
+        if (!G.Buildings.canPlaceKey(key, gx, gy, sx, sy)){ skipped++; continue; }
+        const ap = this.approachFor({ gx, gy, sx, sy, w: d.w, h: d.h }, builder);
         if (!S.paths.reachable(builder.x, builder.y, ap.x, ap.y)){ skipped++; continue; }
         if (!G.Economy.canAfford(d.cost)){ short = true; break; }
         G.Economy.spend(d.cost, 'construction');
-        const site = {
-          id: 'site-' + G.newId(), type: key, team: 'blue', gx, gy, w: d.w, h: d.h,
-          x: (gx + d.w / 2) * T, y: (gy + d.h / 2) * T, buildTime: d.buildTime, remaining: d.buildTime, builderId: builder.id
-        };
+        const site = this.makeSite(key, d, gx, gy, sx, sy, builder);
         S.constructionSites.push(site);
         sites.push(site);
         G.Events.emit('construction:queued', site);
@@ -81,7 +84,7 @@
     // Sets `builder` to work `site`: walk to it and build.
     start(builder, site){
       builder.command = 'build'; builder.buildSiteId = site.id;
-      const ap = this.approachPoint(site.gx, site.gy, site.w, site.h, builder);
+      const ap = this.approachFor(site, builder);
       G.State.paths.request(builder, ap.x, ap.y, { priority: true });
     },
     // Sites queued for `builder` (its current one included), in queue order.
@@ -101,9 +104,9 @@
       G.Events.emit('construction:cancelled', site);
       if (builder && builder.buildSiteId === site.id) this.next(builder);
     },
-    // Within one tile of the footprint's edge (covers diagonal approach tiles).
+    // Within one tile of the edge of the tiles it covers (covers diagonal approach tiles).
     inReach(u, site){
-      const T = G.CONFIG.TILE, x0 = site.gx * T, y0 = site.gy * T, x1 = x0 + site.w * T, y1 = y0 + site.h * T;
+      const T = G.CONFIG.TILE, c = G.Buildings.cover(site), x0 = c.gx * T, y0 = c.gy * T, x1 = x0 + c.w * T, y1 = y0 + c.h * T;
       const dx = Math.max(x0 - u.x, 0, u.x - x1), dy = Math.max(y0 - u.y, 0, u.y - y1);
       return Math.hypot(dx, dy) <= T * REACH_TILES;
     },
@@ -125,16 +128,16 @@
       const builder = G.Units.get(site.builderId);
       if (builder && builder.buildSiteId === site.id) this.next(builder);   // on to the next queued site, or idle
       // A unit may have wandered onto the footprint; nudge it off before the walls go up.
-      const T = G.CONFIG.TILE;
+      const T = G.CONFIG.TILE, c = G.Buildings.cover(site);
       for (const u of S.units){
         if (u.isShip || u.hp <= 0) continue;
         const ux = Math.floor(u.x / T), uy = Math.floor(u.y / T);
-        if (ux >= site.gx && ux < site.gx + site.w && uy >= site.gy && uy < site.gy + site.h){
-          const p = this.approachPoint(site.gx, site.gy, site.w, site.h, u);
+        if (ux >= c.gx && ux < c.gx + c.w && uy >= c.gy && uy < c.gy + c.h){
+          const p = this.approachFor(site, u);
           u.x = p.x; u.y = p.y;
         }
       }
-      const b = G.Buildings.add(site.type, site.gx, site.gy);
+      const b = G.Buildings.add(site.type, site.gx, site.gy, { sx: site.sx || 0, sy: site.sy || 0 });
       G.Events.emit('construction:completed', { site, building: b });
       G.notify(d.name + ' construction complete');
       return b;
@@ -157,7 +160,7 @@
         if (!G.Construction.inReach(u, site)){
           if (G.Units.navIdle(u) && S.time >= u.commandNextPath){
             u.commandNextPath = S.time + REPLAN;
-            const ap = G.Construction.approachPoint(site.gx, site.gy, site.w, site.h, u);
+            const ap = G.Construction.approachFor(site, u);
             S.paths.request(u, ap.x, ap.y);
           }
           continue;

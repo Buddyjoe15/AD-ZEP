@@ -56,39 +56,149 @@
       g.fillStyle = '#1a211a'; g.fillRect(0, 0, this.w, this.h);
       if (!S.grid) return;
       const c = S.camera, z = c.z, t = S.time, v = this.view(), inView = (x, y, p) => x > v.x0 - p && y > v.y0 - p && x < v.x1 + p && y < v.y1 + p;
+      // Surface or a cave (Genesis): the terrain comes from the surface copy of the grid, and
+      // only what is on the layer in view is drawn.
+      const CV = G.CaveView, inCave = CV.cave >= 0, TG = CV.terrainGrid(), here = o => CV.here(o), WP = G.WorldPicture;
+      let pending = 0;   // chunks the view still wants
       g.save(); g.scale(z, z); g.translate(-c.x, -c.y);
 
       // Terrain: overview image underneath, detailed chunks on top when close enough.
-      const TC = G.TerrainCache, ct = C.CHUNK_TILES * T;
-      const cx0 = Math.max(0, Math.floor(v.x0 / ct)), cy0 = Math.max(0, Math.floor(v.y0 / ct));
-      const cx1 = Math.min(Math.ceil(C.WORLD_W / ct) - 1, Math.floor(v.x1 / ct)), cy1 = Math.min(Math.ceil(C.WORLD_H / ct) - 1, Math.floor(v.y1 / ct));
-      // Full-resolution chunks up close (TERRAIN_RES once a world px covers more than one
-      // device px, if they fit the cache), lower-resolution chunks at middle zoom (or when the
+      const TC = G.TerrainCache, CT = C.CHUNK_TILES * T;
+      const span = ct => [Math.max(0, Math.floor(v.x0 / ct)), Math.max(0, Math.floor(v.y0 / ct)), Math.min(Math.ceil(C.WORLD_W / ct) - 1, Math.floor(v.x1 / ct)), Math.min(Math.ceil(C.WORLD_H / ct) - 1, Math.floor(v.y1 / ct))];
+      const count0 = (() => { const [a0, b0, a1, b1] = span(CT); return (a1 - a0 + 1) * (b1 - b0 + 1); })();
+      // Full-resolution chunks up close, lower-resolution chunks at middle zoom (or when the
       // view holds more chunks than the full cache), and only the overview image when far.
-      const count = (cx1 - cx0 + 1) * (cy1 - cy0 + 1), near = z >= C.LOD_ZOOM && count <= C.CHUNK_CACHE_MAX;
-      const far = !near && (z < C.FAR_CHUNK_ZOOM || count > C.FAR_CHUNK_CACHE_MAX), low = !near && !far;
-      const R = C.TERRAIN_RES, res = low ? C.FAR_CHUNK_SCALE : this.dpr * z > 1 && count * R * R <= C.CHUNK_CACHE_MAX ? R : 1;
-      const alt = low ? 1 : res === 1 ? R : 1;   // drawn while the wanted chunk is still queued
-      g.imageSmoothingEnabled = false; g.drawImage(TC.getOverview(), 0, 0, C.WORLD_W, C.WORLD_H); g.imageSmoothingEnabled = true;
+      const near = z >= C.LOD_ZOOM && count0 <= C.CHUNK_CACHE_MAX;
+      const far = !near && (z < C.FAR_CHUNK_ZOOM || count0 > C.FAR_CHUNK_CACHE_MAX), low = !near && !far;
+      // Close up, chunks are painted at about the screen's own resolution: a world px covers
+      // zd device px, and chunks come at ½, 1, 2, 3 or 4 canvas px per world px (the largest the
+      // cache can hold for this view). Thresholds have some give, so zooming back and forth
+      // across one doesn't repaint the whole view each time.
+      const L = this.lod || (this.lod = { res: 1, live: false }), zd = this.dpr * z;
+      const fits = r => { const [a0, b0, a1, b1] = span(TC.tilesFor(r) * T); return (a1 - a0 + 1) * (b1 - b0 + 1) * TC.cost(r) <= C.CHUNK_CACHE_MAX * 0.8; };
+      const pick = d => d <= 0.55 ? 0.5 : Math.min(C.TERRAIN_RES_MAX, Math.max(1, Math.ceil(d - 0.08)));
+      let want1 = pick(zd);
+      if (want1 !== L.res && (pick(zd * 1.08) === L.res || pick(zd / 1.08) === L.res)) want1 = L.res;   // hysteresis
+      while (want1 > 1 && !fits(want1)) want1--;
+      L.res = want1;
+      const res = low ? C.FAR_CHUNK_SCALE : want1, ct = TC.tilesFor(res) * T;
+      const [cx0, cy0, cx1, cy1] = span(ct);
+      // Free-standing trees (Genesis) are drawn live up close and drawn into the chunks further out.
+      // (Trees stand still, so they are always drawn into the chunks: nothing to redraw each frame.)
+      const TA = G.TreeArt, trees = TA.has(TG);
+      L.live = false;
+      const bake = trees && !L.live, live = trees && near ? new Set() : null;
+      if (inCave) CV.drawCave(g, v, z, t);
+      else {
+        g.imageSmoothingEnabled = false; g.drawImage(TC.getOverview(), 0, 0, C.WORLD_W, C.WORLD_H); g.imageSmoothingEnabled = true;
+        // The whole-map picture over it (all of it once loaded), under the chunks.
+        const X0 = Math.max(0, v.x0), Y0 = Math.max(0, v.y0), X1 = Math.min(C.WORLD_W, v.x1), Y1 = Math.min(C.WORLD_H, v.y1);
+        if (X1 > X0 && Y1 > Y0) WP.draw(g, X0, Y0, X1 - X0, Y1 - Y0, X0, Y0, X1 - X0, Y1 - Y0);
+      }
       let chunks = 0;
-      if (!far){
-        g.imageSmoothingEnabled = !(G.PixelArt.enabled && z * this.dpr >= 1);   // pixel terrain stays crisp up close
-        let built = 0;
-        for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++){
-          let cv = null;
-          if (TC.has(cx, cy, res) || built < C.CHUNKS_BUILT_PER_FRAME){ if (!TC.has(cx, cy, res)) built++; cv = TC.chunk(cx, cy, res); }
-          else cv = TC.peek(cx, cy, alt);   // another resolution until this one is painted
-          if (!cv) continue;
-          g.drawImage(cv, cx * ct, cy * ct, ct, ct); chunks++;
+      // The best copy at hand for the world rect of chunk (cx, cy) while it is painted: another
+      // resolution (its chunk may be larger or smaller: the matching part, or the parts), the
+      // other tree layer, or a middle-zoom copy. Returns whether anything was drawn, and
+      // whether it had the trees in it.
+      const stand = (cx, cy) => {
+        const X = cx * ct, Y = cy * ct;
+        const tries = [];
+        for (const r of [res, 2, 1, 3, 4, 0.5]) if (r !== res || trees) for (const bk of trees ? [bake, !bake] : [false]) if (!(r === res && bk === bake)) tries.push([r, bk]);
+        tries.push([C.FAR_CHUNK_SCALE, true]);
+        for (const [r, bk] of tries){
+          const cs = TC.tilesFor(r) * T;
+          if (cs >= ct){
+            const k = Math.floor(X / cs), m = Math.floor(Y / cs), cv = TC.peek(k, m, r, bk);
+            if (!cv) continue;
+            const f = cv.width / cs;
+            g.drawImage(cv, (X - k * cs) * f, (Y - m * cs) * f, ct * f, ct * f, X, Y, ct, ct);
+            return { baked: bk || r < 1 };
+          }
+          // Smaller chunks: all of the pieces, or none.
+          const n = ct / cs, parts = [];
+          for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){ const cv = TC.peek(cx * n + i, cy * n + j, r, bk); if (!cv) break; parts.push([cv, i, j]); }
+          if (parts.length < n * n) continue;
+          for (const [cv, i, j] of parts) g.drawImage(cv, X + i * cs, Y + j * cs, cs, cs);
+          return { baked: bk || r < 1 };
         }
+        return null;
+      };
+      if (!far && !inCave){
+        g.imageSmoothingEnabled = !(G.PixelArt.enabled && z * this.dpr >= 1);   // pixel terrain stays crisp up close
+        // Chunks in view are never evicted while they are wanted. Missing ones are painted
+        // nearest the middle of the screen first, as many as fit in a few milliseconds a frame
+        // (at least one), so the view fills from the centre out and never waits on the edges.
+        TC.pin.clear();
+        const mx = (v.x0 + v.x1) / 2 / ct - 0.5, my = (v.y0 + v.y1) / 2 / ct - 0.5, want = [];
+        for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++){ TC.pin.add(TC.key(cx, cy, res, bake)); if (!TC.has(cx, cy, res, bake)) want.push([cx, cy]); }
+        want.sort((a, b) => (a[0] - mx) ** 2 + (a[1] - my) ** 2 - (b[0] - mx) ** 2 - (b[1] - my) ** 2);
+        // First cover the view: where a chunk is missing and nothing sharper is at hand, a quick
+        // one at QUICK_RES (a fraction of the cost) is painted first, so after a jump across the
+        // map the view is whole within a few frames and then sharpens chunk by chunk.
+        const Q = C.QUICK_RES, qs = TC.tilesFor(Q) * T, jobs = [], seenQ = new Set();
+        if (res > Q) for (const [cx, cy] of want){
+          const qx = Math.floor(cx * ct / qs), qy = Math.floor(cy * ct / qs), qk = qx + ',' + qy;
+          if (seenQ.has(qk)) continue;
+          seenQ.add(qk); TC.pin.add(TC.key(qx, qy, Q, bake));
+          if (!TC.has(qx, qy, Q, bake) && !this.covered(cx, cy, ct, res, bake)) jobs.push([qx, qy, Q]);
+        }
+        for (const [cx, cy] of want) jobs.push([cx, cy, res]);
+        // Painted a band of rows at a time within the frame's budget, so even a big chunk
+        // never stalls a frame; a half-painted one carries on next frame.
+        // The budget: the most while part of the view shows nothing but the overview (quick chunks
+        // still to paint: a few slow frames beat seconds of blur), then less while it sharpens,
+        // so the game stays smooth as the view fills in.
+        // (Once the whole-map picture is there, nothing is ever blank: no need to hurry.)
+        pending = want.length;
+        const t1 = now(), budget = jobs.length && jobs[0][2] === Q && !WP.done ? C.CHUNK_BLANK_MS : want.length ? C.CHUNK_BUILD_MS : C.CHUNK_SHARPEN_MS;
+        for (let k = 0; k < jobs.length && (k < 1 || now() - t1 < budget); k++) if (!TC.work(jobs[k][0], jobs[k][1], jobs[k][2], bake, t1 + budget)) break;
+        S.metrics.chunksBlank = jobs.filter(j => j[2] === Q && !TC.has(j[0], j[1], Q, bake)).length;   // view chunks with nothing but the overview
+        // What is left of the budget for work ahead of need (time spent drawing doesn't count).
+        const spare = () => C.CHUNK_AHEAD_MS - (now() - t1 - drawn), t2 = now(); let drawn = 0;
+        const liveKey = (cx, cy) => { const k = ct / CT; return Math.floor(cy * k) * 4096 + Math.floor(cx * k); };   // (in the tree index's full-size chunks)
+        for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++){
+          if (TC.has(cx, cy, res, bake)){
+            g.drawImage(TC.chunk(cx, cy, res, bake), cx * ct, cy * ct, ct, ct); chunks++;
+            if (live && !bake && res >= 1) live.add(liveKey(cx, cy));
+            continue;
+          }
+          const got = stand(cx, cy);
+          if (!got) continue;
+          chunks++;
+          if (live && !got.baked) live.add(liveKey(cx, cy));
+        }
+        drawn = now() - t2;
+        // With the view complete and time to spare, the ring of chunks round it is painted
+        // ahead, so scrolling finds them ready.
+        if (!want.length){
+          const rx0 = Math.max(0, cx0 - 1), ry0 = Math.max(0, cy0 - 1), rx1 = Math.min(Math.ceil(C.WORLD_W / ct) - 1, cx1 + 1), ry1 = Math.min(Math.ceil(C.WORLD_H / ct) - 1, cy1 + 1);
+          if (res < 1 || (rx1 - rx0 + 1) * (ry1 - ry0 + 1) * TC.cost(res) <= C.CHUNK_CACHE_MAX){
+            const ring = [];
+            for (let cy = ry0; cy <= ry1; cy++) for (let cx = rx0; cx <= rx1; cx++){ const k = TC.key(cx, cy, res, bake); TC.pin.add(k); if (!TC.has(cx, cy, res, bake)) ring.push([cx, cy]); }
+            ring.sort((a, b) => (a[0] - mx) ** 2 + (a[1] - my) ** 2 - (b[0] - mx) ** 2 - (b[1] - my) ** 2);
+            if (ring.length && spare() > 0) TC.work(ring[0][0], ring[0][1], res, bake, now() + spare());
+          }
+        }
+        // Time to spare: houses and caverns are drawn ahead of need.
+        if (!this.warmed && !want.length && spare() > 0) this.warmed = G.Structures.warm(TG, now() + spare());
+        if (!this.treesWarm && !want.length && spare() > 0) this.treesWarm = G.TreeArt.warm(now() + spare());
         g.imageSmoothingEnabled = true;
         // Pixel-art trees moving in the wind (Woodlands); lower-resolution chunks have them drawn in.
-        if (near) G.WoodlandsArt.drawTrees(g, S.grid, v, T, t, z);
+        if (near) G.Landscape.drawLive(g, TG, v, t, z);   // waterfalls and glinting water (Genesis)
+        if (near) G.WoodlandsArt.drawTrees(g, TG, v, T, t, z);
+        if (live && live.size) TA.drawLive(g, TG, v, t, (cx, cy) => live.has(cy * 4096 + cx));
       }
+
+      // The whole-map picture (painted while the game loads): cells whose terrain changed are
+      // painted again in spare time, and all of it for a map made in play.
+      if (!WP.loading && !WP.done && !pending) WP.work(now() + 1);
+
+      // Houses with a unit inside have their roof off, showing the room.
+      if (!inCave && !far) G.Structures.interiors(g, TG, S.units.filter(u => !u.isShip && here(u) && (u.team === 'blue' || !G.Fog.enabled || G.Fog.visibleAt(u.x, u.y))), inView);
 
       // Resource nodes.
       for (const n of S.resourceNodes){
-        if (n.remaining <= 0 || !inView(n.x, n.y, 30)) continue;
+        if (n.remaining <= 0 || !inView(n.x, n.y, 30) || !here(n)) continue;
         if (G.Gather.isDeposit(n)){
           // 1×1 mine deposit (hidden under its Mine Building once built).
           if (G.Gather.mineOn(n)) continue;
@@ -108,13 +218,14 @@
       }
       // Containers and ground items.
       for (const ctn of S.containers){
-        if (!inView(ctn.x, ctn.y, 48)) continue;
+        if (!inView(ctn.x, ctn.y, 48) || !here(ctn)) continue;
         if (ctn.type === 'ground_item'){
           if (!ctn.items.length) continue;
           g.fillStyle = '#87d5e3'; g.fillRect(ctn.x - 7, ctn.y - 7, 14, 14);
           if (!far){ g.fillStyle = '#0b1820'; g.font = 'bold 7px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(G.initials(G.Items.name(ctn.items[0])), ctn.x, ctn.y + 0.5); g.textBaseline = 'alphabetic'; }
           continue;
         }
+        if ((ctn.type === 'cave_cache' || ctn.type === 'black_box') && !far){ G.Visuals.drawCaveFind(g, ctn, z, t); continue; }
         const px = ctn.gx * T, py = ctn.gy * T;
         g.fillStyle = ctn.opened ? '#79552f' : '#d3a92e';
         if (far){ g.fillRect(ctn.x - 12, ctn.y - 12, 24, 24); continue; }
@@ -123,8 +234,8 @@
       }
       // Construction sites.
       for (const site of S.constructionSites){
-        if (!inView(site.x, site.y, site.w * T)) continue;
-        const px = site.gx * T, py = site.gy * T, pct = 1 - site.remaining / site.buildTime;
+        if (!inView(site.x, site.y, site.w * T) || !here(site)) continue;
+        const px = G.Buildings.fx(site) * T, py = G.Buildings.fy(site) * T, pct = 1 - site.remaining / site.buildTime;
         if (G.PixelArt.buildingSprite(site.type)) G.PixelArt.drawSite(g, site, pct);
         else {
         g.fillStyle = 'rgba(160,160,145,.28)'; g.strokeStyle = '#d4b96b'; g.lineWidth = 2 / z; g.setLineDash([6 / z, 5 / z]);
@@ -135,15 +246,15 @@
         g.fillStyle = '#fff0b0'; g.font = (9 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(site.remaining.toFixed(1) + 's', site.x, py - 5);
       }
       // Structures (and, with pixel art, the rubble of recently destroyed ones).
-      if (G.PixelArt.enabled) G.PixelArt.drawRubble(g, inView);
+      if (G.PixelArt.enabled && !inCave) G.PixelArt.drawRubble(g, inView);
       // Pixel-art structures draw every shadow first, so no shadow falls on a neighbour.
       const P = G.PixelArt;
-      if (P.enabled) for (const b of S.buildings) if (inView(b.x, b.y, b.w * T) && P.buildingSprite(b.type)) P.drawBuildingShadow(g, b, t);
-      for (const b of S.buildings) if (inView(b.x, b.y, b.w * T)) G.Visuals.drawBuilding(g, b, z, t, P.enabled);
+      if (P.enabled) for (const b of S.buildings) if (inView(b.x, b.y, b.w * T) && here(b) && P.buildingSprite(b.type)) P.drawBuildingShadow(g, b, t);
+      for (const b of S.buildings) if (inView(b.x, b.y, b.w * T) && here(b)) G.Visuals.drawBuilding(g, b, z, t, P.enabled);
       G.Visuals.shields(g, z, t, inView);
       // Expedition signals.
       const E = S.expedition;
-      if (E) for (const p of E.sites){
+      if (E && !inCave) for (const p of E.sites){
         if (p.done || !inView(p.x, p.y, 50)) continue;
         g.strokeStyle = p.kind === 'Element P' ? '#c591ff' : '#70e3dd'; g.lineWidth = 2 / z;
         g.beginPath(); g.arc(p.x, p.y, 20, 0, TAU); g.stroke();
@@ -153,14 +264,15 @@
 
       // Fog of war over the map and structures; hidden enemies are not drawn at all.
       const Fog = G.Fog;
-      if (Fog.enabled){ Fog.update(); Fog.draw(g); }
+      if (Fog.enabled && !inCave){ Fog.update(); Fog.draw(g); }
+      if (!inCave) CV.drawMouths(g, z, inView);
 
       // Units. With WebGL2 they are drawn by the GPU on their own canvas (one instanced call);
       // the ship stays on this canvas and everything that must sit above units (selection,
       // routes, beams, gunfire, previews) goes on a 2D overlay canvas. Without WebGL2 the
       // same content is drawn here with Canvas 2D.
       const visible = [];
-      for (const u of S.units) if (inView(u.x, u.y, u.isShip ? 340 : 80) && (u.team === 'blue' || Fog.visibleAt(u.x, u.y))) visible.push(u);
+      for (const u of S.units) if (inView(u.x, u.y, u.isShip ? 340 : 80) && here(u) && (u.team === 'blue' || inCave || Fog.visibleAt(u.x, u.y))) visible.push(u);
       const gpu = G.GPU.ok, sprites = [], bars = [];
       for (const u of visible){
         if (u.isShip) G.Visuals.drawUnit(g, u, z, t);
@@ -177,6 +289,7 @@
         o.clearRect(0, 0, this.w, this.h);
         o.save(); o.scale(z, z); o.translate(-c.x, -c.y);
       }
+      G.Lighting.draw(o, c, z, this.w, this.h, t);   // night and the lights in it (Genesis), under the orders and selection
       this.drawOverlay(o, visible, z, t, inView, !gpu);
       o.restore();
 
@@ -189,6 +302,20 @@
       if (now() - this.minimapAt > 1000 / C.MINIMAP_HZ){ this.minimapAt = now(); this.drawMinimap(); }
       else this.drawMinimapCamera();
     },
+    // Whether chunk (cx, cy) at `res` (ct world px across) can be stood in for by a sharper
+    // cached chunk (another resolution at 1 or more), so it needs no quick one.
+    covered(cx, cy, ct, res, bake){
+      const TC = G.TerrainCache, T = G.CONFIG.TILE;
+      for (const r of [1, 2, 3, 4]){
+        if (r === res) continue;
+        const cs = TC.tilesFor(r) * T;
+        if (cs >= ct){ if (TC.peek(Math.floor(cx * ct / cs), Math.floor(cy * ct / cs), r, bake)) return true; continue; }
+        const n = ct / cs; let all = true;
+        for (let j = 0; j < n && all; j++) for (let i = 0; i < n; i++) if (!TC.peek(cx * n + i, cy * n + j, r, bake)){ all = false; break; }
+        if (all) return true;
+      }
+      return false;
+    },
     // Canvas 2D unit drawing (fallback when hardware WebGL2 is unavailable). Units are
     // stamped from the sprite atlas with one transform + drawImage each; zoomed out,
     // ordinary units become team-coloured markers batched into one path per team.
@@ -199,6 +326,7 @@
     drawUnits2D(g, visible, z, t){
       const S = G.State, C = G.CONFIG, lod = z < this.unitLodZoom(), batches = new Map();
       const A = G.SpriteAtlas, c = S.camera, k = this.dpr * z, items = [];
+      A.ensureRoom();
       let shadows = false;
       for (const u of visible){
         if (u.isShip) continue;
@@ -254,6 +382,21 @@
     // Everything drawn above units, in world coordinates.
     drawOverlay(g, visible, z, t, inView, lod2d){
       const S = G.State, C = G.CONFIG, T = C.TILE;
+      // Hostile entry points on the map's edge: red chevrons pointing into the map.
+      if (S.expedition && G.CaveView.cave < 0) for (const e of G.Expedition.entries()){
+        if (!inView(e.x, e.y, 200)) continue;
+        const pulse = 0.55 + 0.35 * Math.sin(t * 3), px = -e.ny, py = e.nx;
+        g.save(); g.lineWidth = 6; g.lineJoin = 'round'; g.strokeStyle = `rgba(255,80,64,${pulse.toFixed(3)})`;
+        for (let k = 0; k < 3; k++){
+          const d = 20 + k * 34, cx = e.x + e.nx * d, cy = e.y + e.ny * d;
+          g.beginPath(); g.moveTo(cx + px * 30 - e.nx * 18, cy + py * 30 - e.ny * 18); g.lineTo(cx, cy); g.lineTo(cx - px * 30 - e.nx * 18, cy - py * 30 - e.ny * 18); g.stroke();
+        }
+        g.restore();
+      }
+      // Treetops over the units under them, then falling trees, dust and sawdust (Genesis).
+      if (G.CaveView.cave < 0) G.TreeArt.drawOverUnits(g, G.CaveView.terrainGrid(), visible, t, z);
+      for (const u of visible){ const p = u.command === 'gather' && G.Gather.chopTarget(u) >= 0 && G.Visuals.laserTarget(u); if (p) G.TreeFX.saw(p.x, p.y); }
+      G.TreeFX.draw(g, z);
       const sel = visible.filter(u => S.selected.has(u.id) && !u.isShip);
       if (sel.length){
         g.fillStyle = 'rgba(115,190,255,.025)'; g.strokeStyle = 'rgba(145,210,255,.12)'; g.lineWidth = 1 / z;
@@ -299,7 +442,7 @@
       for (const b of S.buildings){
         if (b.hp <= 0) continue;
         const s = b.spawner;
-        if (s && s.rally && s.hold) flag(s.rally, G.SpawnerUI.buildingId === b.id ? G.Spawner.spawnPoint(b) : b, G.SpawnerUI.buildingId === b.id, '#e0685f', 'rgba(255,120,100,.8)');
+        if (s && s.rally && s.hold && b.type !== 'cave_nest') flag(s.rally, G.SpawnerUI.buildingId === b.id ? G.Spawner.spawnPoint(b) : b, G.SpawnerUI.buildingId === b.id, '#e0685f', 'rgba(255,120,100,.8)');
         if (b.fabQueue && b.rally) flag(b.rally, b, G.ExpeditionUI.fabOwnerId === b.id, '#5fb7e0', 'rgba(110,190,240,.85)');
       }
       const ship = G.Units.ship();
@@ -336,22 +479,24 @@
           g.beginPath(); g.arc(s.x2, s.y2, missile ? 70 : 40, 0, TAU); g.fill();
         }
       }
+      if (S.buildMode && S.buildMode.active && S.buildMode.key) this.drawBuildGrid(g, z);
       if (S.buildPreview){
         const bp = S.buildPreview, d = G.Defs.buildables.get(bp.key) || { w: 1, h: 1, cost: {} }, builder = !!G.Construction.builder(S.buildMode.builderId);
-        const cell = (gx, gy, ok) => {
+        const cell = (o, ok) => {
+          const x = G.Buildings.fx(o) * T, y = G.Buildings.fy(o) * T;
           g.fillStyle = ok ? 'rgba(125,220,130,.30)' : 'rgba(230,90,80,.32)'; g.strokeStyle = ok ? '#8de295' : '#ee6b62'; g.lineWidth = 2 / z;
-          g.fillRect(gx * T, gy * T, T * d.w, T * d.h); g.strokeRect(gx * T, gy * T, T * d.w, T * d.h);
+          g.fillRect(x, y, T * d.w, T * d.h); g.strokeRect(x, y, T * d.w, T * d.h);
         };
         if (bp.cells){
           // A row of walls: green where it will be built, red where blocked or beyond the resources.
-          for (const c of bp.cells) cell(c.gx, c.gy, c.afford && builder);
+          for (const c of bp.cells) cell({ ...c, w: d.w, h: d.h }, c.afford && builder);
           const n = bp.cells.filter(c => c.afford).length, last = bp.cells[bp.cells.length - 1];
           const cost = G.Economy.describe(Object.fromEntries(Object.entries(d.cost).map(([k, v]) => [k, v * n])));
           g.font = `bold ${12 / z}px sans-serif`; g.textAlign = 'center';
-          const label = `${n} × ${d.name}${n ? ' · ' + cost : ''}`, lx = (last.gx + 0.5) * T, ly = last.gy * T - 8 / z, w = g.measureText(label).width + 12 / z;
+          const label = `${n} × ${d.name}${n ? ' · ' + cost : ''}`, lx = (G.Buildings.fx(last) + d.w / 2) * T, ly = G.Buildings.fy(last) * T - 8 / z, w = g.measureText(label).width + 12 / z;
           g.fillStyle = 'rgba(10,16,12,.8)'; g.fillRect(lx - w / 2, ly - 14 / z, w, 18 / z);
           g.fillStyle = n ? '#dff5c8' : '#ffb3a8'; g.fillText(label, lx, ly);
-        } else cell(bp.gx, bp.gy, G.Buildings.canPlaceKey(bp.key, bp.gx, bp.gy) && builder && G.Economy.canAfford(d.cost));
+        } else cell({ ...bp, w: d.w, h: d.h }, G.Buildings.canPlaceKey(bp.key, bp.gx, bp.gy, bp.sx || 0, bp.sy || 0) && builder && G.Economy.canAfford(d.cost));
       }
       if (S.formationPreview){
         const fp = S.formationPreview;
@@ -364,21 +509,79 @@
         });
       }
     },
+    // The building grid while a structure is picked for placing, over the whole view: tile
+    // lines, the quarter-tile cells inside them (when zoomed in enough to see them), ground
+    // nothing can be built on (cliffs, water, trees) shaded red, and the footprint of every
+    // structure and site, so it is clear which cells each one takes.
+    drawBuildGrid(g, z){
+      const S = G.State, grid = S.grid, T = G.CONFIG.TILE, K = G.Buildings.SUB, c = S.camera;
+      if (z < 0.3) return;
+      const x0 = Math.max(0, Math.floor(c.x / T)), y0 = Math.max(0, Math.floor(c.y / T));
+      const x1 = Math.min(grid.cols, Math.ceil((c.x + this.w / z) / T)), y1 = Math.min(grid.rows, Math.ceil((c.y + this.h / z) / T));
+      g.save();
+      g.fillStyle = 'rgba(220,60,50,.3)';
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (!grid.terrainPassable(x, y)) g.fillRect(x * T, y * T, T, T);
+      const lines = (step, style) => {
+        g.strokeStyle = style; g.lineWidth = 1 / z; g.beginPath();
+        for (let x = x0 * T; x <= x1 * T; x += step){ g.moveTo(x, y0 * T); g.lineTo(x, y1 * T); }
+        for (let y = y0 * T; y <= y1 * T; y += step){ g.moveTo(x0 * T, y); g.lineTo(x1 * T, y); }
+        g.stroke();
+      };
+      if (T / K * z >= 5) lines(T / K, 'rgba(230,240,225,.13)');
+      lines(T, 'rgba(230,240,225,.3)');
+      // Footprints of what is already there.
+      g.strokeStyle = 'rgba(255,236,150,.55)'; g.lineWidth = 1.5 / z; g.setLineDash([4 / z, 3 / z]); g.beginPath();
+      for (const o of [...S.buildings, ...S.constructionSites]){
+        const x = G.Buildings.fx(o) * T, y = G.Buildings.fy(o) * T;
+        if (x + o.w * T < x0 * T || y + o.h * T < y0 * T || x > x1 * T || y > y1 * T) continue;
+        g.rect(x, y, o.w * T, o.h * T);
+      }
+      g.stroke(); g.setLineDash([]);
+      g.restore();
+    },
+    // Minimap zoom: 1 shows the whole map, 2, 4 and 8 a window that many times smaller,
+    // centred on the camera (kept inside the map).
+    miniZoom: 1,
+    MINI_ZOOMS: [1, 2, 4, 8],
+    zoomMinimap(dir){
+      const Z = this.MINI_ZOOMS, i = Math.max(0, Math.min(Z.length - 1, Z.indexOf(this.miniZoom) + dir));
+      this.miniZoom = Z[i];
+      this.drawMinimap();
+      return this.miniZoom;
+    },
+    // The world rect the minimap shows.
+    miniRect(){
+      const C = G.CONFIG, c = G.State.camera, k = this.miniZoom, w = C.WORLD_W / k, h = C.WORLD_H / k;
+      const mx = c.x + this.w / c.z / 2, my = c.y + this.h / c.z / 2;
+      return { x: G.clamp(mx - w / 2, 0, C.WORLD_W - w), y: G.clamp(my - h / 2, 0, C.WORLD_H - h), w, h };
+    },
+    // World point under (fx, fy), fractions across and down the minimap.
+    miniToWorld(fx, fy){ const r = this.shown || this.miniRect(); return { x: r.x + fx * r.w, y: r.y + fy * r.h }; },
     drawMinimap(){
       const m = this.mini, S = G.State, C = G.CONFIG;
       if (!m || !S.grid) return;
       if (!this.miniBase){ this.miniBase = document.createElement('canvas'); }
-      const base = this.miniBase, W = base.width = m.width, H = base.height = m.height;
-      const g = base.getContext('2d'), sx = W / C.WORLD_W, sy = H / C.WORLD_H;
-      g.drawImage(G.TerrainCache.getOverview(), 0, 0, W, H);
+      const base = this.miniBase, W = base.width = m.width, H = base.height = m.height, r = this.shown = this.miniRect();
+      const g = base.getContext('2d'), sx = W / r.w, sy = H / r.h, ov = G.TerrainCache.getOverview();
+      g.imageSmoothingEnabled = this.miniZoom === 1;
+      g.drawImage(ov, r.x / C.WORLD_W * ov.width, r.y / C.WORLD_H * ov.height, r.w / C.WORLD_W * ov.width, r.h / C.WORLD_H * ov.height, 0, 0, W, H);
+      g.imageSmoothingEnabled = true;
+      if (this.miniZoom >= 4) G.WorldPicture.draw(g, r.x, r.y, r.w, r.h, 0, 0, W, H);   // (close enough for the picture's detail to show)
+      g.save(); g.translate(-r.x * sx, -r.y * sy);
       for (const n of S.resourceNodes) if (n.remaining > 0){ g.fillStyle = G.Gather.isDeposit(n) ? G.Gather.def(n).ore || '#c9d4dc' : '#d0a65b'; g.fillRect(n.x * sx - 1, n.y * sy - 1, 3, 3); }
-      for (const b of S.buildings){ g.fillStyle = '#adb5ad'; g.fillRect(b.x * sx - 1, b.y * sy - 1, 3, 3); }
+      for (const b of S.buildings){ if (G.Caves.layer(b) >= 0) continue; g.fillStyle = '#adb5ad'; g.fillRect(b.x * sx - 1, b.y * sy - 1, 3, 3); }   // (not underground)
       for (const s of S.constructionSites){ g.fillStyle = '#d4b96b'; g.fillRect(s.x * sx - 1, s.y * sy - 1, 3, 3); }
-      if (G.Fog.enabled && G.Fog.canvas){ G.Fog.update(); g.imageSmoothingEnabled = true; g.drawImage(G.Fog.canvas, 0, 0, W, H); }
+      // Where hostile waves enter the map: red wedges on the edge, pointing in.
+      if (S.expedition) for (const e of G.Expedition.entries()){
+        const x = e.x * sx, y = e.y * sy;
+        g.fillStyle = '#ff5a4a'; g.beginPath();
+        g.moveTo(x + e.nx * 7, y + e.ny * 7); g.lineTo(x - e.ny * 5, y + e.nx * 5); g.lineTo(x + e.ny * 5, y - e.nx * 5); g.fill();
+      }
+      if (G.Fog.enabled && G.Fog.canvas){ G.Fog.update(); g.imageSmoothingEnabled = true; g.drawImage(G.Fog.canvas, 0, 0, C.WORLD_W * sx, C.WORLD_H * sy); }
       // Ordinary units batched per team; ship and Vance on top.
       const byTeam = new Map();
       for (const u of S.units){
-        if (u.isShip || u.isHero || !G.Fog.canSee(u)) continue;
+        if (u.isShip || u.isHero || !G.Fog.canSee(u) || G.Caves.layer(u) >= 0) continue;   // (not those underground)
         const col = C.COLORS[u.team] || '#ccc';
         let list = byTeam.get(col);
         if (!list) byTeam.set(col, list = []);
@@ -395,16 +598,19 @@
         g.fillStyle = u.isShip ? '#d5e1e5' : C.COLORS[u.team] || '#ccc';
         g.fillRect(u.x * sx - sz / 2, u.y * sy - sz / 2, sz, sz);
       }
+      g.restore();
       this.drawMinimapCamera();
     },
     // Between full redraws only the camera rectangle moves.
     drawMinimapCamera(){
       const m = this.mini, S = G.State, C = G.CONFIG;
       if (!m || !this.miniBase) return;
-      const g = m.getContext('2d'), c = S.camera;
+      const g = m.getContext('2d'), c = S.camera, r = this.shown;
+      // Zoomed in, the window follows the camera: redraw it when the camera has left it.
+      if (this.miniZoom > 1){ const q = this.miniRect(); if (Math.abs(q.x - r.x) > r.w * 0.02 || Math.abs(q.y - r.y) > r.h * 0.02) return this.drawMinimap(); }
       g.drawImage(this.miniBase, 0, 0);
       g.strokeStyle = '#fff'; g.lineWidth = 1;
-      g.strokeRect(c.x / C.WORLD_W * m.width, c.y / C.WORLD_H * m.height, (this.w / c.z) / C.WORLD_W * m.width, (this.h / c.z) / C.WORLD_H * m.height);
+      g.strokeRect((c.x - r.x) / r.w * m.width, (c.y - r.y) / r.h * m.height, (this.w / c.z) / r.w * m.width, (this.h / c.z) / r.h * m.height);
     }
   };
 })();

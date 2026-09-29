@@ -37,7 +37,7 @@
     protectedTile(x, y){
       const S = G.State, grid = S.grid;
       if (grid.occ[grid.idx(x, y)] > 0 || G.Buildings.at(x, y)) return true;
-      if (S.constructionSites.some(s => x >= s.gx && x < s.gx + s.w && y >= s.gy && y < s.gy + s.h)) return true;
+      if (S.constructionSites.some(s => { const c = G.Buildings.cover(s); return x >= c.gx && x < c.gx + c.w && y >= c.gy && y < c.gy + c.h; })) return true;
       const t = T();
       return S.resourceNodes.some(n => Math.floor(n.x / t) === x && Math.floor(n.y / t) === y);
     },
@@ -131,9 +131,9 @@
     clearUnderObjects(){
       const S = G.State, grid = S.grid, t = T(), clearing = G.TT.CLEARING, rects = [];
       const tileRect = (wx, wy, r) => ({ x: Math.floor(wx / t) - r, y: Math.floor(wy / t) - r, w: 2 * r + 1, h: 2 * r + 1 });
-      for (const b of S.buildings) rects.push({ x: b.gx - 1, y: b.gy - 1, w: b.w + 2, h: b.h + 2 });
+      for (const b of S.buildings){ const c = G.Buildings.cover(b); rects.push({ x: c.gx - 1, y: c.gy - 1, w: c.w + 2, h: c.h + 2 }); }
       for (const u of S.units) if (u.isShip) rects.push({ x: u.gx - 1, y: u.gy - 1, w: u.w + 2, h: u.h + 2 });
-      for (const c of S.constructionSites) rects.push({ x: c.gx - 1, y: c.gy - 1, w: c.w + 2, h: c.h + 2 });
+      for (const s of S.constructionSites){ const c = G.Buildings.cover(s); rects.push({ x: c.gx - 1, y: c.gy - 1, w: c.w + 2, h: c.h + 2 }); }
       for (const n of S.resourceNodes) rects.push(tileRect(n.x, n.y, 2));
       for (const c of S.containers) rects.push(tileRect(c.x, c.y, 1));
       for (const p of (S.expedition && S.expedition.sites) || []) rects.push(tileRect(p.x, p.y, 1));
@@ -151,12 +151,12 @@
     // a description of what was removed, or null.
     removeAt(wx, wy){
       const S = G.State, t = T(), gx = Math.floor(wx / t), gy = Math.floor(wy / t), near = (o, r) => Math.hypot(o.x - wx, o.y - wy) < r;
-      const site = S.constructionSites.find(s => gx >= s.gx && gx < s.gx + s.w && gy >= s.gy && gy < s.gy + s.h);
+      const site = S.constructionSites.find(s => { const c = G.Buildings.cover(s); return gx >= c.gx && gx < c.gx + c.w && gy >= c.gy && gy < c.gy + c.h; });
       if (site){
         G.Construction.cancelSite(site, true);   // a builder working it moves on to its next queued site
         return 'Construction site';
       }
-      const b = G.Buildings.at(gx, gy);
+      const b = G.Buildings.atPoint(wx, wy) || G.Buildings.at(gx, gy);
       if (b){
         if (b.fabQueue && b.fabQueue.length) G.Fabrication.refundQueue(b);
         G.Buildings.remove(b);

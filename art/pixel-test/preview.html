@@ -52,6 +52,7 @@ function frameCanvas(str, w, h, team, mode){
   if (c) return c;
   c = document.createElement('canvas'); c.width = w; c.height = h;
   const g = c.getContext('2d'), img = g.createImageData(w, h);
+  str = /\d/.test(str) ? str.replace(/(\D)(\d+)/g, (_, ch, n) => ch.repeat(+n)) : str;   // (run-length encoded frames)
   for (let i = 0; i < w * h; i++){
     const k = CODE[str[i]];
     if (!k) continue;

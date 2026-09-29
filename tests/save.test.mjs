@@ -289,3 +289,80 @@ test('migrate_7_to_8: older saves land at the centre of their world, and landing
     assert.throws(() => G.Save.validate(bad), /landing site/, JSON.stringify(landing));
   }
 });
+
+test('migrate_10_to_11: structures double their footprint, extractors stay centred on their deposits, and units double their size', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(10)), before = JSON.stringify(raw);
+  const up = G.Save.migrations[10](raw);
+  assert.equal(JSON.stringify(raw), before, 'the input is not modified');
+  assert.equal(up.schema, 11);
+  raw.buildings.forEach((b, i) => {
+    const n = up.buildings[i];
+    if (b.type === 'mine_building'){
+      assert.deepEqual([n.w, n.h, n.gx, n.gy], [7, 7, b.gx - 2, b.gy - 2], 'the extractor grows round its deposit');
+      assert.equal(n.x, b.x); assert.equal(n.y, b.y);
+    } else {
+      assert.deepEqual([n.w, n.h, n.gx, n.gy], [b.w * 2, b.h * 2, b.gx, b.gy], b.type);
+      assert.equal(n.x, (n.gx + n.w / 2) * 48); assert.equal(n.y, (n.gy + n.h / 2) * 48);
+    }
+  });
+  raw.units.forEach((u, i) => assert.equal(up.units[i].radius, u.isShip ? u.radius : u.radius * 2, u.type));
+  // Restored, the footprints match the definitions and a default rally point is still the default.
+  const S = G.Save.restore(raw, 1);
+  for (const b of S.buildings){ const d = G.Defs.buildables.get(b.type); assert.deepEqual([b.w, b.h], [d.w, d.h], b.type); }
+  const mine = S.buildings.find(b => b.type === 'mine_building'), node = S.resourceNodes.find(n => n.id === mine.nodeId);
+  assert.ok(node && Math.floor(node.x / 48) === mine.gx + 3 && Math.floor(node.y / 48) === mine.gy + 3, 'the deposit is under the centre');
+  const sp = S.buildings.find(b => b.spawner);
+  assert.deepEqual({ ...sp.spawner.rally }, { ...G.Spawner.defaultRally(sp) });
+});
+
+test('migrate_11_to_12: structures and sites stand squarely on their tiles, and bad building-grid cells are rejected', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(11)), before = JSON.stringify(raw);
+  const up = G.Save.migrations[11](raw);
+  assert.equal(JSON.stringify(raw), before, 'the input is not modified');
+  assert.equal(up.schema, 12);
+  for (const b of [...up.buildings, ...up.constructionSites]) assert.deepEqual([b.sx, b.sy], [0, 0], b.type);
+  raw.buildings.forEach((b, i) => { assert.equal(up.buildings[i].x, b.x); assert.equal(up.buildings[i].gx, b.gx); });
+  G.Save.restore(raw, 1);
+  for (const sx of [4, -1, 1.5, undefined]){
+    const bad = readJSON(fixtureFile(G.SAVE_SCHEMA));
+    bad.buildings[0].sx = sx;
+    assert.throws(() => G.Save.validate(bad), /building/, String(sx));
+  }
+});
+
+test('migrate_12_to_13: walls and gates shrink to one tile thick about their centre; nothing else changes', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(12)), before = JSON.stringify(raw);
+  const up = G.Save.migrations[12](raw);
+  assert.equal(JSON.stringify(raw), before, 'the input is not modified');
+  assert.equal(up.schema, 13);
+  const fence = t => /_wall$|^gate/.test(t);
+  assert.ok(raw.buildings.some(b => fence(b.type) && b.sx), 'the fixture has a wall off the tile grid');
+  raw.buildings.forEach((b, i) => {
+    const n = up.buildings[i];
+    if (!fence(b.type)){ assert.deepEqual([n.gx, n.gy, n.sx, n.sy, n.w, n.h, n.x, n.y], [b.gx, b.gy, b.sx, b.sy, b.w, b.h, b.x, b.y], b.type); return; }
+    assert.deepEqual([n.w, n.h], [b.w / 2, b.h / 2], b.type);
+    assert.equal(n.x, b.x, b.type + ' keeps its centre'); assert.equal(n.y, b.y);
+    assert.equal((n.gx * 4 + n.sx) - (b.gx * 4 + b.sx), n.w * 2, b.type + ' moves in by half its new size');
+  });
+  // Restored, footprints match the definitions.
+  const S = G.Save.restore(raw, 1);
+  for (const b of S.buildings){ const d = G.Defs.buildables.get(b.type); assert.deepEqual([b.w, b.h], [d.w, d.h], b.type); }
+});
+
+test('migrate_13_to_14: nobody in older saves is on the way through a cave entrance', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(13)), before = JSON.stringify(raw);
+  const up = G.Save.migrations[13](raw);
+  assert.equal(JSON.stringify(raw), before, 'the input is not modified');
+  assert.equal(up.schema, 14);
+  for (const u of up.units){ assert.equal(u.caveTransit, null); assert.equal(u.caveRetry, 0); }
+  G.Save.restore(raw, 1);
+  for (const tr of [{ cave: -1, dir: 'in', then: null }, { cave: 0, dir: 'down', then: null }, { cave: 0, dir: 'in', then: { x: 'far' } }, 'in']){
+    const bad = readJSON(fixtureFile(G.SAVE_SCHEMA));
+    bad.units[0].caveTransit = tr;
+    assert.throws(() => G.Save.validate(bad), /cave transit/, JSON.stringify(tr));
+  }
+});

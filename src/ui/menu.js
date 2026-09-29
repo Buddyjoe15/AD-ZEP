@@ -92,8 +92,8 @@
         <p class="main-copy">Commander Elias Vance. UES Aster Vale. One unfamiliar Earth, and one way forward.</p>
         <p class="main-copy">Explore a signal, mine metal, build a field generator, and survive until the drive is ready. Bring the crew home to the ship. Jump again.</p>
         <label class="ezSeed">EARTH SEED <input id="ezSeedInput" type="number" min="1" max="4294967295" step="1" value="${this.expeditionSeed}"></label>
-        <label class="ezSeed">MAP <select id="ezMapInput">${Object.entries({ grass: 'Test map (open grass)', woodlands: 'Woodlands' }).map(([k, n]) => `<option value="${k}"${this.mapChoice === k ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
-        <label class="ezSeed">LANDING SITE <select id="ezLandingMode">${Object.entries({ centre: 'Centre of the map', random: 'Random', custom: 'Choose a tile' }).map(([k, n]) => `<option value="${k}"${this.landingMode === k ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label class="ezSeed">MAP <select id="ezMapInput">${Object.entries({ grass: 'Test map (open grass)', woodlands: 'Woodlands', genesis: 'Genesis v0.1 (landscaping test)' }).map(([k, n]) => `<option value="${k}"${this.mapChoice === k ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label class="ezSeed">LANDING SITE <select id="ezLandingMode">${Object.entries({ centre: 'Default (centre; a corner on Genesis)', random: 'Random', custom: 'Choose a tile' }).map(([k, n]) => `<option value="${k}"${this.landingMode === k ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
         <div id="ezLandingXY" class="ezLandXY${this.landingMode === 'custom' ? '' : ' hidden'}">
           <label class="ezSeed">TILE X <input id="ezLandX" type="number" min="${lo}" max="${hi}" step="1" value="${this.landX}"></label>
           <label class="ezSeed">TILE Y <input id="ezLandY" type="number" min="${lo}" max="${hi}" step="1" value="${this.landY}"></label>
@@ -169,20 +169,35 @@
       document.body.classList.add('in-game');
       G.Game.setPaused(false, true);
       G.UI.refreshSelection(true);
+      // The whole map is painted once before play starts (G.WorldPicture), behind a loading
+      // bar; the game waits, and the arrival plays after.
+      const WP = G.WorldPicture;
+      WP.work(0);   // (picks up the new map)
+      WP.loading = !WP.done;
+      G.UI.showMapLoading(WP.loading);
       if (data.introReveal){
         const ship = G.Units.ship();
         if (ship){
           G.centerCamera(ship.x, ship.y, 2.15);
           G.State.introCamera = { start: performance.now(), duration: 2600, from: 2.15, to: 0.72, cx: ship.x, cy: ship.y };
         }
-        setTimeout(() => { if (G.SceneManager.currentName === 'gameplay') G.Scenario.disembark(); }, data.skip ? 40 : 450);
+        const land = () => { if (G.SceneManager.currentName !== 'gameplay') return; if (G.WorldPicture.loading) return setTimeout(land, 100); G.Scenario.disembark(); };
+        setTimeout(land, data.skip ? 40 : 450);
         G.UI.toast('Wormhole transit complete');
       }
     },
-    exit(){ document.body.classList.remove('in-game'); G.State.clockReset = true; },
-    update(dt){ if (!document.hidden) G.Sim.step(dt); },
+    exit(){ document.body.classList.remove('in-game'); G.State.clockReset = true; G.WorldPicture.loading = false; G.UI.showMapLoading(false); },
+    update(dt){ if (!document.hidden && !G.WorldPicture.loading) G.Sim.step(dt); },
     render(t, realDt){
-      const S = G.State, ic = S.introCamera;
+      const S = G.State, WP = G.WorldPicture;
+      if (WP.loading){
+        // (Nothing else is drawn under the loading screen: all the time goes to the picture.)
+        WP.work(performance.now() + G.CONFIG.PICTURE_LOAD_MS);
+        if (WP.done){ WP.loading = false; G.UI.showMapLoading(false); if (S.introCamera) S.introCamera.start = t; }
+        else G.UI.showMapLoading(true, WP.progress());
+        return;
+      }
+      const ic = S.introCamera;
       if (ic){
         const k = Math.min(1, (t - ic.start) / ic.duration), e = 1 - Math.pow(1 - k, 3);
         G.centerCamera(ic.cx, ic.cy, ic.from + (ic.to - ic.from) * e);

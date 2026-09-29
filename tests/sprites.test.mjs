@@ -9,7 +9,8 @@ import { build, dataScript, OUT, DATA_FILE, FACINGS } from '../tools/sprites.mjs
 import { PALETTE, ALPHABET, Grid, rot90, finish } from '../tools/pixelart.mjs';
 
 const { data } = build();
-const decode = (s, w) => { const g = new Grid(w, s.length / w); [...s].forEach((ch, i) => g.p[i] = ALPHABET.indexOf(ch)); return g; };
+const plain = s => /\d/.test(s) ? s.replace(/(\D)(\d+)/g, (_, ch, n) => ch.repeat(+n)) : s;   // sprite frames are run-length encoded
+const decode = (s, w) => { s = plain(s); const g = new Grid(w, s.length / w); [...s].forEach((ch, i) => g.p[i] = ALPHABET.indexOf(ch)); return g; };
 
 test('palette has 48 distinct colours', () => {
   assert.equal(PALETTE.length, 48);
@@ -105,11 +106,68 @@ test('woodlands pilot: full terrain tiles, edge-matched variants, shoreline and 
   }
 });
 
-test('sprite lab: the example spec renders top-down at 96 × 96 and passes every check; a sprite too big for its frame fails', async () => {
+test('genesis trees: five species in three sizes drawn to the crowns the generator plants, outlined, with rustle frames', async () => {
+  const { loadSim } = await import('./harness.mjs');
+  const GTM = await import('../tools/genesis-trees.mjs'), { unrle, rle } = GTM;
+  const G = loadSim(), GT = data.genesis.trees;
+  assert.equal(GT.encoding, 'rle');
+  assert.equal(unrle(rle('...AAAB.C')), '...AAAB.C');
+  assert.equal(rle('....AAAB'), '.4A3B');
+  assert.deepEqual(GT.kinds, [...G.TREES.KINDS], 'same species as src/data/trees.js');
+  assert.deepEqual(GT.sizes, [...G.TREES.SIZES]);
+  for (const kind of GT.kinds){
+    assert.deepEqual(GT.crown[kind], [...G.TREES.species[kind].crown], kind + ' crown sizes match the generator');
+    GT.art[kind].forEach((variants, z) => {
+      assert.ok(variants.length >= 2, `${kind} ${z} variants`);
+      for (const { n, frames } of variants){
+        assert.equal(n % 4, 0, 'whole world px on each side of the centre');
+        assert.equal(frames.length, kind === 'snag' ? 1 : 3, kind + ' rustle frames (a snag has no leaves)');
+        const gs = frames.map(str => { str = unrle(str); assert.equal(str.length, n * n); return decode(str, n); });
+        for (const g of gs){
+          for (let i = 0; i < n; i++) for (const [x, y] of [[i, 0], [0, i], [i, n - 1], [n - 1, i]]) assert.equal(g.get(x, y), 0, `${kind} margin`);
+          // The crown fills its diameter (GT.k art px per world px), give or take the outline and the
+          // rustled leaves (clumps a world px across, just outside the edge).
+          let far = 0; const c = (n - 1) / 2;
+          for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (g.get(x, y) > 1) far = Math.max(far, Math.hypot(x - c, y - c) + 0.5);
+          const d = far * 2 / (GT.k || 2) * (GT.scale?.[kind] || 1);   // diameter in world px (drawn at GT.scale)
+          assert.ok(d <= GT.crown[kind][z] + 6 && d >= GT.crown[kind][z] * 0.75, `${kind} ${z} crown ${d} for ${GT.crown[kind][z]}`);
+        }
+        assert.ok(unrle(frames[0]).includes(ALPHABET[1]), 'outlined');
+        for (let f = 1; f < frames.length; f++) assert.notEqual(frames[f], frames[0], kind + ' leaves move');
+      }
+    });
+  }
+  assert.equal(GT.k, 4, 'tree and landscaping art at 4 art px per world px');
+  assert.deepEqual(GT.shadow.map(o => o[0] / 2), [6, 8, 12], 'taller trees throw their shadow further (world px, at twice the size)');
+  for (const [kind, sc] of Object.entries(GT.scale)) assert.equal(sc, 1, kind + ' art is 4 art px per world px at its size on the map, never stretched (art/PIXEL_ART_RULES.md 2.1)');
+  // Dead wood: the sizes the generator plants, stumps in variants, fallen trees at every angle.
+  assert.deepEqual(Object.keys(GT.props), Object.keys(G.TREES.props));
+  assert.equal(GT.logAngles, G.TREES.LOG_ANGLES);
+  for (const [kind, specs] of Object.entries(GT.props)){
+    assert.equal(JSON.stringify(specs), JSON.stringify(G.TREES.props[kind].sizes), kind + ' sizes match the generator');
+    assert.ok(GT.propShadow[kind], kind + ' has a shadow');
+    GT.art[kind].forEach((frames, z) => {
+      const { PROP_VARIANTS } = GTM;
+      assert.equal(frames.length, kind === 'log' ? GT.logAngles * 2 : PROP_VARIANTS[kind] || 3, kind + ' frames');
+      for (const { n, frames: [str] } of frames){
+        const g = decode(unrle(str), n);
+        for (let i = 0; i < n; i++) for (const [x, y] of [[i, 0], [0, i], [i, n - 1], [n - 1, i]]) assert.equal(g.get(x, y), 0, `${kind} margin`);
+        assert.ok(unrle(str).includes(ALPHABET[1]), 'outlined');
+      }
+    });
+  }
+  // A fallen tree's crown end points along its angle: at angle 0 the root plate is west.
+  const log0 = GT.art.log[1][0], g0 = decode(unrle(log0.frames[0]), log0.n), mid = log0.n / 2;
+  let west = 0, east = 0;
+  for (let y = 0; y < log0.n; y++) for (let x = 0; x < log0.n; x++){ const v = g0.get(x, y); if (v && PALETTE[v - 1][0] === 'dust0') x < mid ? west++ : east++; }
+  assert.ok(west > east, 'root plate (dark soil) at the west end');
+});
+
+test('sprite lab: the example spec renders top-down at 192 × 192 and passes every check; a sprite too big for its frame fails', async () => {
   const { loadSpec, renderSpec, check } = await import('../tools/sprite-lab.mjs');
   const { Model, MAT, mul, translate, scale, unitFrame, LIFT } = await import('../tools/sprite-kit.mjs');
   assert.equal(LIFT, 0, 'straight top-down');
-  assert.deepEqual([unitFrame().w, unitFrame().h], [96, 96], 'a one-tile unit frame is 96 × 96 art px');
+  assert.deepEqual([unitFrame().w, unitFrame().h], [192, 192], 'a one-tile unit frame is 192 × 192 art px (4 per world px)');
   const spec = await loadSpec(path.join(path.dirname(new URL(import.meta.url).pathname), '../art/sprite-lab/specs/example_spider.mjs'));
   const R = renderSpec(spec);
   assert.equal(R.rows.length, 8, 'eight facings');
@@ -133,7 +191,7 @@ test('sprite lab: the example spec renders top-down at 96 × 96 and passes every
 
 test('Sentry Turret: modelled base states and a head layer in 16 facings, turned about the footprint centre', () => {
   const tu = data.sprites.sentry_turret, H = tu.head, N = tu.frameWidth;
-  assert.equal(N, 96, 'a 1 × 1 structure is 96 × 96 art px');
+  assert.equal(N, 192, 'a 1 × 1 structure is 192 × 192 art px');
   for (const s of ['foundation', 'frame', 'near-complete', 'finished', 'damaged', 'rubble']) assert.ok(tu.states[s], s);
   assert.equal(tu.frames[0].length, Object.values(tu.states).reduce((n, s) => n + s.frames, 0));
   assert.equal(H.facings, 16); assert.equal(H.frames.length, 16);
@@ -144,7 +202,7 @@ test('Sentry Turret: modelled base states and a head layer in 16 facings, turned
   assert.equal(new Set(H.frames[0].slice(dmg.start, dmg.start + dmg.frames)).size, dmg.frames, 'the damaged gun spins and feeds too');
   assert.equal(new Set(H.frames[0].slice(H.states.firing.start, H.states.firing.start + H.states.firing.frames)).size, H.states.firing.frames, 'the barrels and belts move every firing frame');
   const cols = Object.values(H.states).reduce((n, s) => n + s.frames, 0);
-  for (const row of H.frames){ assert.equal(row.length, cols); for (const str of row) assert.equal(str.length, N * N); }
+  for (const row of H.frames){ assert.equal(row.length, cols); for (const str of row) assert.equal(plain(str).length, N * N); }
   // Each facing is the model turned, not a copy: every facing differs, and the one pointing
   // down is the up facing turned 180° (nearly: each is rasterised on its own).
   assert.equal(new Set(H.frames.map(r => r[0])).size, 16);
@@ -170,19 +228,19 @@ test('walls: 16 joined pieces per state that reach the tile edge exactly on the 
   }
   for (const [name, w, h] of [['gate', 2, 1], ['gate_3', 3, 1], ['gate_4', 4, 1], ['gate_v', 1, 2], ['gate_3_v', 1, 3], ['gate_4_v', 1, 4]]){
     const sp = data.sprites[name];
-    assert.deepEqual([sp.frameWidth, sp.frameHeight], [w * 96, h * 96], name);
+    assert.deepEqual([sp.frameWidth, sp.frameHeight], [w * 192, h * 192], name);
     assert.ok(sp.states.open && sp.states.finished && sp.states.damaged, name);
     assert.notEqual(sp.frames[0][sp.states.open.start], sp.frames[0][sp.states.finished.start], name + ' looks different open');
   }
   // A vertical gate is the horizontal one turned, not squashed: same silhouette area, near enough.
-  const area = s => [...s].filter(ch => ch !== ALPHABET[0]).length;
+  const area = s => [...plain(s)].filter(ch => ch !== ALPHABET[0]).length;
   const hz = data.sprites.gate_3, vt = data.sprites.gate_3_v, a = area(hz.frames[0][hz.states.finished.start]), b = area(vt.frames[0][vt.states.finished.start]);
   assert.ok(Math.abs(a - b) < a * 0.05, `turned gate keeps its size (${a} vs ${b} px)`);
 });
 
 test('Laser Turret: a diamond base and a head in 16 facings whose charging frames light one more coil each', () => {
   const sp = data.sprites.laser_turret, H = sp.head;
-  assert.equal(sp.frameWidth, 96);
+  assert.equal(sp.frameWidth, 192);
   assert.equal(H.facings, 16);
   assert.equal(H.chargeTime, 2.5);
   assert.deepEqual(H.firing, { idle: ['charging', 'flash'], damaged: ['damaged-charging', 'damaged-flash'] });
@@ -190,7 +248,7 @@ test('Laser Turret: a diamond base and a head in 16 facings whose charging frame
   assert.equal(ch.frames, 6);
   // Each charging frame has more lit (cyan) pixels than the one before.
   const cyan = new Set(['cyan1', 'cyan2', 'white'].map(n => ALPHABET[PALETTE.findIndex(([k]) => k === n) + 1]));
-  const lit = s => [...s].filter(c => cyan.has(c)).length;
+  const lit = s => [...plain(s)].filter(c => cyan.has(c)).length;
   for (let i = 1; i < ch.frames; i++) assert.ok(lit(row[ch.start + i]) > lit(row[ch.start + i - 1]), 'coil ' + i);
   assert.ok(lit(row[H.states.idle.start]) < lit(row[ch.start]), 'idle has no coil lit');
 });

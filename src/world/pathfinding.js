@@ -201,6 +201,9 @@
     }
     // Queue a route for `unit`. A newer request for the same unit replaces the older one.
     request(unit, x, y, opts = {}){
+      // A player's unit sent somewhere on another layer (into or out of a cave) walks to the
+      // entrance instead; G.Caves carries it through and on.
+      if (!opts.noCaves && G.Caves){ const d = G.Caves.redirect(unit, x, y); if (d){ x = d.x; y = d.y; } }
       const old = this.pending.get(unit.id);
       if (old) old.cancelled = true;
       const req = { unit, x, y, maxNodes: opts.maxNodes, onDone: opts.onDone, cancelled: false };

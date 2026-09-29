@@ -242,7 +242,13 @@
       else if (u.command === 'guard') s = 'Guarding a position';
       else if (u.command === 'patrol') s = 'Patrolling';
       else if (u.command === 'build') s = 'Constructing';
-      else if (u.command === 'gather'){
+      else if (u.command === 'gather' && G.Gather.chopTarget(u) >= 0){
+        const k = G.Gather.chopTarget(u), kind = G.Trees.kind(k) || '', what = kind === 'log' ? 'fallen tree' : kind.startsWith('stump') ? 'stump' : 'tree';
+        s = u.haulState === 'return' ? `Hauling ${Math.floor(u.cargo?.wood || 0)} wood to the nearest drop-off`
+          : u.haulState === 'unloadFirst' ? 'Unloading before sawing'
+          : u.haulState === 'felling' ? 'Timber! The tree is coming down'
+          : u.haulState === 'collecting' ? `Sawing down a ${what} (${Math.round(100 * (1 - G.Trees.hp(k) / (G.Trees.maxHp(k) || 1)))}%)` : `Heading to a ${what}`;
+      } else if (u.command === 'gather'){
         const where = u.mineId ? 'Resource Extractor' : (G.Gather.node(u.nodeId)?.name || 'salvage');
         s = ({ toNode: 'Heading to ', collecting: 'Collecting at ', toMine: 'Heading to ', loading: 'Loading at ', waiting: 'Waiting for ore at ', return: 'Hauling to ship from ' }[u.haulState] || 'Working ') + esc(where);
       } else if (u.path.length) s = 'Moving';
@@ -270,16 +276,71 @@
       const bar = $('economyBar'), squad = $('squadBar');
       if (squad) squad.style.top = bar.offsetHeight > 34 ? (bar.offsetTop + bar.offsetHeight + 4) + 'px' : '';
     },
+    // The time of day, on maps that have day and night (G.Lighting). The sun (or the moon at
+    // night) rides an arc across the little dial from sunrise to sunset.
+    renderClock(){
+      const el = $('dayClock'), Lt = G.Lighting;
+      if (!el) return;
+      const on = !!(Lt && G.State.grid && Lt.enabled());
+      el.classList.toggle('hidden', !on);
+      if (!on) return;
+      const time = Lt.clock(), sig = time + Lt.day();
+      if (sig === this.clockSig) return;
+      this.clockSig = sig;
+      const night = Lt.isNight(), p = Lt.phase(), f = night ? ((p + 0.25) % 1) / 0.5 : (p - 0.25) / 0.5;   // 0 rising … 1 setting
+      const u = Math.max(0, Math.min(1, f)), x = 3 + u * 20, y = 13 - Math.sin(u * Math.PI) * 10;
+      el.classList.toggle('night', night);
+      el.querySelector('.day-icon').innerHTML = `<i class="${night ? 'moon' : 'sun'}" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px"></i>`;
+      el.querySelector('.day-time').textContent = time;
+      el.querySelector('.day-num').textContent = 'Day ' + Lt.day();
+      el.title = `Time of day: ${time}, day ${Lt.day()} of the expedition. ${night ? 'Night: lamps and lights are on.' : 'Day.'}`;
+    },
+    // Camera zoom as a percentage: 0% at ZOOM_MIN, 100% at ZOOM_MAX, even steps of the wheel
+    // between (it zooms by a factor per step).
+    renderZoom(){
+      const C = G.CONFIG, z = G.State.camera.z, pct = Math.round(Math.log(z / C.ZOOM_MIN) / Math.log(C.ZOOM_MAX / C.ZOOM_MIN) * 100);
+      if (pct === this.zoomSig) return;
+      this.zoomSig = pct;
+      const el = $('zoomPct');
+      if (el) el.querySelector('b').textContent = G.clamp(pct, 0, 100) + '%';
+    },
+    // The minimap's zoom buttons: over its top-left corner, each off at its end of the range.
+    refreshMiniZoom(){
+      const el = $('miniZoom'), m = $('minimap');
+      if (!el || !m) return;
+      const r = m.getBoundingClientRect(), R = G.Renderer, Z = R.MINI_ZOOMS;
+      el.style.left = (r.left + 5) + 'px'; el.style.top = (r.top + 5) + 'px';
+      el.style.display = r.width ? '' : 'none';
+      $('miniZoomIn').disabled = R.miniZoom === Z[Z.length - 1];
+      $('miniZoomOut').disabled = R.miniZoom === Z[0];
+      el.title = 'Minimap zoom ×' + R.miniZoom;
+    },
+    // The loading bar while the whole-map picture is painted (`p`: 0…1).
+    showMapLoading(on, p = 0){
+      const el = $('mapLoading');
+      if (!el) return;
+      el.classList.toggle('hidden', !on);
+      if (!on) return;
+      const pct = Math.floor(p * 100);
+      if (pct === this.loadSig) return;
+      this.loadSig = pct;
+      el.querySelector('i').style.width = pct + '%';
+      el.querySelector('small').textContent = pct + '%';
+    },
     // Called every rendered frame; heavier refreshes are throttled.
     update(){
       const S = G.State, t = performance.now();
       this.renderEconomy();
+      this.renderClock();
+      this.renderZoom();
+      G.HoverInfo.render();
       G.InventoryUI.refreshSearch();
       if (t - this.lastSlow < 250) return;
       this.lastSlow = t;
       this.refreshSelection();
       this.refreshTarget();
       this.refreshSquadButtons();
+      this.refreshMiniZoom();
       const title = $('gameTitle').getBoundingClientRect(), dbg = $('dbgBtn');
       if (title.width){ dbg.style.left = (title.right + 6) + 'px'; dbg.style.top = Math.max(2, title.top + title.height / 2 - dbg.offsetHeight / 2) + 'px'; }
       else { dbg.style.left = ''; dbg.style.top = ''; }

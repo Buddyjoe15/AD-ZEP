@@ -1,0 +1,55 @@
+{
+  "name": "genesis_tree_snag",
+  "frameWidth": 336,
+  "frameHeight": 336,
+  "origin": [
+    167.5,
+    167.5
+  ],
+  "worldPxPerArtPx": 0.25,
+  "rows": [
+    "small",
+    "medium",
+    "large"
+  ],
+  "frameSizes": [
+    192,
+    256,
+    336
+  ],
+  "crownWorldPx": [
+    18,
+    26,
+    36
+  ],
+  "columns": "2 variants × 1 rustle frames, each frame centred in its cell",
+  "animations": {
+    "rustle": {
+      "frames": 1,
+      "fps": "set by the weather"
+    },
+    "lean": "crown shifted downwind by the engine"
+  },
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      [
+        6,
+        6
+      ],
+      [
+        8,
+        8
+      ],
+      [
+        12,
+        12
+      ]
+    ],
+    "by": "size",
+    "elevation": "prop"
+  },
+  "image": "genesis_tree_snag.png",
+  "sheetWidth": 672,
+  "sheetHeight": 1008
+}

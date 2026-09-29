@@ -1,7 +1,8 @@
 /* Map Editor (debug mode): paint terrain with a brush, place structures, resource nodes
-   and signals, erase objects, reset the map to grass, load another map type (the test map
-   or a generated Woodlands), and keep named maps to reload later. Edits go through
-   GW.MapEdit, so they are recorded as terrain edits and saved with the game. */
+   and signals, erase objects, set off blasts that destroy trees on Genesis maps, reset the
+   map to grass, load another map type (the test map or a generated Woodlands), and keep
+   named maps to reload later. Edits go through GW.MapEdit, so they are recorded as terrain
+   edits and saved with the game. */
 (function(){
   'use strict';
   const G = GW;
@@ -18,15 +19,19 @@
     ['deep_water', 'Deep water'], ['waterfall', 'Waterfall'], ['cliff', 'Cliff'], ['slope', 'Grassy slope'], ['steps', 'Carved steps'],
     ['cave', 'Cave mouth'], ['mossy_rock', 'Mossy boulders'], ['crystal', 'Crystals'], ['outcrop', 'Mineral outcrop'],
     ['steam_vent', 'Steam vent'], ['termite_mound', 'Termite mound'], ['burrow', 'Animal burrow'], ['alien_flora', 'Alien vegetation'],
-    ['barren', 'Barren ground'], ['rubble', 'Rubble'], ['log_pile', 'Log pile'], ['sawhorse', 'Sawhorse'], ['log_wall', 'Log wall']
+    ['barren', 'Barren ground'], ['rubble', 'Rubble'], ['log_pile', 'Log pile'], ['sawhorse', 'Sawhorse'], ['log_wall', 'Log wall'],
+    // Genesis terrain.
+    ['stepping_stones', 'Stepping stones'],
+    ['cave_floor', 'Cave floor']
   ];
   const mapName = key => (G.MapGen.types[key] && G.MapGen.types[key].name) || key;
 
   G.MapEditorUI = {
+    BLAST: { radius: 70, damage: 200 },
     tab: 'terrain', terrain: 'water', brush: 3, object: null, stroke: null, woodSeed: null, confirm: null,
     isOpen(){ return !$('mapEdPanel').classList.contains('hidden'); },
     // True when a tap or drag on the map should edit rather than play.
-    active(){ return this.isOpen() && (this.tab === 'terrain' || this.tab === 'erase' || (this.tab === 'objects' && !!this.object)); },
+    active(){ return this.isOpen() && (this.tab === 'terrain' || this.tab === 'erase' || this.tab === 'blast' || (this.tab === 'objects' && !!this.object)); },
     toggle(open){
       const p = $('mapEdPanel');
       open = open ?? p.classList.contains('hidden');
@@ -42,7 +47,7 @@
     objects(){ return G.DebugUI.catalog().filter(e => e.kind === 'building' || e.kind === 'node' || e.kind === 'site'); },
     render(){
       const p = $('mapEdPanel'), tab = this.tab;
-      const tabs = [['terrain', 'Terrain'], ['objects', 'Objects'], ['erase', 'Erase'], ['maps', 'Maps']]
+      const tabs = [['terrain', 'Terrain'], ['objects', 'Objects'], ['erase', 'Erase'], ['blast', 'Blast'], ['maps', 'Maps']]
         .map(([k, n]) => `<button type="button" class="medTab${tab === k ? ' on' : ''}" data-tab="${k}">${n}</button>`).join('');
       let body = '';
       if (tab === 'terrain'){
@@ -54,10 +59,12 @@
         const list = this.objects(), a = this.object;
         body = list.map((e, i) => `<button type="button" class="dbgEntry${a && a.kind === e.kind && a.key === e.key ? ' active' : ''}" data-obj="${i}"><span class="dbgIcon dbg-${e.kind}">${esc(G.DebugUI.symbol(e))}</span>${esc(e.name)}</button>`).join('');
       } else if (tab === 'maps') body = this.mapsBody();
+      else if (tab === 'blast') body = `<p class="dbgHelp">Tap the map to set off an explosion (${this.BLAST.damage} damage within ${this.BLAST.radius} world px). Trees snap into stumps; stumps and fallen trees are blown away. On a Genesis map only. Units and structures are not harmed.</p>`;
       else body = '<p class="dbgHelp">Tap a structure, container, resource node, signal or construction site to remove it. The ship and units are never erased.</p>';
       const help = tab === 'terrain' ? `Tap or drag on the map to paint <b>${esc(PALETTE.find(x => x[0] === this.terrain)?.[1] || this.terrain)}</b>. Blocking terrain skips structures and moves units aside. Two fingers still pan and zoom.`
         : tab === 'objects' ? (this.object ? `Tap the map to place <b>${esc(this.object.name)}</b>.` : 'Choose something to place.')
-        : tab === 'maps' ? 'Loading a map replaces the terrain. Units, structures and resources stay, with open ground cleared under them.' : 'Erase mode is on.';
+        : tab === 'maps' ? 'Loading a map replaces the terrain. Units, structures and resources stay, with open ground cleared under them.'
+        : tab === 'blast' ? 'Blast mode is on.' : 'Erase mode is on.';
       p.innerHTML = `<div class="dbgHead"><b>Map Editor</b><button id="medClose" type="button">×</button></div>
         <div class="medTabs">${tabs}</div><div class="dbgHelp">${help}</div>${body}`;
       $('medClose').onclick = () => this.toggle(false);
@@ -90,6 +97,7 @@
         <div class="medRow"><label class="medLabel" for="medSeed">Woodlands seed</label><input id="medSeed" class="medInput" type="number" min="0" max="4294967295" value="${seed}"><button type="button" id="medRnd" class="medSize">Random</button></div>
         <button type="button" id="medPreview" class="dbgEntry"><span class="dbgIcon">◎</span>Preview seed ${seed} <small>see the map first</small></button>
         <button type="button" class="dbgEntry" data-load="woodlands"><span class="dbgIcon" style="background:${this.swatch('tree')}"></span>Woodlands, seed ${seed}${confirmText('woodlands')}</button>
+        <button type="button" class="dbgEntry" data-load="genesis"><span class="dbgIcon" style="background:${this.swatch('forest')}"></span>Genesis v0.1, seed ${seed} <small>Woodlands landscape, free-standing trees</small>${confirmText('genesis')}</button>
         <div class="dbgGroup">Saved maps</div>
         <div class="medRow"><input id="medName" class="medInput" type="text" maxlength="60" value="${esc(defName)}" aria-label="Name for the saved map"><button type="button" id="medSave" class="medSize">Save current map</button></div>
         ${saved.length ? saved.map((m, i) => `<div class="medRow"><button type="button" class="dbgEntry medSaved" data-saved="${i}">${esc(m.name)} <small>${esc(mapName(m.map))} · seed ${m.seed} · ${m.edits.length} edits${c === 'saved' + i ? ' · tap again to load' : ''}</small></button><button type="button" class="medSize medDel" data-del="${i}" aria-label="Delete ${esc(m.name)}">×</button></div>`).join('')
@@ -108,9 +116,9 @@
       $('medPreview').onclick = () => { const v = readSeed() ?? G.State.seed; this.woodSeed = v; this.confirm = null; this.render(); G.MapPreviewUI.open(v); };
       $('medRnd').onclick = () => { this.woodSeed = 1 + Math.floor(Math.random() * 999999); this.confirm = null; this.render(); };
       p.querySelectorAll('[data-load]').forEach(b => b.onclick = () => {
-        const map = b.dataset.load, seed = map === 'woodlands' ? (readSeed() ?? G.State.seed) : G.State.seed;
-        if (map === 'woodlands') this.woodSeed = seed;
-        twice(map, () => G.UI.toast(G.MapEdit.loadMap(map, seed) ? `Loaded ${mapName(map)}${map === 'woodlands' ? ', seed ' + seed : ''}` : 'Could not load that map'));
+        const map = b.dataset.load, seeded = map !== 'grass', seed = seeded ? (readSeed() ?? G.State.seed) : G.State.seed;
+        if (seeded) this.woodSeed = seed;
+        twice(map, () => G.UI.toast(G.MapEdit.loadMap(map, seed) ? `Loaded ${mapName(map)}${seeded ? ', seed ' + seed : ''}` : 'Could not load that map'));
       });
       $('medSave').onclick = () => {
         const name = $('medName').value.trim();
@@ -145,6 +153,13 @@
     pointerDown(wx, wy){
       if (this.tab === 'terrain'){ this.stroke = { last: null }; this.paintAt(wx, wy); return true; }
       if (this.tab === 'objects' && this.object){ G.DebugUI.spawn(this.object, wx, wy); return false; }
+      if (this.tab === 'blast'){
+        if (!G.Trees.has()){ G.UI.toast('Only Genesis maps have trees that can be destroyed'); return false; }
+        const n = G.Trees.blast(wx, wy, this.BLAST.radius, this.BLAST.damage);
+        G.State.shots.push({ x1: wx, y1: wy - 1, x2: wx, y2: wy, life: 0.18, team: 'blue', kind: 'heavy' });
+        G.UI.toast(n ? `Blast: ${n} destroyed` : 'Blast: nothing destroyed');
+        return false;
+      }
       if (this.tab === 'erase'){ const what = G.MapEdit.removeAt(wx, wy); G.UI.toast(what ? what + ' removed' : 'Nothing to remove here'); }
       return false;
     },

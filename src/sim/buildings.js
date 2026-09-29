@@ -10,8 +10,22 @@
     register(type, handler){ this.handlers.set(type, handler); return handler; }
   };
 
+  // Structures are placed on a building grid of SUB × SUB cells per tile: `gx, gy` is the tile
+  // of the top-left corner and `sx, sy` (0 to SUB − 1) the cell within it, so a structure can
+  // sit a quarter tile over. Sizes (`w`, `h`) stay whole tiles. Movement stays tile-based:
+  // every tile a structure touches (its `cover`) is blocked for pathfinding, while placement
+  // checks overlaps cell by cell, so two structures may share a tile.
+  const SUB = 4;
+
   G.Buildings = {
-    version: 0,
+    version: 0, SUB,
+    // Left and top edges in tiles (fractional), for drawing; `cover` is the tiles it touches.
+    fx(b){ return b.gx + (b.sx || 0) / SUB; },
+    fy(b){ return b.gy + (b.sy || 0) / SUB; },
+    cover(b){ return { gx: b.gx, gy: b.gy, w: b.w + (b.sx ? 1 : 0), h: b.h + (b.sy ? 1 : 0) }; },
+    // Building-grid cell under world point (wx, wy) as a tile and a cell within it.
+    cellAt(wx, wy){ const T = G.CONFIG.TILE, c = Math.floor(wx / T * SUB), r = Math.floor(wy / T * SUB); return this.split(c, r); },
+    split(c, r){ const gx = Math.floor(c / SUB), gy = Math.floor(r / SUB); return { gx, gy, sx: c - gx * SUB, sy: r - gy * SUB }; },
     def(b){ return G.Defs.buildables.get(b.type); },
     get(id){ return G.State.buildings.find(b => b.id === id) || null; },
     // Places a finished structure. Container buildables become item containers.
@@ -22,9 +36,10 @@
         Object.assign(c, opts.extra || {});
         return c;
       }
+      const sx = opts.sx || 0, sy = opts.sy || 0;
       const b = {
         id: opts.id || 'building-' + G.newId(), type, team: opts.team || d.team,
-        gx, gy, w: d.w, h: d.h, x: (gx + d.w / 2) * T, y: (gy + d.h / 2) * T,
+        gx, gy, sx, sy, w: d.w, h: d.h, x: (gx + sx / SUB + d.w / 2) * T, y: (gy + sy / SUB + d.h / 2) * T,
         hp: opts.hp != null ? opts.hp : d.hp, maxHp: d.hp, ...(opts.extra || {})
       };
       if (d.level) b.level = d.level;
@@ -35,7 +50,7 @@
     adopt(b){
       const d = this.def(b);
       G.State.buildings.push(b);
-      if (d && d.blocksMovement && G.State.grid) G.State.grid.stamp(b.gx, b.gy, b.w, b.h, 1);
+      if (d && d.blocksMovement && G.State.grid){ const c = this.cover(b); G.State.grid.stamp(c.gx, c.gy, c.w, c.h, 1); }
       this.version++;
       G.Events.emit('building:placed', b);
       return b;
@@ -45,58 +60,76 @@
       if (i < 0) return false;
       S.buildings.splice(i, 1);
       const d = this.def(b);
-      if (d && d.blocksMovement && S.grid) S.grid.stamp(b.gx, b.gy, b.w, b.h, -1);
+      if (d && d.blocksMovement && S.grid){ const c = this.cover(b); S.grid.stamp(c.gx, c.gy, c.w, c.h, -1); }
       this.version++;
       G.Events.emit('building:removed', b);
       return true;
     },
+    // The structure covering tile (gx, gy), if any.
     at(gx, gy){
-      for (const b of G.State.buildings) if (gx >= b.gx && gx < b.gx + b.w && gy >= b.gy && gy < b.gy + b.h) return b;
+      for (const b of G.State.buildings){ const c = this.cover(b); if (gx >= c.gx && gx < c.gx + c.w && gy >= c.gy && gy < c.gy + c.h) return b; }
       return null;
     },
-    // True when a w×h footprint at (gx, gy) is open terrain free of structures, sites,
-    // containers and units.
-    canPlace(gx, gy, w = 1, h = 1){
-      const S = G.State, C = G.CONFIG, grid = S.grid;
-      if (!grid || gx < 0 || gy < 0 || gx + w > C.COLS || gy + h > C.ROWS) return false;
-      for (let y = gy; y < gy + h; y++) for (let x = gx; x < gx + w; x++) if (!grid.passable(x, y)) return false;
+    // The structure whose footprint contains world point (wx, wy), if any.
+    atPoint(wx, wy){
+      const T = G.CONFIG.TILE;
+      for (const b of G.State.buildings){ const x = this.fx(b) * T, y = this.fy(b) * T; if (wx >= x && wx < x + b.w * T && wy >= y && wy < y + b.h * T) return b; }
+      return null;
+    },
+    // True when a w×h footprint at tile (gx, gy), cell (sx, sy), is on open terrain and
+    // overlaps no structure, site, container or unit (structures and sites cell by cell).
+    canPlace(gx, gy, w = 1, h = 1, sx = 0, sy = 0){
+      const S = G.State, C = G.CONFIG, grid = S.grid, cw = w + (sx ? 1 : 0), ch = h + (sy ? 1 : 0);
+      if (!grid || gx < 0 || gy < 0 || gx + cw > C.COLS || gy + ch > C.ROWS) return false;
+      const caveOf = grid.art && grid.art.caveOf;   // (nothing is built in the caves, underground)
+      for (let y = gy; y < gy + ch; y++) for (let x = gx; x < gx + cw; x++) if (!grid.terrainPassable(x, y) || (caveOf && caveOf[y * grid.cols + x] >= 0)) return false;
+      // In cells: this footprint, then anything else's.
+      const c0 = gx * SUB + sx, r0 = gy * SUB + sy, c1 = c0 + w * SUB, r1 = r0 + h * SUB;
+      const hits = (x, y, ww, hh) => x < c1 && x + ww > c0 && y < r1 && y + hh > r0;
+      const rect = o => hits(o.gx * SUB + (o.sx || 0), o.gy * SUB + (o.sy || 0), o.w * SUB, o.h * SUB);
       for (const c of S.containers){
         if (c.type === 'ground_item' && !c.items.length) continue;
-        if (c.gx >= gx && c.gx < gx + w && c.gy >= gy && c.gy < gy + h) return false;
+        if (hits(c.gx * SUB, c.gy * SUB, SUB, SUB)) return false;
       }
-      for (const s of S.constructionSites) if (s.gx < gx + w && s.gx + s.w > gx && s.gy < gy + h && s.gy + s.h > gy) return false;
-      // Structures that don't block the grid (gates) still occupy their tiles.
-      for (const b of S.buildings) if (b.gx < gx + w && b.gx + b.w > gx && b.gy < gy + h && b.gy + b.h > gy && !this.def(b)?.blocksMovement) return false;
-      const T = C.TILE, cx = (gx + w / 2) * T, cy = (gy + h / 2) * T, r = Math.max(w, h) * T;
-      const near = S.spatial ? S.spatial.query(cx, cy, r) : S.units;
+      for (const s of S.constructionSites) if (rect(s)) return false;
+      for (const b of S.buildings) if (rect(b)) return false;
+      const T = C.TILE, x0 = c0 * T / SUB, y0 = r0 * T / SUB, x1 = c1 * T / SUB, y1 = r1 * T / SUB;
+      const near = S.spatial ? S.spatial.query((x0 + x1) / 2, (y0 + y1) / 2, Math.max(cw, ch) * T) : S.units;
       for (const u of near){
-        if (u.isShip || u.hp <= 0) continue;
-        const ux = Math.floor(u.x / T), uy = Math.floor(u.y / T);
-        if (ux >= gx && ux < gx + w && uy >= gy && uy < gy + h) return false;
+        if (u.hp <= 0) continue;
+        if (u.isShip){ if (u.w && hits(u.gx * SUB, u.gy * SUB, u.w * SUB, u.h * SUB)) return false; continue; }
+        if (u.x >= x0 && u.x < x1 && u.y >= y0 && u.y < y1) return false;
       }
+      // (The ship stamps the grid too; the spatial query can miss its far corners.)
+      const ship = G.Units.ship && G.Units.ship();
+      if (ship && ship.w && hits(ship.gx * SUB, ship.gy * SUB, ship.w * SUB, ship.h * SUB)) return false;
       return true;
     },
     // Full placement rule for a buildable: open footprint, and deposits respected. Mine
     // structures (placeOnNode: 'deposit') must be centred on a free deposit; every other
     // structure must leave deposits uncovered.
-    canPlaceKey(key, gx, gy){
+    canPlaceKey(key, gx, gy, sx = 0, sy = 0){
       const d = G.Defs.buildables.get(key);
-      if (!d || !this.canPlace(gx, gy, d.w, d.h)) return false;
-      const inside = G.State.resourceNodes.filter(n => G.Gather.isDeposit(n) && n.gx >= gx && n.gx < gx + d.w && n.gy >= gy && n.gy < gy + d.h);
+      if (!d || !this.canPlace(gx, gy, d.w, d.h, sx, sy)) return false;
+      const cw = d.w + (sx ? 1 : 0), ch = d.h + (sy ? 1 : 0);
+      const inside = G.State.resourceNodes.filter(n => G.Gather.isDeposit(n) && n.gx >= gx && n.gx < gx + cw && n.gy >= gy && n.gy < gy + ch);
       if (d.placeOnNode !== 'deposit') return inside.length === 0;
+      if (sx || sy) return false;   // an extractor sits squarely on its deposit's tile
       const centre = G.Gather.depositAt(gx + Math.floor(d.w / 2), gy + Math.floor(d.h / 2));
       return !!centre && inside.length === 1 && !G.Gather.mineOn(centre) && G.Defs.nodes.get(centre.type).building === key;
     },
-    // Top-left tile for placing `key` near a world point: snapped over the nearest free
-    // deposit for mine structures, the tile under the point otherwise.
+    // Where to place `key` near a world point, as { gx, gy, sx, sy }: snapped over the nearest
+    // free deposit for mine structures (whole tiles), otherwise centred on the point and
+    // snapped to the building grid's cells.
     placementAt(key, wx, wy){
       const d = G.Defs.buildables.get(key), T = G.CONFIG.TILE;
       if (d && d.placeOnNode === 'deposit'){
         const n = G.Gather.freeDepositNear(wx, wy, 3);
-        if (n) return { gx: n.gx - Math.floor(d.w / 2), gy: n.gy - Math.floor(d.h / 2), node: n };
-        return { gx: Math.floor(wx / T) - Math.floor(d.w / 2), gy: Math.floor(wy / T) - Math.floor(d.h / 2), node: null };
+        if (n) return { gx: n.gx - Math.floor(d.w / 2), gy: n.gy - Math.floor(d.h / 2), sx: 0, sy: 0, node: n };
+        return { gx: Math.floor(wx / T) - Math.floor(d.w / 2), gy: Math.floor(wy / T) - Math.floor(d.h / 2), sx: 0, sy: 0, node: null };
       }
-      return { gx: Math.floor(wx / T), gy: Math.floor(wy / T), node: null };
+      const w = d ? d.w : 1, h = d ? d.h : 1;
+      return { ...this.split(Math.round(wx / T * SUB - w * SUB / 2), Math.round(wy / T * SUB - h * SUB / 2)), node: null };
     },
     // Nearest structure an attacker of another team may target within `r` (edge distance).
     // Testing-zone fixtures are never targeted.
@@ -104,7 +137,7 @@
       const T = G.CONFIG.TILE;
       let best = null, bd = Infinity;
       for (const b of G.State.buildings){
-        if (b.hp <= 0 || b.team === u.team || b.testZone) continue;
+        if (b.hp <= 0 || b.team === u.team || b.testZone || !G.Caves.same(u, b)) continue;
         const dx = Math.max(Math.abs(u.x - b.x) - b.w * T / 2, 0), dy = Math.max(Math.abs(u.y - b.y) - b.h * T / 2, 0), d = Math.hypot(dx, dy);
         if (d <= r && d < bd){ bd = d; best = b; }
       }

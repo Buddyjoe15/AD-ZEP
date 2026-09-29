@@ -11,7 +11,7 @@
     CLIFF: 'cliff', SLOPE: 'slope', STAIRS: 'steps', CAVE: 'cave', ROCKS: 'rock', MOSSROCK: 'mossy_rock',
     CRYSTAL: 'crystal', ORE: 'outcrop', VENT: 'steam_vent', MOUND: 'termite_mound', BURROW: 'burrow', PATH: 'path',
     WALL: 'wall', FLOOR: 'floor', DOOR: 'door', RUBBLE: 'rubble', LOGS: 'log_pile', SAWHORSE: 'sawhorse',
-    PAD: 'clearing', LOGWALL: 'log_wall'
+    PAD: 'clearing', LOGWALL: 'log_wall', FOREST: 'forest', STONES: 'stepping_stones', CAVEF: 'cave_floor'
   };
   const K = {}, RGB = [];
   for (const [k, key] of Object.entries(KEYS)) K[k] = G.Defs.terrain.get(key).id;
@@ -50,7 +50,7 @@
   const FOREST_FLOOR = [40, 70, 42];
   const FLOWER_COLS = [[238,226,120],[236,238,240],[214,118,178],[140,160,238],[240,158,80]];
   function groundFor(t){
-    if (t === K.TREE || t === K.LOG || t === K.THICKET || t === K.MUSHROOM) return FOREST_FLOOR;
+    if (t === K.TREE || t === K.FOREST || t === K.LOG || t === K.THICKET || t === K.MUSHROOM) return FOREST_FLOOR;
     if (t === K.SHRUB || t === K.STUMP || t === K.LOGS || t === K.BURROW || t === K.MOUND || t === K.FLOWERS) return RGB[K.GRASS];
     if (t === K.ROCKS || t === K.MOSSROCK || t === K.CRYSTAL) return [86,98,68];
     if (t === K.ORE || t === K.VENT) return RGB[K.BARREN];
@@ -102,7 +102,7 @@
   const variant = (set, gx, gy, salt) => set.tiles[G.PixelArt.weighted(set.weights, gx, gy, salt)];
   // The pixel tile for terrain `t`, or null when the pilot has no art for it.
   function pixelTile(i, t, gx, gy){
-    if (t === K.GRASS || t === K.TREE) return variant(pix.grass, gx, gy, 11);
+    if (t === K.GRASS || t === K.TREE || t === K.FOREST) return variant(pix.grass, gx, gy, 11);
     if (t === K.THICK) return variant(pix.tall_grass, gx, gy, 23);
     if (t === K.DEEP) return variant(pix.deep_water, gx, gy, 41);
     if (t === K.WATER){
@@ -129,13 +129,44 @@
     ctx.imageSmoothingEnabled = smooth;
   }
 
+  // Genesis: water and cliffs are drawn along contours over plain ground (G.Landscape), and
+  // small features stand on grass rather than a flat square of colour.
+  const CONTOUR = new Set([K.WATER, K.DEEP, K.FALLS, K.CLIFF, K.CAVE, K.PATH, K.SLOPE, K.STAIRS, K.STONES]);
+  const ON_GRASS = new Set([K.REEDS, K.ROCKS, K.MOSSROCK, K.MUSHROOM, K.FLOWERS, K.BURROW, K.SHRUB, K.STUMP, K.LOGS, K.MOUND, K.VENT, K.ORE, K.CRYSTAL]);
+  const PROPPED = new Set([K.SHRUB, K.FLOWERS, K.MUSHROOM, K.ROCKS, K.MOSSROCK, K.REEDS]);
+  // Genesis ground under props (G.TreeArt draws what stands on it): grass, or bare dust.
+  const GEN_GRASS = new Set([K.THICK, K.THICKET, K.MOUND, K.CRYSTAL, K.ALIEN, K.LOGS, K.SAWHORSE, K.BURROW, K.RUBBLE, K.PAD, K.BOG, K.BARREN, K.ORE, K.VENT, K.SWAMP,
+    K.WALL, K.FLOOR, K.DOOR, K.LOGWALL, K.BRIDGE]);   // (houses and bridges: G.Structures)
+  const GEN_DUST = new Set();   // (barren ground is drawn along contours by G.Landscape)
+  function dustBase(ctx, gx, gy, px, py, S){
+    const P = G.PixelArt;
+    if (!pix){ ctx.fillStyle = rgb(RGB[K.BARREN]); ctx.fillRect(px, py, S + .5, S + .5); return; }
+    const smooth = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = P.shrinks(ctx, S, P.tileArt());
+    ctx.drawImage(P.tile(gx, gy), px, py, S + .5, S + .5);
+    ctx.imageSmoothingEnabled = smooth;
+  }
+  const genesis = () => !!(art && art.generator === 'genesis');
+  function grassBase(ctx, gx, gy, px, py, S){
+    if (pix && genesis() && Math.abs(ctx.getTransform().a) >= 1.5) G.Ground.grass(ctx, gx, gy, px, py, S);   // close up: the fine grass
+    else if (pix) blit(ctx, variant(pix.grass, gx, gy, 11), px, py, S);
+    else { ctx.fillStyle = rgb(RGB[K.GRASS]); ctx.fillRect(px, py, S + .5, S + .5); }
+  }
   function drawTile(ctx, i, t, gx, gy, px, py, S){
+    if (t === K.LOG && art && art.trees && G.TreeArt.logOn(grid, i)) t = K.FOREST;   // a Genesis fallen tree lies here (G.TreeArt)
+    const gen = genesis();
+    // A cavern's floor (its walls: G.Structures).
+    if (gen && (t === K.GRASS || t === K.FOREST || t === K.TREE || t === K.LOG) && Math.abs(ctx.getTransform().a) >= 1.5){ grassBase(ctx, gx, gy, px, py, S); return; }   // close up: fine grass under everything (undergrowth: G.Ground)
+    if (gen && t === K.CAVEF){ G.Structures.caveFloor(ctx, gx, gy, px, py, S); return; }
+    if (gen && (CONTOUR.has(t) || GEN_GRASS.has(t))){ grassBase(ctx, gx, gy, px, py, S); return; }
+    if (gen && GEN_DUST.has(t)){ dustBase(ctx, gx, gy, px, py, S); return; }
     if (pix){ const str = pixelTile(i, t, gx, gy); if (str){ blit(ctx, str, px, py, S); return; } }
     const s = seed, h = [hash(gx, gy, s + 7), hash(gx, gy, s + 9), hash(gx, gy, s + 13)];
     const jit = Math.round((h[0] - .5) * 10), lw = Math.max(1, S * .08);
     if (t === K.CLIFF || t === K.CAVE){ cliffTile(ctx, i, px, py, S, h, t === K.CAVE); return; }
     const base = groundFor(t);
-    ctx.fillStyle = rgb(base, jit); ctx.fillRect(px, py, S + .5, S + .5);
+    if (gen && ON_GRASS.has(t)){ grassBase(ctx, gx, gy, px, py, S); if (PROPPED.has(t)) return; }   // bushes, flowers and so on are drawn as props (G.TreeArt)
+    else { ctx.fillStyle = rgb(base, jit); ctx.fillRect(px, py, S + .5, S + .5); }
     switch (t){
       case K.GRASS:
         ctx.fillStyle = rgb(base, -14); ctx.fillRect(px + h[1] * S * .8, py + h[2] * S * .8, S * .14, S * .14);
@@ -492,10 +523,12 @@
   // Tall things drawn after the ground, row by row, so nearer objects overlap farther ones.
   function drawTop(ctx, t, gx, gy, px, py, S){
     const s = seed, h0 = hash(gx, gy, s + 7), h1 = hash(gx, gy, s + 9), h2 = hash(gx, gy, s + 17);
+    if (t === K.TREE && art && art.trees) return;   // free-standing trees (Genesis) are drawn by G.TreeArt
+    if (art && art.generator === 'genesis' && (t === K.THICKET || t === K.MOUND || t === K.VENT)) return;   // props too
     if (t === K.TREE && pix && !fenAt(gx, gy)){
       // Trees that lean in the current wind are drawn every frame (drawTrees); the rest are
       // drawn upright into the chunk, and rustling leaves are drawn over them when close.
-      if (bakeTrees || !G.Weather.sways(gx, gy)) G.PixelArt.prop(ctx, treeFrame(gy * grid.cols + gx, gx, gy, 0), px, py, S);
+      G.PixelArt.prop(ctx, treeFrame(gy * grid.cols + gx, gx, gy, 0), px, py, S);   // (trees stand still: always in the chunk)
       return;
     }
     if (t === K.TREE){
@@ -539,6 +572,12 @@
   function heightShade(ctx, gx, gy, px, py, S){
     const l = lvlAt(gx, gy);
     if (l < 0) return;
+    // Genesis shades rims per pixel (G.Landscape); elsewhere only the level's tint.
+    if (genesis()){
+      const tint = [-.18, -.09, 0, .06, .12][l];
+      if (tint && !G.Landscape.shaded(grid, gy * grid.cols + gx)){ ctx.fillStyle = tint < 0 ? `rgba(0,0,0,${-tint})` : `rgba(255,255,240,${tint})`; ctx.fillRect(px, py, S, S); }   // exact: overlapping tints would seam
+      return;
+    }
     const tint = [-.18, -.09, 0, .06, .12][l];
     if (tint){ ctx.fillStyle = tint < 0 ? `rgba(0,0,0,${-tint})` : `rgba(255,255,240,${tint})`; ctx.fillRect(px, py, S + .5, S + .5); }
     const nl = lvlAt(gx, gy - 1), wl = lvlAt(gx - 1, gy), here = tileAt(gx, gy);
@@ -566,23 +605,47 @@
     // which may overhang the chunk edge (the neighbouring chunk draws the other part).
     // `opts.trees` draws pixel-art trees at rest into the canvas too (the preview); the game
     // leaves them to drawTrees so they can sway.
+    // A chunk can also be painted in parts, over several frames: `opts.rows` [r0, r1] paints
+    // just the ground of those tile rows; `opts.finish` then adds everything on top.
     paintChunk(ctx, grd, x0, y0, ct, S, opts){
       bind(grd);
-      const cols = grd.cols, rows = grd.rows;
-      for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
-        const gx = x0 + lx, gy = y0 + ly;
-        if (gx >= cols || gy >= rows) continue;
-        const i = gy * cols + gx, px = lx * S, py = ly * S;
-        drawTile(ctx, i, grd.tiles[i], gx, gy, px, py, S);
-        const d = art.detail[i];
-        if (d) drawDecal(ctx, d, gx, gy, px, py, S, art.angle[i] / 256 * TAU, seed);
+      const cols = grd.cols, rows = grd.rows, gen = genesis(), band = opts && opts.rows, r0 = band ? band[0] : 0, r1 = band ? band[1] : ct;
+      if (!(opts && opts.finish)){
+        for (let ly = r0; ly < r1; ly++) for (let lx = 0; lx < ct; lx++){
+          const gx = x0 + lx, gy = y0 + ly;
+          if (gx >= cols || gy >= rows) continue;
+          const i = gy * cols + gx, px = lx * S, py = ly * S;
+          drawTile(ctx, i, grd.tiles[i], gx, gy, px, py, S);
+          const d = art.detail[i];
+          if (d && !gen) drawDecal(ctx, d, gx, gy, px, py, S, art.angle[i] / 256 * TAU, seed);
+        }
+        if (gen){
+          G.Ground.paintChunk(ctx, grd, x0, y0, ct, r0, r1);   // grass, undergrowth, brush and flowers
+          G.Landscape.paintChunk(ctx, grd, x0, y0, ct, r0, r1);   // water, shores, cliffs and trails along contours
+        }
+      }
+      if (band) return;
+      // Genesis: the ground detail on top (tracks and footprints show on the trails).
+      if (gen){
+        for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
+          const gx = x0 + lx, gy = y0 + ly;
+          if (gx >= cols || gy >= rows) continue;
+          const i = gy * cols + gx, d = art.detail[i];
+          // Shifted up to a third of a tile and turned a little, so marks don't line up on the grid.
+          if (d) drawDecal(ctx, d, gx, gy, lx * S + (hash(gx, gy, 931) - .5) * S * .66, ly * S + (hash(gx, gy, 933) - .5) * S * .66, S, art.angle[i] / 256 * TAU + (hash(gx, gy, 937) - .5) * .8, seed);
+        }
+        G.Structures.paintChunk(ctx, grd, x0, y0, ct);   // houses, bridges and cave mouths
       }
       for (let ly = 0; ly < ct; ly++) for (let lx = 0; lx < ct; lx++){
         const gx = x0 + lx, gy = y0 + ly;
         if (gx < cols && gy < rows) heightShade(ctx, gx, gy, lx * S, ly * S, S);
       }
+      if (G.TreeFX) G.TreeFX.paintScorch(ctx, x0 * S, y0 * S, ct * S);   // blast marks, under everything tall
       bakeTrees = !!(opts && opts.trees);
       this.paintTops(ctx, grd, x0, y0, ct, S, true);
+      // Trees at rest when asked; the ground layer (dead wood, bushes, grass, rocks) always, as it
+      // never moves.
+      if (art.trees) G.TreeArt.paintChunk(ctx, grd, x0, y0, ct, !bakeTrees);
       bakeTrees = false;
     },
     // Pixel-art trees in view that move in the current weather, drawn every frame. Leaning
@@ -592,13 +655,16 @@
     // visible world rectangle and T the tile size.
     // The kind of pixel-art tree on a tile ('oak', 'pine', 'birch'), or null.
     treeKindAt(grd, gx, gy){
+      if (G.TreeArt.has(grd)) return G.TreeArt.at(grd, gx, gy);
       bind(grd);
       if (!pix || !grd.inBounds(gx, gy) || grd.tiles[gy * grd.cols + gx] !== K.TREE || fenAt(gx, gy)) return null;
       return pix.tree.types[treeKind(gy * grd.cols + gx, gx, gy)];
     },
     RUSTLE_ZOOM: 0.5,
+    // Trees no longer move, so there is nothing to draw here (they are all in the chunks).
+    ANIMATED: false,
     drawTrees(g, grd, v, T, t, z = 1){
-      if (!this.isWoodlands(grd)) return;
+      if (!this.ANIMATED || !this.isWoodlands(grd) || G.TreeArt.has(grd)) return;
       bind(grd);
       if (!pix) return;
       const cols = grd.cols, tiles = grd.tiles;

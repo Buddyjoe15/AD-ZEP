@@ -10,6 +10,7 @@
     G.Defs.verify();
     G.Renderer.init();
     G.Input.init();
+    G.HoverInfo.init();
     G.UI.init();
     G.ExpeditionUI.init();
     G.DebugUI.init();

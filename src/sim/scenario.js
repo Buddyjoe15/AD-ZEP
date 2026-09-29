@@ -5,7 +5,8 @@
 
   G.Scenario = {
     // Empty world for `seed`: terrain, spatial indexes and navigation, no entities.
-    // `landing` ({x, y} tiles) is where the ship comes down; the centre when not given. A
+    // `landing` ({x, y} tiles) is where the ship comes down; when not given, the map type's
+    // default (a corner on Genesis) or the centre. A
     // generator may move it (Woodlands keeps it off water); S.landing is where it ended up.
     createWorld(seed, { slot, map, landing } = {}){
       const prevSlot = G.State.activeSaveSlot, prevMap = G.State.map;
@@ -16,7 +17,8 @@
       S.seed = seed >>> 0;
       S.activeSaveSlot = slot || prevSlot || 1;
       S.map = map;
-      const want = G.MapGen.landing(landing);
+      // (A map type may have its own default landing site: Genesis lands in a corner.)
+      const type = G.MapGen.types[map], want = G.MapGen.landing(landing || (type.defaultLanding ? type.defaultLanding(S.seed) : null));
       S.grid = G.MapGen.types[map].generate(S.seed, { landing: want });
       S.landing = S.grid.art && S.grid.art.landing ? { x: S.grid.art.landing.x, y: S.grid.art.landing.y } : want;
       S.terrainEdits = [];
@@ -71,7 +73,7 @@
   // Fixed simulation order. Spatial indexes are rebuilt inside 'movement' (and by
   // G.rebuildSpatial() whenever a world is created or restored).
   G.SIM_ORDER = ['time', 'containers', 'economy', 'power', 'shields', 'swarm', 'commands', 'gather', 'construction', 'fabrication',
-    'gates', 'paths', 'movement', 'buildings', 'combat', 'expedition', 'cleanup', 'rules'];
+    'gates', 'paths', 'movement', 'caves', 'buildings', 'combat', 'expedition', 'cleanup', 'rules'];
 
   G.Sim = {
     // Advances the simulation by one fixed step. Safe to call headless.

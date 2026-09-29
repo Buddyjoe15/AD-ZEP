@@ -40,5 +40,9 @@ GW.Defs.terrain.defineAll({
   rubble:        { id: 35, name: 'Rubble',         moveCost: 1.3, speed: 0.85, minimap: [122, 112, 98] },
   log_pile:      { id: 36, name: 'Log pile',       passable: false, minimap: [158, 117, 66] },
   sawhorse:      { id: 37, name: 'Sawhorse',       passable: false, minimap: [150, 108, 62] },
-  log_wall:      { id: 38, name: 'Log wall',       passable: false, minimap: [124, 86, 50] }
+  log_wall:      { id: 38, name: 'Log wall',       passable: false, minimap: [124, 86, 50] },
+  // Genesis (src/world/genesis.js): a line of rocks across a river, walked slowly.
+  stepping_stones: { id: 39, name: 'Stepping stones', moveCost: 1.5, speed: 0.7, minimap: [96, 124, 132] },
+  // Inside a cave (Genesis): the floor of a cavern behind a cave mouth, below the rock around it.
+  cave_floor:   { id: 40, name: 'Cave floor',     moveCost: 1.1, speed: 0.9, minimap: [44, 40, 38] }
 });

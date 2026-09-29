@@ -1,0 +1,55 @@
+{
+  "name": "genesis_tree_pine",
+  "frameWidth": 416,
+  "frameHeight": 416,
+  "origin": [
+    207.5,
+    207.5
+  ],
+  "worldPxPerArtPx": 0.25,
+  "rows": [
+    "small",
+    "medium",
+    "large"
+  ],
+  "frameSizes": [
+    224,
+    320,
+    416
+  ],
+  "crownWorldPx": [
+    22,
+    34,
+    46
+  ],
+  "columns": "2 variants × 3 rustle frames, each frame centred in its cell",
+  "animations": {
+    "rustle": {
+      "frames": 3,
+      "fps": "set by the weather"
+    },
+    "lean": "crown shifted downwind by the engine"
+  },
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      [
+        6,
+        6
+      ],
+      [
+        8,
+        8
+      ],
+      [
+        12,
+        12
+      ]
+    ],
+    "by": "size",
+    "elevation": "prop"
+  },
+  "image": "genesis_tree_pine.png",
+  "sheetWidth": 2496,
+  "sheetHeight": 1248
+}

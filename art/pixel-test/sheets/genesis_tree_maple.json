@@ -1,0 +1,55 @@
+{
+  "name": "genesis_tree_maple",
+  "frameWidth": 496,
+  "frameHeight": 496,
+  "origin": [
+    247.5,
+    247.5
+  ],
+  "worldPxPerArtPx": 0.25,
+  "rows": [
+    "small",
+    "medium",
+    "large"
+  ],
+  "frameSizes": [
+    240,
+    368,
+    496
+  ],
+  "crownWorldPx": [
+    24,
+    40,
+    56
+  ],
+  "columns": "2 variants × 3 rustle frames, each frame centred in its cell",
+  "animations": {
+    "rustle": {
+      "frames": 3,
+      "fps": "set by the weather"
+    },
+    "lean": "crown shifted downwind by the engine"
+  },
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      [
+        6,
+        6
+      ],
+      [
+        8,
+        8
+      ],
+      [
+        12,
+        12
+      ]
+    ],
+    "by": "size",
+    "elevation": "prop"
+  },
+  "image": "genesis_tree_maple.png",
+  "sheetWidth": 2976,
+  "sheetHeight": 1488
+}

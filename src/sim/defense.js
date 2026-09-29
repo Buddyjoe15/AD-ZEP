@@ -12,8 +12,9 @@
    `charge` (the Laser Turret) first charges that many seconds with a target in range, and
    loses the charge when no target is left. A turret with `turn` (radians per second)
    traverses toward its target at that rate and fires only once it is on target, so a
-   heavy gun can't snap round and fire at a new target. `splash` also
-   hits other enemies that close to the target; `ammo` spends one of that resource per shot
+   heavy gun can't snap round and fire at a new target. `splash` also hits other enemies
+   that close to the target, and trees (G.Trees.blast) wherever the round lands, hit or
+   miss; `ammo` spends one of that resource per shot
    from the stockpile and holds fire without it. Testing-zone copies never fire. Each shot
    hits with the turret's `accuracy`, raised by a Defensive Sensor within its boostTiles;
    the roll is G.hashRandom of the tick, turret and target, so replays are identical.
@@ -45,7 +46,8 @@
         this.count++;
         const open = this.shouldOpen(b, gd), v = open ? OPEN : CLOSED;
         this.open.set(b.id, open);
-        for (let y = b.gy; y < b.gy + b.h; y++) for (let x = b.gx; x < b.gx + b.w; x++) if (grid.inBounds(x, y)) this.mask[y * grid.cols + x] = v;
+        const c = G.Buildings.cover(b);
+        for (let y = c.gy; y < c.gy + c.h; y++) for (let x = c.gx; x < c.gx + c.w; x++) if (grid.inBounds(x, y)) this.mask[y * grid.cols + x] = v;
       }
       // Destroyed gates leave the mask on the next structure change (their removal).
     },
@@ -94,7 +96,7 @@
       for (const [team, hash] of Object.entries(S.teamSpatial)){
         if (team === b.team || !hash.count) continue;
         for (const u of hash.query(b.x, b.y, cfg.range)){
-          if (u.hp <= 0 || !this.canHit(cfg, u)) continue;
+          if (u.hp <= 0 || !this.canHit(cfg, u) || !G.Caves.same(u, b)) continue;
           const d = G.dist2(u, b);
           if (d >= min2 && d <= max2 && d < bd){ bd = d; best = u; }
         }
@@ -106,15 +108,18 @@
       s.shots = (s.shots || 0) + 1;
       if (G.hashRandom(Math.round(S.time * 60), s.seed ?? (s.seed = G.hashString(b.id)), t.id, s.shots) >= this.accuracy(b, cfg)){
         // A miss: the round lands beside the target.
-        const a = s.shots * 2.39996, off = 18 + (t.radius || 10);
-        S.shots.push({ x1: b.x, y1: b.y, x2: t.x + Math.cos(a) * off, y2: t.y + Math.sin(a) * off, life: cfg.shot ? 0.18 : 0.09, team: b.team, kind: cfg.shot || null, from: b.id, miss: true });
+        const a = s.shots * 2.39996, off = 18 + (t.radius || 10), mx = t.x + Math.cos(a) * off, my = t.y + Math.sin(a) * off;
+        S.shots.push({ x1: b.x, y1: b.y, x2: mx, y2: my, life: cfg.shot ? 0.18 : 0.09, team: b.team, kind: cfg.shot || null, from: b.id, miss: true });
+        if (cfg.splash) G.Trees.blast(mx, my, cfg.splash, cfg.damage);   // it still explodes where it lands
         return false;
       }
       const hit = u => { u.hp -= cfg.damage; G.Events.emit('combat:hit', { attacker: b, target: u, damage: cfg.damage }); };
       hit(t);
       if (cfg.splash){
+        // Anyone whose body the blast reaches (units are large next to the blast).
         const hash = S.teamSpatial[t.team];
-        for (const u of hash ? hash.query(t.x, t.y, cfg.splash) : []) if (u !== t && u.hp > 0 && this.canHit(cfg, u) && G.dist2(u, t) <= cfg.splash * cfg.splash) hit(u);
+        for (const u of hash ? hash.query(t.x, t.y, cfg.splash + 40) : []) if (u !== t && u.hp > 0 && this.canHit(cfg, u) && G.dist2(u, t) <= (cfg.splash + (u.radius || 0)) ** 2) hit(u);
+        if (!flying(t)) G.Trees.blast(t.x, t.y, cfg.splash, cfg.damage);   // blasts on the ground also hit trees
       }
       S.shots.push({ x1: b.x, y1: b.y, x2: t.x, y2: t.y, life: cfg.shot ? 0.18 : 0.09, team: b.team, kind: cfg.shot || null, from: b.id });
       return true;

@@ -1,0 +1,28 @@
+{
+  "name": "genesis_bones",
+  "frameWidth": 52,
+  "frameHeight": 52,
+  "origin": [
+    25.5,
+    25.5
+  ],
+  "worldPxPerArtPx": 0.25,
+  "rows": [
+    "{\"r\":6}"
+  ],
+  "frameSizes": [
+    52
+  ],
+  "columns": "2 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      1,
+      1
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_bones.png",
+  "sheetWidth": 104,
+  "sheetHeight": 52
+}

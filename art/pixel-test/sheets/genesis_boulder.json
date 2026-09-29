@@ -1,0 +1,34 @@
+{
+  "name": "genesis_boulder",
+  "frameWidth": 148,
+  "frameHeight": 148,
+  "origin": [
+    73.5,
+    73.5
+  ],
+  "worldPxPerArtPx": 0.25,
+  "rows": [
+    "{\"r\":7}",
+    "{\"r\":11}",
+    "{\"r\":15}",
+    "{\"r\":21}"
+  ],
+  "frameSizes": [
+    60,
+    84,
+    108,
+    148
+  ],
+  "columns": "8 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      6,
+      6
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_boulder.png",
+  "sheetWidth": 1184,
+  "sheetHeight": 592
+}

@@ -81,7 +81,18 @@ export function representativeGame(){
   G.Orders.move([straggler], back.x, back.y);
   straggler.recallPoint = back;
 
-  // Work: one Spider hauls from the testing-zone Mine Building, one builds.
+  // Structures the testing zone no longer has: a Mine Building on a metal deposit, and an
+  // Ore Processor and a Shield Projector on open ground.
+  const openSpot = (key, gx, gy) => { const d = G.Defs.buildables.get(key);
+    for (let r = 0; r < 40; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (Math.max(Math.abs(dx), Math.abs(dy)) === r && G.Buildings.canPlace(gx + dx, gy + dy, d.w, d.h)) return G.Buildings.add(key, gx + dx, gy + dy);
+    throw new Error('representative game: no room for ' + key); };
+  const deposit = S.resourceNodes.find(n => n.type === 'metal_mine' && G.Buildings.canPlaceKey('mine_building', n.gx - 3, n.gy - 3));
+  if (deposit) G.Buildings.add('mine_building', deposit.gx - 3, deposit.gy - 3);
+  const proc = openSpot('ore_processor', ship.gx - 14, ship.gy - 16);
+  G.Shields.set(openSpot('shield_projector', ship.gx + 16, ship.gy - 16), true);
+  G.Fabrication.enqueue(proc, 'steel');
+
+  // Work: one Spider hauls from the Mine Building, one builds.
   const mine = S.buildings.find(b => G.Gather.isMine(b));
   if (!mine || !G.Gather.command(spider, mine)) throw new Error('representative game: no Mine Building to haul from');
   const scavenger = G.Units.spawn('utility_spider', ship.x - 260, ship.y + 320);
@@ -106,9 +117,28 @@ export function representativeGame(){
   // A finished player structure and chest (not part of the testing zone), far enough from
   // the crew that the hostile attacking the wall survives the few seconds simulated.
   const wallAt = S.grid.nearestOpen(sh.gx - 30, sh.gy - 22, 10);
-  const wall = G.Buildings.add('defensive_wall', wallAt.x, wallAt.y);
+  const wall = G.Buildings.add('defensive_wall', wallAt.x, wallAt.y, { sx: 2 });   // half a tile over on the building grid
   const chestAt = S.grid.nearestOpen(sh.gx + 10, sh.gy + sh.h + 6, 10);
   G.Buildings.add('chest', chestAt.x, chestAt.y).items.push(G.Items.create('field_cap'));
+  // A Genesis map under the game, with trees blown down by a blast (snapped stumps, their
+  // tiles freed as terrain edits), one tree only damaged, and a Salvage Crawler sawing another.
+  if (!G.MapEdit.loadMap('genesis', S.seed)) throw new Error('representative game: could not load Genesis');
+  const near = (x, y, ok) => { let best = -1, bd = Infinity; for (let k = 0; k < G.Trees.count(); k++){ if (!G.Trees.present(k) || !ok(k)) continue; const p = G.Trees.pos(k), d = (p.x - x) ** 2 + (p.y - y) ** 2; if (d < bd){ bd = d; best = k; } } return best; };
+  const standing = k => G.Trees.state(k) === G.Trees.ALIVE && G.TREES.KINDS.includes(G.Trees.kind(k)) && G.Trees.maxHp(k) > 100;
+  const blastAt = G.Trees.pos(near(sh.x, sh.y + 900, standing));
+  if (!G.Trees.blast(blastAt.x, blastAt.y, 70, 400)) throw new Error('representative game: the blast felled nothing');
+  G.Trees.damage(near(sh.x - 900, sh.y, standing), 40);
+  const sawn = near(sh.x + 900, sh.y, standing), sp = G.Trees.pos(sawn);
+  const cp = G.openPoint(sp.x, sp.y), crawler = G.Units.spawn('salvage_crawler', cp.x, cp.y);
+  if (!G.Gather.chop([crawler], sawn).length) throw new Error('representative game: chop order failed');
+
+  // A drone on its way into a cave (caves are underground: it walks to the entrance first).
+  const cave = G.Caves.list()[0];
+  if (!cave) throw new Error('representative game: no cave on the Genesis map');
+  const out = G.Caves.door(0, 'outside'), inn = G.Caves.door(0, 'inside'), caver = G.Units.spawn('survey_drone', G.openPoint(out.x, out.y + 6 * T).x, G.openPoint(out.x, out.y + 6 * T).y);
+  G.Orders.move([caver], inn.x, inn.y - T);
+  if (!caver.caveTransit) throw new Error('representative game: cave order failed');
+
   // Map Editor strokes: a pond (impassable, painted around nothing) and a path.
   G.MapEdit.paint(sh.gx + 20, sh.gy - 14, 5, G.TT.WATER);
   G.MapEdit.paint(sh.gx + 12, sh.gy - 14, 3, G.TT.PATH);

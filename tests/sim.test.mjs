@@ -182,8 +182,8 @@ test('salvage crawler: fabricated, cuts salvage 1.5× faster than a Spider into 
   const c = G.Units.cargoTotal(crawler), s = G.Units.cargoTotal(spider);
   assert.ok(s > 40 && Math.abs(c / s - 1.5) < 0.05, `crawler ${c}, spider ${s}`);
   // Saws cut wrecks: no hauling from a Mine Building or a bare deposit.
-  const mine = S.buildings.find(b => G.Gather.isMine(b)), deposit = S.resourceNodes.find(n => G.Gather.isDeposit(n));
-  assert.ok(mine && deposit);
+  const [site, deposit] = S.resourceNodes.filter(n => n.type === 'metal_mine'), mine = G.Buildings.add('mine_building', site.gx - 3, site.gy - 3);
+  assert.ok(G.Gather.isMine(mine) && G.Gather.isDeposit(deposit));
   assert.equal(G.Gather.command(crawler, mine), false);
   assert.equal(G.Gather.command(crawler, deposit), false);
   assert.equal(crawler.nodeId, scrap.id, 'a refused order keeps the current one');
@@ -284,6 +284,33 @@ test('fabrication queues, respects capacity and refunds destroyed owners', () =>
   assert.equal(S.units.filter(u => u.type === 'utility_spider').length, 2);
 });
 
+test('hostile waves enter on the map edge where trails leave it, and march in from across the map', () => {
+  const G = loadSim();
+  G.Scenario.newGame({ seed: 72491, map: 'genesis' });
+  const S = G.State, E = S.expedition, sh = G.Units.ship(), W = S.grid.cols, PATH = G.Defs.terrain.get('path').id;
+  const list = G.Expedition.entries();
+  assert.ok(list.length >= 2, 'several entry points: ' + list.length);
+  for (const e of list){
+    assert.ok(e.gx === 0 || e.gy === 0 || e.gx === W - 1 || e.gy === W - 1, 'on the edge of the map');
+    assert.equal(S.grid.tiles[e.gy * W + e.gx], PATH, 'where a trail leaves the map');
+    assert.ok(S.grid.reachable(e.gx, e.gy, sh.gx + 3, sh.gy + sh.h), 'connected to the base');
+    assert.ok(Math.hypot(e.gx - sh.gx, e.gy - sh.gy) >= G.Expedition.ENTRY_MIN_TILES, 'not beside the base');
+  }
+  const before = new Set(S.units.map(u => u.id));
+  E.elapsed = E.waveAt - 0.01; S.paused = false; G.Sim.run(0.1);
+  const wave = S.units.filter(u => !before.has(u.id) && u.team === 'red');
+  assert.equal(wave.length, Math.min(G.EXPEDITION_RULES.waveMax, G.EXPEDITION_RULES.waveBase + E.world));
+  const at = list.find(e => wave.every(u => Math.hypot(u.x - e.x, u.y - e.y) < 5 * T));
+  assert.ok(at, 'the wave appears together at one entry point');
+  assert.match(E.log[0], new RegExp(at.side + ' edge'));
+  // The swarm's flow field spans the map (a regression: far builds never finished) and the
+  // wave marches in toward Vance.
+  const hero = G.Units.hero(), d0 = Math.hypot(wave[0].x - hero.x, wave[0].y - hero.y);
+  G.Sim.run(40);
+  assert.ok(G.Swarm.field.ready, 'flow field built');
+  assert.ok(Math.hypot(wave[0].x - hero.x, wave[0].y - hero.y) < d0 - 60 * T, 'marching in');
+});
+
 test('hostile waves fight, walls reduce damage and repair stations heal', () => {
   const G = newGame();
   const S = G.State, E = S.expedition;
@@ -312,7 +339,7 @@ test('hostile waves fight, walls reduce damage and repair stations heal', () => 
 
 test('sensor stations and surveyors study signals', () => {
   const G = newGame();
-  const S = G.State, E = S.expedition, sensor = S.buildings.find(b => b.type === 'sensor');
+  const S = G.State, E = S.expedition, p = field(G), sensor = G.Buildings.add('sensor', p.x, p.y);
   E.sites = [{ id: 's1', x: sensor.x + 120, y: sensor.y, kind: 'Archive', done: false, progress: 0 }];
   const metal = G.Economy.get('metal');
   G.Sim.run(5);
@@ -540,7 +567,7 @@ test('crowded units slide along a wall instead of pinning each other against it'
   // into the wall by every push, could never move, and a unit squeezing past it stayed stuck
   // (a Hostile Fabricator's spawn point next to the Shield Projector never cleared).
   const G = newGame();
-  const S = G.State, grid = S.grid, b = S.buildings.find(b => b.type === 'shield_projector');
+  const S = G.State, grid = S.grid, p = field(G), b = G.Buildings.add('shield_projector', p.x, p.y);
   const gx = Math.floor(b.x / T), gy = Math.floor((b.y - b.h * T / 2) / T);   // top row of its footprint
   assert.ok(!grid.passable(gx, gy) && grid.passable(gx, gy - 1) && grid.passable(gx + 1, gy - 1), 'open ground along the top edge');
   const put = (x, y) => { const u = G.Units.spawn('hostile_machine', x, y, { team: 'red' }); u.aiHold = true; u.path = []; return u; };
@@ -555,7 +582,7 @@ test('a unit pushed onto a wall with its next waypoint straight through it drops
   // Regression: sliding along the open axis moved it ~0 px each tick, so it kept a route it
   // could never follow (and a spawner waiting for it to leave never spawned again).
   const G = newGame();
-  const S = G.State, b = S.buildings.find(b => b.type === 'shield_projector');
+  const S = G.State, p = field(G), b = G.Buildings.add('shield_projector', p.x, p.y);
   const gx = Math.floor(b.x / T), gy = Math.floor((b.y - b.h * T / 2) / T);
   const x0 = (gx + 0.5) * T, u = G.Units.spawn('hostile_machine', x0, gy * T - 0.05, { team: 'red' });
   u.aiHold = true; u.path = [{ x: x0 + 0.01, y: (gy + 4) * T }]; u.pathIndex = 0;
@@ -564,28 +591,28 @@ test('a unit pushed onto a wall with its next waypoint straight through it drops
   assert.ok(S.grid.passableWorld(u.x, u.y));
 });
 
-test('metal mines need a centred 3×3 Mine Building, then extract slowly into a stockpile Spiders haul', () => {
+test('metal mines need a centred 7×7 Mine Building, then extract slowly into a stockpile Spiders haul', () => {
   const G = newGame();
   const S = G.State, spider = find(G, 'utility_spider');
   const deposits = S.resourceNodes.filter(n => n.type === 'metal_mine');
-  assert.ok(deposits.length >= 3, 'deposits near the ship plus one in the testing zone');
+  assert.ok(deposits.length >= 2, 'deposits near the ship');
   const free = deposits.find(n => !G.Gather.mineOn(n) && !S.buildings.some(b => b.nodeId === n.id));
   assert.ok(free.remaining >= 1e6 - 1, 'near-endless reserve');
   // A bare deposit does nothing and cannot be hauled from.
   assert.equal(G.Gather.command(spider, free), false);
   // Placement: only centred on the deposit.
   const d = G.Defs.buildables.get('mine_building');
-  assert.equal(d.w, 3); assert.equal(d.h, 3);
+  assert.equal(d.w, 7); assert.equal(d.h, 7);
   assert.equal(G.Buildings.canPlaceKey('mine_building', free.gx, free.gy), false, 'off-centre');
-  assert.equal(G.Buildings.canPlaceKey('mine_building', free.gx - 1, free.gy - 1), true, 'centred');
+  assert.equal(G.Buildings.canPlaceKey('mine_building', free.gx - 3, free.gy - 3), true, 'centred');
   const snap = G.Buildings.placementAt('mine_building', free.x + 40, free.y - 30);
-  assert.deepEqual([snap.gx, snap.gy], [free.gx - 1, free.gy - 1], 'snaps onto the nearby deposit');
+  assert.deepEqual([snap.gx, snap.gy], [free.gx - 3, free.gy - 3], 'snaps onto the nearby deposit');
   assert.equal(G.Buildings.canPlaceKey('defensive_wall', free.gx, free.gy), false, 'other structures cannot cover a deposit');
   // Build it with the Spider.
   S.resources.metal = 500;
-  assert.ok(G.Construction.order(spider, 'mine_building', free.gx - 1, free.gy - 1));
+  assert.ok(G.Construction.order(spider, 'mine_building', free.gx - 3, free.gy - 3));
   G.Sim.run(40);
-  const mine = S.buildings.find(b => b.type === 'mine_building' && b.gx === free.gx - 1);
+  const mine = S.buildings.find(b => b.type === 'mine_building' && b.gx === free.gx - 3);
   assert.ok(mine, 'mine built');
   assert.equal(free.buildingId, mine.id);
   // Extraction is slow (2/s) compared with scavenging (20/s).
@@ -608,7 +635,7 @@ test('metal mines need a centred 3×3 Mine Building, then extract slowly into a 
   assert.equal(G.Gather.mineOn(node2), mine2);
   mine2.hp = 0; G.Sim.run(0.2);
   assert.equal(node2.buildingId, null);
-  assert.equal(G.Buildings.canPlaceKey('mine_building', node2.gx - 1, node2.gy - 1), true);
+  assert.equal(G.Buildings.canPlaceKey('mine_building', node2.gx - 3, node2.gy - 3), true);
 });
 
 test('Follow: any friendly unit follows the unit chosen for it', () => {
@@ -777,6 +804,386 @@ test('a woodlands game starts, plays and survives a save', () => {
   assert.equal(fnv(G.State.grid.art.level), level, 'heights rebuilt from the seed');
 });
 
+test('genesis villages and bridges: buildings clear of cliffs and water, paths to the doors, village props, square bridges', () => {
+  const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
+  for (const seed of [72491, 2]){
+    const grid = G.MapGen.genesis(seed), art = grid.art, cols = grid.cols, lvl = art.level, tiles = grid.tiles;
+    const PART = new Set(['wall', 'floor', 'door', 'log_wall'].map(id)), BAD = new Set(['cliff', 'slope', 'steps', 'water', 'deep_water', 'waterfall', 'bog', 'bridge', 'cave', 'stepping_stones'].map(id));
+    // No building touches a cliff, the water or a change of level.
+    for (let i = 0; i < grid.size; i++){
+      if (!PART.has(tiles[i])) continue;
+      const x = i % cols, y = (i / cols) | 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){ const j = (y + dy) * cols + x + dx; assert.ok(!BAD.has(tiles[j]) && lvl[j] === lvl[i], `building at ${x},${y} beside a feature`); }
+    }
+    // Every door opens onto a path.
+    for (let i = 0; i < grid.size; i++){
+      if (tiles[i] !== id('door')) continue;
+      const x = i % cols, y = (i / cols) | 0;
+      assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => tiles[(y + dy) * cols + x + dx] === id('path')), `door at ${x},${y} opens onto a path`);
+    }
+    // Each village has a barn, a well and lamp posts.
+    const villages = art.places.filter(p => p.kind === 'settlement').length, tr = art.trees, n = k => { let c = 0; for (let q = 0; q < tr.count; q++) if (G.TREES.ALL[tr.kind[q]] === k) c++; return c; };
+    assert.equal(art.barns.length, villages, 'a barn per village');
+    assert.equal(n('well'), villages, 'a well per village');
+    for (const k of ['lamp', 'bench', 'sign', 'fence', 'hay', 'cart']) assert.ok(n(k) >= villages, k + ': ' + n(k));
+    assert.ok(n('barrel') + n('crate') > villages * 3, 'barrels and crates');
+    // Bridges it squared up are straight decks two tiles wide across open water.
+    assert.ok(art.bridges.length > 0, 'bridges squared up');
+    for (const b of art.bridges) for (let u = b.u0; u <= b.u1; u++) for (const v of [b.v0, b.v0 + 1]){
+      const x = b.ew ? u : v, y = b.ew ? v : u;
+      assert.equal(tiles[y * cols + x], id('bridge'), `deck at ${x},${y}`);
+    }
+  }
+});
+
+test('caves are underground: units go in and out through the entrance, carry on to where they were sent, and never fight through the rock', () => {
+  const G = loadSim();
+  G.Scenario.newGame({ seed: 72491, map: 'genesis' });
+  const S = G.State, C = G.Caves, cave = C.list()[0];
+  assert.ok(cave, 'a cave on the map');
+  const out = C.door(0, 'outside'), inn = C.door(0, 'inside');
+  assert.equal(C.layerAt(out.x, out.y), -1); assert.equal(C.layerAt(inn.x, inn.y), 0);
+  // A drone sent to a spot inside the cave walks to the entrance, goes through, and on.
+  const start = G.openPoint(out.x, out.y + 8 * T), drone = G.Units.spawn('survey_drone', start.x, start.y);
+  const target = { x: (cave.chest.x + 0.5) * T, y: (cave.chest.y + 1.5) * T };   // (beside the cache)
+  assert.equal(C.layerAt(target.x, target.y), 0);
+  G.Orders.move([drone], target.x, target.y);
+  assert.deepEqual({ cave: drone.caveTransit.cave, dir: drone.caveTransit.dir }, { cave: 0, dir: 'in' });
+  S.paused = false;
+  // A save on the way keeps the trip.
+  G.Sim.run(1);
+  G.Save.restore(JSON.parse(JSON.stringify(G.Save.serialize())), 1); S.paused = false;
+  const d2 = G.Units.get(drone.id);
+  assert.equal(d2.caveTransit && d2.caveTransit.dir, 'in', 'still on the way in after loading');
+  const crossed = [];
+  G.Events.on('cave:crossed', e => crossed.push(e.dir));
+  G.State.paused = false;
+  for (let t = 0; t < 40 && C.layer(d2) !== 0; t++) G.Sim.run(0.5);
+  assert.equal(C.layer(d2), 0, 'inside the cave');
+  G.Sim.run(4);
+  assert.ok(Math.hypot(d2.x - target.x, d2.y - target.y) < 1.5 * T, 'and on to the spot');
+  // Nothing on the surface sees it, and it sees nothing up there.
+  const foe = G.Units.spawn('hostile_machine', out.x, out.y + T, { team: 'red' }); foe.speed = 0; foe.damage = 0; G.rebuildSpatial();
+  assert.equal(G.Swarm.findTarget(foe, G.Defs.units.get('hostile_machine')) === d2, false, 'no target through the rock');
+  assert.ok(!G.Caves.same(foe, d2));
+  foe.hp = 0; G.Sim.run(0.1);
+  // Out again: to a point on the surface.
+  G.Orders.move([d2], out.x, out.y + 4 * T);
+  assert.equal(d2.caveTransit.dir, 'out');
+  for (let t = 0; t < 40 && C.layer(d2) !== -1; t++) G.Sim.run(0.5);
+  assert.equal(C.layer(d2), -1, 'back on the surface');
+  assert.deepEqual(crossed, ['in', 'out']);
+  // Nothing is built inside a cave.
+  assert.equal(G.Buildings.canPlace(cave.inside.x, cave.inside.y, 1, 1), false);
+});
+
+test('genesis bridges are square decks two or three tiles wide, and one-level banks are mostly grassy slopes', () => {
+  const G = loadSim(), id = k => G.Defs.terrain.get(k).id, B = id('bridge'), CLIFF = id('cliff'), SLOPE = id('slope');
+  for (const seed of [72491, 1, 3, 4, 5]){
+    const g = G.MapGen.genesis(seed), W = g.cols, seen = new Uint8Array(g.size);
+    let cliffs = 0, slopes = 0;
+    for (let s = 0; s < g.size; s++){
+      if (g.tiles[s] === CLIFF) cliffs++; else if (g.tiles[s] === SLOPE) slopes++;
+      if (g.tiles[s] !== B || seen[s]) continue;
+      const q = [s]; seen[s] = 1; let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+      for (let h = 0; h < q.length; h++){ const i = q[h], x = i % W, y = (i / W) | 0; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]){ const j = (y + dy) * W + x + dx; if (g.tiles[j] === B && !seen[j]){ seen[j] = 1; q.push(j); } } }
+      const w = x1 - x0 + 1, h = y1 - y0 + 1;
+      assert.ok(q.length === w * h && Math.min(w, h) >= 2 && Math.min(w, h) <= 3 && Math.max(w, h) <= 15, `seed ${seed}: bridge at ${x0},${y0} is ${w}×${h} (${q.length} tiles)`);
+    }
+    assert.ok(cliffs < slopes, `seed ${seed}: fewer cliff tiles (${cliffs}) than grassy slope (${slopes})`);
+  }
+});
+
+test('genesis lands the ship in a corner of the map unless a landing site is chosen', () => {
+  const G = loadSim(), W = G.CONFIG.WORLD_TILES, m = G.MapGen.LANDING_MARGIN;
+  const corners = new Set();
+  for (const seed of [72491, 2, 99]){
+    G.Scenario.newGame({ seed, map: 'genesis' });
+    const L = G.State.landing, sh = G.Units.ship();
+    const near = v => Math.min(v - m, W - 1 - m - v);
+    assert.ok(near(L.x) < 64 && near(L.y) < 64, `seed ${seed} lands near a corner: ${L.x}, ${L.y}`);
+    corners.add((L.x < W / 2 ? 'W' : 'E') + (L.y < W / 2 ? 'N' : 'S'));
+    for (const p of G.State.expedition.sites) assert.ok(G.State.grid.reachable(sh.gx + 3, sh.gy + sh.h, Math.floor(p.x / T), Math.floor(p.y / T)), 'signals reachable from the corner');
+  }
+  assert.ok(corners.size >= 2, 'the corner depends on the seed');
+  G.Scenario.newGame({ seed: 72491, map: 'genesis', landing: { x: 256, y: 256 } });
+  assert.deepEqual({ ...G.State.landing }, { x: 256, y: 256 }, 'a chosen landing site is kept');
+});
+
+test('genesis caves: underground caverns behind the mouths, sealed from the surface, with caches, nests and recordings that work', () => {
+  const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
+  let caves = 0, nests = 0, recs = 0, rare = 0, medium = 0;
+  for (const seed of [72491, 1, 2, 3]){
+    const grid = G.MapGen.genesis(seed), art = grid.art, cols = grid.cols;
+    for (const c of art.caverns){
+      caves++; if (c.nest) nests++; if (c.recording) recs++; if (c.chest.rare) rare++; if (c.size === 'medium') medium++;
+      // The mouth is rock-face: the cavern is underground, sealed from the surface, and reached
+      // only through the entrance (inside is the floor behind the mouth, outside the ground
+      // in front of it).
+      const mouth = c.y * cols + c.x, inside = c.inside.y * cols + c.inside.x;
+      assert.equal(grid.tiles[mouth], id('cave'), 'the mouth stays solid');
+      assert.equal(grid.tiles[inside], id('cave_floor'), 'floor just inside');
+      assert.ok(grid.passable(c.outside.x, c.outside.y), 'ground outside the mouth');
+      assert.ok(!grid.reachable(c.inside.x, c.inside.y, c.outside.x, c.outside.y), 'sealed from the surface');
+      assert.equal(art.caveOf[inside], art.caverns.indexOf(c), 'the cave knows its tiles');
+      assert.equal(art.caveOf[c.outside.y * cols + c.outside.x], -1);
+      const seen = new Set([inside]), q = [inside];
+      while (q.length){ const i = q.pop(), x = i % cols, y = (i / cols) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){ const j = (y + dy) * cols + x + dx; if (!seen.has(j) && grid.tiles[j] === id('cave_floor')){ seen.add(j); q.push(j); } } }
+      assert.equal(seen.size, c.cells, 'one connected cavern');
+      for (const i of seen) assert.equal(art.caveOf[i], art.caverns.indexOf(c));
+      for (const p of [c.chest, c.recording, c.nest].filter(Boolean)) assert.ok(seen.has(p.y * cols + p.x), 'contents inside the cavern');
+      // Walled in by rock: every floor tile's neighbours are floor or cliff (or the way out).
+      for (const i of seen){ const x = i % cols, y = (i / cols) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1]]){ const t = grid.tiles[(y + dy) * cols + x + dx]; assert.ok(t === id('cave_floor') || t === id('cliff') || t === id('cave'), 'walled at ' + x + ',' + y); } }
+    }
+  }
+  assert.ok(caves >= 6 && medium >= 2 && caves - medium >= 2, `small and medium caves: ${caves}, ${medium} medium`);
+  assert.ok(nests >= 2 && recs >= 2 && rare >= 2 && rare < caves, `nests ${nests}, recordings ${recs}, rare caches ${rare}`);
+
+  // In a game: a cache in every cave, recorders and nests where the map says; a nest sleeps
+  // until a friendly unit comes near, then makes its guards; a recorder plays when opened.
+  const S = G.Scenario.newGame({ seed: 72491, map: 'genesis' });
+  const art = S.grid.art, caches = S.containers.filter(c => c.type === 'cave_cache'), boxes = S.containers.filter(c => c.type === 'black_box');
+  assert.equal(caches.length, art.caverns.length);
+  assert.ok(caches.every(c => c.items.length >= 2 && !c.opened));
+  assert.ok(caches.filter(c => c.name.startsWith('Rare')).every(c => c.items.some(i => ['prototype_visor', 'expedition_pack'].includes(i.key))), 'rare caches hold rare gear');
+  const nest = S.buildings.find(b => b.type === 'cave_nest');
+  assert.ok(nest, 'a nest');
+  S.paused = false;
+  G.Sim.run(3);
+  assert.ok(!nest.spawner.spawned, 'asleep while nobody is near');
+  // Vance on the surface right over it doesn't wake it (rock in between); in its cave he does.
+  const hero = G.Units.hero(), k = G.Caves.layer(nest), cols = S.grid.cols;
+  const cx = Math.floor(nest.x / T), cy = Math.floor(nest.y / T);
+  let above = null;
+  for (let r = 1; r < 20 && !above; r++) for (let dy = -r; dy <= r && !above; dy++) for (let dx = -r; dx <= r; dx++){ const x = cx + dx, y = cy + dy; if (art.caveOf[y * cols + x] === -1 && S.grid.passable(x, y)){ above = { x, y }; break; } }
+  hero.x = (above.x + 0.5) * T; hero.y = (above.y + 0.5) * T; G.rebuildSpatial();
+  if (Math.hypot(hero.x - nest.x, hero.y - nest.y) < 9 * T){ G.Sim.run(2); assert.ok(!nest.spawner.spawned, 'nothing stirs for a unit on the surface'); }
+  let spot = null, bd = Infinity;
+  for (let i = 0; i < S.grid.size; i++) if (art.caveOf[i] === k){ const x = i % cols, y = (i / cols) | 0, d = Math.hypot(x - cx, y - cy); if (d > 3 && d < bd && S.grid.passable(x, y)){ bd = d; spot = { x, y }; } }
+  hero.x = (spot.x + 0.5) * T; hero.y = (spot.y + 0.5) * T; G.rebuildSpatial();
+  G.Sim.run(6);
+  assert.ok(nest.spawner.spawned > 0, 'awake and making guards');
+  assert.equal(nest.spawner.hold, false, 'guards released on the intruder');
+  if (boxes.length){
+    const box = boxes[0], before = S.expedition.log.length;
+    box.opened = true; G.Events.emit('container:opened', box);
+    assert.ok(S.expedition.log.length > before && /Black box/.test(S.expedition.log[0]), 'the recording plays in the log');
+  }
+  G.Save.validate(G.Save.serialize());
+});
+
+test('genesis plants free-standing trees in thick and thin clusters, off the tile centres, with stumps and fallen trees among them', () => {
+  const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
+  const grid = G.MapGen.genesis(72491), art = grid.art, tr = art.trees, cols = grid.cols;
+  // Pinned: saves of this map type rebuild their terrain and trees from the seed.
+  assert.equal(art.generator, 'genesis');
+  assert.equal(fnv(grid.tiles), 3167226598, 'genesis terrain unchanged');
+  assert.equal((fnv(new Uint8Array(tr.x.buffer)) ^ fnv(new Uint8Array(tr.y.buffer))) >>> 0, 1122145741, 'genesis trees unchanged');
+  const again = G.MapGen.genesis(72491);
+  assert.equal(fnv(again.tiles), fnv(grid.tiles), 'same seed, same map');
+  assert.equal(fnv(G.MapGen.woodlands(72491).tiles), 1031677493, 'woodlands itself is untouched');
+  assert.equal(fnv(G.MapGen.woodlands(72491).art.level), 4273338452, 'the Woodlands landscape underneath is untouched');
+  assert.equal(fnv(art.level), 306448450, 'genesis heights unchanged (caverns are cut a level down)');
+  assert.ok(tr.count > 20000, 'a forested map: ' + tr.count);
+
+  // Trunks stand anywhere in their tile, not on its centre.
+  let off = 0;
+  for (let k = 0; k < tr.count; k++) if (Math.hypot(tr.x[k] % T - T / 2, tr.y[k] % T - T / 2) > 6) off++;
+  assert.ok(off / tr.count > 0.8, 'most trunks away from the tile centre: ' + (off / tr.count).toFixed(2));
+  // Clustered: some 8 × 8 tile blocks are thick (many trees), others thin or open.
+  const blocks = new Map();
+  for (let k = 0; k < tr.count; k++){ const key = Math.floor(tr.x[k] / T / 8) * 64 + Math.floor(tr.y[k] / T / 8); blocks.set(key, (blocks.get(key) || 0) + 1); }
+  const counts = [...blocks.values()];
+  assert.ok(counts.filter(c => c >= 80).length > 40, 'thick stands');
+  assert.ok(counts.filter(c => c > 0 && c <= 12).length > 80, 'thin woodland and lone trees');   // (fewer since open ground grows its own woods and copses)
+  // Every species and kind of dead wood, every size, in drawing order (dead wood, then small
+  // trees first, then north to south).
+  const ALL = G.TREES.ALL, KN = G.TREES.KINDS.length, layer = k => tr.kind[k] >= KN ? 0 : 1, is = (k, name) => ALL[tr.kind[k]] === name;
+  for (let k = 0; k < ALL.length; k++) assert.ok(tr.kind.includes(k), ALL[k]);
+  for (let z = 0; z < 3; z++) assert.ok(tr.size.includes(z), 'size ' + z);
+  for (let k = 1; k < tr.count; k++){
+    const a = [layer(k - 1), tr.size[k - 1], tr.y[k - 1]], b = [layer(k), tr.size[k], tr.y[k]];
+    assert.ok(a[0] < b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] <= b[2]))), 'drawing order at ' + k);
+  }
+  const count = name => { let c = 0; for (let k = 0; k < tr.count; k++) if (is(k, name)) c++; return c; };
+  assert.ok(count('log') > 150 && count('stump_cut') > 300 && count('stump_broken') > 1000, `dead wood: ${count('log')} fallen, ${count('stump_cut')} cut, ${count('stump_broken')} snapped`);
+
+  // Medium and large trunks block their tile, and every tree tile has one; small trees and
+  // the forest between the trunks can be walked through.
+  // Fallen trees block the tiles along their trunk, and the old tile-sized stumps and fallen
+  // trees are gone: every fallen-tree tile is under a new one, and there are no stump tiles.
+  const blocking = new Uint8Array(grid.size), logged = new Uint8Array(grid.size), SOIL = new Set(['tree', 'forest', 'bush', 'tall_grass', 'grass', 'wildflowers', 'mushrooms', 'swamp', 'fallen_tree'].map(id));
+  for (let k = 0; k < tr.count; k++){
+    const i = Math.floor(tr.y[k] / T) * cols + Math.floor(tr.x[k] / T);
+    assert.equal(tr.tile[k], i);
+    if (!G.TREES.props[ALL[tr.kind[k]]]?.hp) assert.ok(SOIL.has(grid.tiles[i]), `${ALL[tr.kind[k]]} ${k} on soil`);   // landscaping stands on its own tiles
+    if (is(k, 'log')) G.TREES.logTiles(tr.x[k], tr.y[k], tr.size[k], tr.variant[k] >> 1, T, (x, y) => { logged[y * cols + x] = 1; assert.ok([id('fallen_tree'), id('tree')].includes(grid.tiles[y * cols + x]), 'fallen tree blocks its tiles'); });
+    else if (layer(k) && tr.size[k] >= G.TREES.BLOCKS_FROM){ assert.equal(grid.tiles[i], id('tree')); blocking[i] = 1; }
+  }
+  for (let i = 0; i < grid.size; i++){
+    if (grid.tiles[i] === id('tree')) assert.ok(blocking[i], 'tree tile without a trunk at ' + i);
+    if (grid.tiles[i] === id('fallen_tree')) assert.ok(logged[i], 'old fallen-tree tile left at ' + i);
+    assert.notEqual(grid.tiles[i], id('stump'), 'old stump tile left at ' + i);
+  }
+  assert.ok(G.MapGen.woodlands(72491).tiles.includes(id('stump')), 'Woodlands keeps its own');
+  assert.ok(G.Defs.terrain.get('forest').passable, 'forest floor is passable');
+  // Nothing grows on the landing pad.
+  const L = art.landing;
+  for (let k = 0; k < tr.count; k++) if (layer(k)) assert.ok(Math.hypot(tr.x[k] / T - L.x, tr.y[k] / T - L.y) > 26, 'tree on the landing pad');
+});
+
+test('genesis lays stepping stones across narrow rivers, walkable bank to bank', () => {
+  const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
+  const grid = G.MapGen.genesis(72491), f = grid.art.fords, cols = grid.cols;
+  assert.ok(f.crossings.length >= 3, 'a few crossings: ' + f.crossings.length);
+  assert.ok(G.Defs.terrain.get('stepping_stones').passable);
+  // Stones only ever stand where the Woodlands landscape underneath has river.
+  const base = G.MapGen.woodlands(72491);
+  for (let i = 0; i < grid.size; i++) if (grid.tiles[i] === id('stepping_stones')) assert.ok([id('water'), id('deep_water')].includes(base.tiles[i]), 'stones in the river at ' + i);
+  // Rocks in the river lie within a tile of the crossing's stones; the rest are slabs on the
+  // banks. Each crossing is two rocks wide mid-stream, widening to five or six at the land.
+  const near = (x, y) => { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (grid.get(x + dx, y + dy) === id('stepping_stones')) return true; return false; };
+  for (let k = 0; k < f.count; k++){
+    const x = Math.floor(f.x[k] / T), y = Math.floor(f.y[k] / T);
+    if (f.land[k]) assert.ok(grid.terrainPassable(x, y), 'bank slab on open ground');
+    else assert.ok(near(x, y), 'river rock beside the crossing');
+  }
+  for (let c = 0; c < f.crossings.length; c++){
+    const rows = new Map();
+    for (let k = 0; k < f.count; k++) if (f.c[k] === c){ const cr = f.crossings[c], s = Math.round(((f.x[k] / T - cr.x - 0.5) * cr.dx + (f.y[k] / T - cr.y - 0.5) * cr.dy) * T / 4); rows.set(s, (rows.get(s) || 0) + 1); }
+    assert.ok(!f.land.some((l, k) => l && f.c[k] === c), 'no stones on the land');
+  }
+  assert.ok(f.count > f.crossings.length * 20, 'many rocks per crossing, not a few big ones');
+  const sizes = new Set(f.r), small = [...f.r].filter(r => r <= 4).length;
+  assert.ok(sizes.size >= 6, 'six sizes: ' + [...sizes]);
+  assert.ok(small > f.count * 0.6, 'mostly small');
+  for (const c of f.crossings){
+    for (let k = 1; k <= c.n; k++) assert.equal(grid.get(c.x + c.dx * k, c.y + c.dy * k), id('stepping_stones'));
+    const ex = c.x + c.dx * (c.n + 1), ey = c.y + c.dy * (c.n + 1);
+    assert.ok(grid.terrainPassable(c.x, c.y) && grid.terrainPassable(ex, ey), 'walkable banks at both ends');
+    assert.ok(grid.reachable(c.x, c.y, ex, ey), 'one bank reaches the other');
+  }
+});
+
+test('a genesis game starts, plays and survives a save', () => {
+  const G = loadSim();
+  G.Scenario.newGame({ seed: 72491, map: 'genesis' });
+  const S = G.State, sh = G.Units.ship();
+  assert.equal(S.map, 'genesis');
+  assert.ok(S.grid.art.trees.count > 0);
+  for (const p of S.expedition.sites) assert.ok(S.grid.reachable(sh.gx + 3, sh.gy + sh.h, Math.floor(p.x / T), Math.floor(p.y / T)), 'signal reachable');
+  S.paused = false;
+  G.Sim.run(3);
+  const tiles = Array.from(S.grid.tiles), trees = fnv(new Uint8Array(S.grid.art.trees.x.buffer));
+  const save = G.Save.serialize();
+  assert.equal(save.map, 'genesis');
+  assert.deepEqual(Array.from(save.trees), [], 'trees are rebuilt from the seed; only damage to them is saved');
+  G.Save.restore(save, 1);
+  assert.deepEqual(Array.from(G.State.grid.tiles), tiles);
+  assert.equal(fnv(new Uint8Array(G.State.grid.art.trees.x.buffer)), trees, 'trees rebuilt from the seed');
+});
+
+test('genesis trees, stumps and fallen trees can be blown up and sawn down; saves keep the damage', () => {
+  const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
+  G.Scenario.newGame({ seed: 72491, map: 'genesis' });
+  const S = G.State, grid = S.grid, tr = grid.art.trees, Tr = G.Trees, sh = G.Units.ship();
+  S.paused = false;
+  // The nearest thing to the ship that matches `ok`.
+  const near = ok => { let best = -1, bd = Infinity; for (let k = 0; k < tr.count; k++){ if (!Tr.present(k) || !ok(k)) continue; const d = (tr.x[k] - sh.x) ** 2 + (tr.y[k] - sh.y) ** 2; if (d < bd){ bd = d; best = k; } } return best; };
+  const kind = k => G.TREES.ALL[tr.kind[k]], standing = k => Tr.state(k) === Tr.ALIVE && G.TREES.KINDS.includes(kind(k));
+
+  // A blast snaps a large tree: it leaves a snapped stump and frees its tile, recorded as a terrain edit.
+  const big = near(k => standing(k) && tr.size[k] === 2 && kind(k) !== 'snag');
+  const tile = tr.tile[big], edits = S.terrainEdits.length;
+  assert.equal(grid.tiles[tile], id('tree'));
+  Tr.blast(tr.x[big], tr.y[big], 20, 50);   // (it may clear grass round the tree)
+  assert.equal(Tr.state(big), Tr.ALIVE, 'one hit only dents it');
+  assert.ok(Tr.hp(big) < Tr.maxHp(big) && Tr.state(big) === Tr.ALIVE);
+  assert.ok(Tr.blast(tr.x[big], tr.y[big], 20, 1000) >= 1);
+  assert.equal(Tr.state(big), Tr.SNAPPED);
+  assert.equal(Tr.kind(big), 'stump_broken');
+  assert.ok(grid.passableIdx(tile) || grid.occ[tile], 'the tile opens up');
+  assert.ok(S.terrainEdits.length > edits);
+  // A second blast clears the stump away.
+  Tr.blast(tr.x[big], tr.y[big], 10, 1000);
+  assert.equal(Tr.state(big), Tr.GONE);
+  assert.equal(Tr.present(big), false);
+
+  // A fallen tree blown apart frees the tiles along its trunk.
+  const log = near(k => kind(k) === 'log');
+  const logTiles = [];
+  G.TREES.logTiles(tr.x[log], tr.y[log], tr.size[log], tr.variant[log] >> 1, T, (x, y) => logTiles.push(y * grid.cols + x));
+  assert.ok(logTiles.some(i => grid.tiles[i] === id('fallen_tree')));
+  assert.ok(Tr.damage(log, 1e4));
+  assert.equal(Tr.state(log), Tr.GONE);
+  assert.ok(logTiles.every(i => grid.tiles[i] !== id('fallen_tree') || tr.kind.some((kd, q) => q !== log && G.TREES.ALL[kd] === 'log' && Tr.present(q))), 'fallen-tree tiles freed');
+
+  // Turret shells explode among the trees, hit or miss.
+  const target = near(k => standing(k) && tr.size[k] === 1);
+  const foe = G.Units.spawn('hostile_machine', tr.x[target], tr.y[target]);
+  const turret = { id: 'b-test', x: tr.x[target] - 300, y: tr.y[target], team: 'blue' }, cfg = G.Defs.buildables.get('heavy_turret').behaviors[0];
+  for (let i = 0; i < 12 && Tr.state(target) === Tr.ALIVE; i++) G.Turrets.fire(turret, cfg, foe);
+  assert.equal(Tr.state(target), Tr.SNAPPED, 'splash damage felled the tree');
+
+  // A Salvage Crawler saws a tree down to a sawn stump; a Utility Spider can't.
+  const saw = near(k => standing(k) && tr.size[k] === 2 && Math.hypot(tr.x[k] - sh.x, tr.y[k] - sh.y) > 400);
+  const spider = S.units.find(u => u.type === 'utility_spider');
+  assert.equal(G.Gather.chop([spider], saw).length, 0);
+  const at = G.openPoint(tr.x[saw], tr.y[saw]), crawler = G.Units.spawn('salvage_crawler', at.x, at.y);
+  assert.equal(G.Gather.chop([crawler], saw).length, 1);
+  assert.equal(G.Gather.chopTarget(crawler), saw);
+  const wood = Tr.wood(saw), stock = G.Economy.get('wood');
+  assert.equal(wood, Math.round(G.TREES.WOOD.tree[2] * (G.TREES.species[kind(saw)].wood || 1)));
+  for (let s = 0; s < 40 && Tr.state(saw) === Tr.ALIVE; s++) G.Sim.run(1);
+  assert.equal(Tr.state(saw), Tr.CUT, 'sawn down');
+  assert.equal(Tr.kind(saw), 'stump_cut');
+  // Its wood goes into the Crawler's hold once the tree hits the ground, and it hauls it
+  // to the ship, then stops.
+  assert.equal(crawler.haulState, 'felling');
+  assert.equal(crawler.cargo.wood || 0, 0, 'no wood while it is still falling');
+  G.Sim.run(G.TREES.FALL_TIME + 0.1);
+  assert.equal(crawler.cargo.wood, wood, 'the wood is in the hold');
+  assert.equal(crawler.haulState, 'return');
+  for (let s = 0; s < 90 && crawler.command !== 'idle'; s++) G.Sim.run(1);
+  assert.equal(crawler.command, 'idle', 'done once the wood is delivered');
+  assert.equal(crawler.cargo.wood || 0, 0);
+  assert.equal(G.Economy.get('wood'), stock + wood, 'delivered to the ship');
+  // Sent back, it clears the stump too, for a little more wood.
+  G.Gather.chop([crawler], saw);
+  for (let s = 0; s < 60 && Tr.present(saw); s++) G.Sim.run(1);
+  assert.equal(Tr.state(saw), Tr.GONE);
+  assert.equal(crawler.cargo.wood, G.TREES.WOOD.stump[1]);
+  // With a full hold it unloads first, then comes back to saw.
+  const next = near(k => standing(k) && tr.size[k] === 1 && Math.hypot(tr.x[k] - crawler.x, tr.y[k] - crawler.y) < 800);
+  crawler.cargo.metal = crawler.cargoCapacity;
+  G.Gather.chop([crawler], next);
+  G.Sim.run(0.2);
+  assert.equal(crawler.haulState, 'unloadFirst');
+  for (let s = 0; s < 120 && Tr.state(next) === Tr.ALIVE; s++) G.Sim.run(1);
+  assert.equal(Tr.state(next), Tr.CUT, 'came back and sawed it down');
+  // Blasts give no wood.
+  assert.equal(S.units.some(u => u.cargo && u.cargo.wood && u !== crawler), false);
+
+  // Partly sawn: a save keeps it, and everything destroyed, with the tiles opened.
+  const half = near(k => standing(k) && tr.size[k] === 2 && Math.hypot(tr.x[k] - sh.x, tr.y[k] - sh.y) > 600);
+  Tr.damage(half, 100, 'cut');
+  const save = JSON.parse(JSON.stringify(G.Save.serialize())), tiles = Array.from(grid.tiles);
+  assert.ok(save.trees.length >= 5);
+  G.Save.restore(save, 1);
+  assert.deepEqual(Array.from(G.State.grid.tiles), tiles, 'freed tiles restored from the terrain edits');
+  for (const k of [big, log, target, saw, half]) assert.deepEqual([G.Trees.state(k), G.Trees.hp(k)], [Tr.state(k), Tr.hp(k)]);
+  assert.equal(G.Trees.state(half), G.Trees.ALIVE);
+  assert.equal(G.Trees.hp(half), G.Trees.maxHp(half) - 100);
+  // Bad tree data is rejected before anything changes.
+  for (const trees of [[[1, 7, 0]], [[1, 1, -5]], [[3, 1, 0], [3, 2, 0]], [['x', 0, 0]]])
+    assert.throws(() => G.Save.restore({ ...save, trees }, 1), /trees/);
+  // Saves from before trees could be damaged migrate with every tree standing.
+  const old = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/fixtures/save-schema-8.json'), 'utf8'));
+  assert.equal(old.trees, undefined);
+  assert.deepEqual(Array.from(G.Save.migrate(old).trees), []);
+});
+
 test('landing site: new games land where asked; Woodlands keeps it off water; saves keep it', () => {
   const G = loadSim(), id = k => G.Defs.terrain.get(k).id;
   // Test map: the ship lands on the chosen tile; out-of-range requests stay 64 tiles from the edge.
@@ -822,7 +1229,7 @@ test('map editor: load woodlands and the test map, and keep named maps', () => {
   assert.equal(G.MapEdit.loadMap('woodlands', 1.5), false);
   assert.equal(G.MapEdit.loadMap('woodlands', 9, [{ x: 0, y: 0, w: 1, h: 1, t: 200 }]), false, 'unknown terrain in an edit');
   // Save the test map with an edit, then swap in Woodlands under the running game.
-  G.MapEdit.paint(sh.gx - 30, sh.gy, 3, G.TT.WATER);
+  G.MapEdit.paint(sh.gx - 40, sh.gy, 3, G.TT.WATER);   // (west of the testing zone)
   const testTiles = Array.from(S.grid.tiles);
   assert.ok(G.MapLibrary.saveCurrent('Test map'));
   assert.ok(G.MapEdit.loadMap('woodlands', 424242));
@@ -970,9 +1377,8 @@ test('rally points: units from the ship and Fabricators walk to their rally poin
 test('Ore Processor turns metal, copper and uranium into steel, electronics and fuel rods', () => {
   const G = newGame();
   const S = G.State, ship = G.Units.ship(), P = G.Fabrication;
-  const proc = S.buildings.find(b => b.type === 'ore_processor');
-  assert.ok(proc, 'one stands in the testing zone');
-  assert.equal(proc.w, 3); assert.equal(proc.h, 3);
+  const p = field(G), proc = G.Buildings.add('ore_processor', p.x, p.y);
+  assert.equal(proc.w, 6); assert.equal(proc.h, 6);
   // Each producer offers only its own recipes.
   assert.equal(P.recipesFor(proc).map(r => r.key).join(), 'steel,electronics,fuel_rods');
   assert.ok(P.recipesFor(ship).every(r => r.unit), 'the ship builds units only');
@@ -1016,9 +1422,9 @@ test('copper and uranium deposits are placed on each Earth and mined like metal'
   const S = G.State, spider = find(G, 'utility_spider');
   for (const type of ['copper_mine', 'uranium_mine']) assert.ok(S.resourceNodes.some(n => n.type === type), type + ' placed');
   const copper = S.resourceNodes.find(n => n.type === 'copper_mine');
-  assert.equal(G.Buildings.canPlaceKey('mine_building', copper.gx - 1, copper.gy - 1), true, 'room for a Mine Building');
+  assert.equal(G.Buildings.canPlaceKey('mine_building', copper.gx - 3, copper.gy - 3), true, 'room for a Mine Building');
   S.resources.metal = 500;
-  assert.ok(G.Construction.order(spider, 'mine_building', copper.gx - 1, copper.gy - 1));
+  assert.ok(G.Construction.order(spider, 'mine_building', copper.gx - 3, copper.gy - 3));
   G.Sim.run(60);
   const mine = S.buildings.find(b => b.nodeId === copper.id);
   assert.ok(mine, 'mine built on the copper deposit');
@@ -1046,12 +1452,12 @@ test('power: the Warp Drive gives 25, Solar Arrays scale with the Earth, and a s
   // A Solar Array stands north of the ship in the testing zone.
   const solar = S.buildings.find(b => b.type === 'solar_array');
   assert.ok(solar, 'solar array placed');
-  assert.equal(solar.w, 3); assert.equal(solar.h, 2);
+  assert.equal(solar.w, 6); assert.equal(solar.h, 4);
   assert.ok(solar.gy + solar.h <= ship.gy, 'north of the ship');
   assert.equal(P.output(ship), 25);
   assert.equal(P.output(solar), 8, 'full sun on the first (temperate) Earth');
-  // Idle producers draw nothing; the test-zone mine draws 5 while extracting.
-  const fab = S.buildings.find(b => b.type === 'fabricator'), proc = S.buildings.find(b => b.type === 'ore_processor');
+  // Idle producers draw nothing; a mine draws 5 while extracting.
+  const at = field(G), fab = S.buildings.find(b => b.type === 'fabricator'), proc = G.Buildings.add('ore_processor', at.x, at.y);
   const mines = S.buildings.filter(b => b.type === 'mine_building' && b.team === 'blue');
   assert.equal(P.draw(fab), 0); assert.equal(P.draw(proc), 0);
   const wind = S.buildings.find(b => b.type === 'wind_turbine');
@@ -1096,7 +1502,7 @@ test('power: the Warp Drive gives 25, Solar Arrays scale with the Earth, and a s
 test('power: solar and wind output follow each Earth\'s climate', () => {
   const G = newGame();
   const S = G.State, P = G.Power, solar = S.buildings.find(b => b.type === 'solar_array'), wind = S.buildings.find(b => b.type === 'wind_turbine');
-  assert.equal(wind.w, 2); assert.equal(wind.h, 2);
+  assert.equal(wind.w, 4); assert.equal(wind.h, 4);
   const expect = { temperate: [8, 6], frozen: [4.8, 10.8], silent: [10, 0.3], irradiated: [3.2, 7.8] };
   G.Defs.climates.all().forEach((c, i) => {
     S.expedition.climate = i;
@@ -1114,13 +1520,13 @@ test('the Resource Extractor mines whatever deposit it stands on', () => {
   const G = newGame();
   const S = G.State, d = G.Defs.buildables.get('mine_building');
   assert.equal(d.name, 'Resource Extractor');
-  assert.equal(d.w, 3); assert.equal(d.h, 3);
+  assert.equal(d.w, 7); assert.equal(d.h, 7);
   S.resources.metal = 10000;
   const made = {};
   for (const type of ['metal_mine', 'copper_mine', 'uranium_mine']){
     const n = S.resourceNodes.find(n => n.type === type && !G.Gather.mineOn(n) && !S.buildings.some(b => b.nodeId === n.id));
-    assert.ok(G.Buildings.canPlaceKey('mine_building', n.gx - 1, n.gy - 1), type);
-    const b = G.Buildings.add('mine_building', n.gx - 1, n.gy - 1);
+    assert.ok(G.Buildings.canPlaceKey('mine_building', n.gx - 3, n.gy - 3), type);
+    const b = G.Buildings.add('mine_building', n.gx - 3, n.gy - 3);
     assert.equal(b.nodeId, n.id, 'claims the deposit underneath');
     made[type] = b;
   }
@@ -1135,6 +1541,42 @@ test('the Resource Extractor mines whatever deposit it stands on', () => {
 
 // An open field east of the ship, away from the testing zone and deposits.
 const field = (G, dx = 14, dy = 16) => { const sh = G.Units.ship(); return G.State.grid.nearestOpen(sh.gx + dx, sh.gy + dy, 6); };
+
+test('building grid: structures snap to quarter-tile cells and may share a tile; movement is blocked on every tile they touch', () => {
+  const G = newGame();
+  const S = G.State, B = G.Buildings, p = field(G, 16, 20);
+  // Placement snaps to cells, centred on the point: a 1 × 1 wall centred on a tile's centre
+  // sits squarely; nudged by a cell it sits a quarter tile over.
+  assert.deepEqual({ ...B.placementAt('defensive_wall', (p.x + 0.5) * T, (p.y + 0.5) * T) }, { gx: p.x, gy: p.y, sx: 0, sy: 0, node: null });
+  assert.deepEqual({ ...B.placementAt('defensive_wall', (p.x + 0.75) * T, (p.y + 0.5) * T) }, { gx: p.x, gy: p.y, sx: 1, sy: 0, node: null });
+  // A wall half a tile over: it covers two tiles across, both blocked for movement.
+  const a = B.add('defensive_wall', p.x, p.y, { sx: 2 });
+  assert.equal(a.x, (p.x + 0.5 + 0.5) * T);
+  assert.deepEqual({ ...B.cover(a) }, { gx: p.x, gy: p.y, w: 2, h: 1 });
+  for (let x = p.x; x < p.x + 2; x++) assert.equal(S.grid.passable(x, p.y), false, 'tile ' + (x - p.x));
+  // Another wall may share its last tile (cells don't overlap), but not overlap it by a cell.
+  assert.equal(B.canPlaceKey('defensive_wall', p.x + 1, p.y, 2, 0), true, 'flush against it, sharing a tile');
+  assert.equal(B.canPlaceKey('defensive_wall', p.x + 1, p.y, 1, 0), false, 'one cell into it');
+  const b = B.add('defensive_wall', p.x + 1, p.y, { sx: 2 });
+  // The shared tile stays blocked until both are gone.
+  B.remove(a);
+  assert.equal(S.grid.passable(p.x + 1, p.y), false, 'still under the second wall');
+  assert.equal(S.grid.passable(p.x, p.y), true);
+  // Clicks find the structure under the point, not the tile.
+  assert.equal(B.atPoint((p.x + 1.4) * T, (p.y + 0.5) * T), null, 'the free half of the shared tile');
+  assert.equal(B.atPoint((p.x + 1.6) * T, (p.y + 0.5) * T), b);
+  // A Spider builds at an offset, and a save keeps it.
+  S.resources.metal = 1000;
+  const spider = find(G, 'utility_spider'), q = field(G, 12, 26);
+  assert.ok(G.Construction.order(spider, 'wood_wall', q.x, q.y, 3, 1));
+  G.Sim.run(30);
+  const built = S.buildings.find(o => o.type === 'wood_wall' && o.gx === q.x && o.gy === q.y);
+  assert.ok(built && built.sx === 3 && built.sy === 1, 'built a cell over');
+  G.Save.restore(JSON.parse(JSON.stringify(G.Save.serialize())), 1);
+  const again = G.State.buildings.find(o => o.id === built.id);
+  assert.deepEqual([again.sx, again.sy, again.x, again.y], [3, 1, built.x, built.y]);
+  assert.equal(G.State.grid.passable(q.x + 1, q.y + 1), false, 'its covered tiles are blocked again after loading');
+});
 
 test('walls: Reinforced Walls take less damage; both block movement like the old Wall', () => {
   const G = newGame();
@@ -1157,6 +1599,7 @@ test('Laser Turret: charges 2.5 s with a target in range before each shot, and l
   const S = G.State, T = 48, p = field(G, 18, 16), D = G.Defs.buildables.get('laser_turret');
   const cfg = D.behaviors.find(x => x.type === 'turret');
   assert.equal(cfg.charge, 2.5); assert.equal(D.power.demand, 6);
+  cfg.accuracy = 1;   // (this game's copy) every shot hits, so the test doesn't hang on the roll
   for (const u of G.Units.crew()) u.maxHp = u.hp = 1e9;
   const b = G.Buildings.add('laser_turret', p.x, p.y, { team: 'blue' });
   const foe = G.Units.spawn('hostile_machine', b.x + 5 * T, b.y);
@@ -1347,7 +1790,7 @@ test('Shield Projector: switched on it charges, draws 40 power and absorbs damag
   const G = newGame();
   const S = G.State, T = 48, p = field(G, 18, 24);
   const proj = G.Buildings.add('shield_projector', p.x, p.y);
-  const wall = G.Buildings.add('defensive_wall', p.x + 5, p.y + 1), far = G.Buildings.add('defensive_wall', p.x + 12, p.y + 1);
+  const wall = G.Buildings.add('defensive_wall', p.x + 7, p.y + 2), far = G.Buildings.add('defensive_wall', p.x + 14, p.y + 2);
   assert.equal(proj.shieldOn, false); assert.equal(proj.shield, 0);
   G.Sim.run(2);
   assert.equal(proj.shield, 0, 'no charge while off');
@@ -1362,7 +1805,7 @@ test('Shield Projector: switched on it charges, draws 40 power and absorbs damag
   assert.ok(Math.abs(proj.shield - c0 - 400 * ratio) < 5, `charged ${proj.shield - c0} at ${ratio}`);
   // Full power: up to capacity.
   const extra = [];
-  for (let i = 0; i < 6; i++) extra.push(G.Buildings.add('solar_array', p.x - 20, p.y + i * 3));
+  for (let i = 0; i < 6; i++) extra.push(G.Buildings.add('solar_array', p.x - 20, p.y + i * 4));
   G.Sim.run(80);
   assert.equal(proj.shield, 2500);
   // Hits on covered structures come off the charge; outside the field they don't.

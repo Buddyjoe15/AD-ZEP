@@ -1,0 +1,30 @@
+{
+  "name": "genesis_stump_broken",
+  "frameWidth": 104,
+  "frameHeight": 104,
+  "origin": [
+    51.5,
+    51.5
+  ],
+  "worldPxPerArtPx": 0.25,
+  "rows": [
+    "{\"r\":4}",
+    "{\"r\":6}"
+  ],
+  "frameSizes": [
+    80,
+    104
+  ],
+  "columns": "3 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      3,
+      3
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_stump_broken.png",
+  "sheetWidth": 312,
+  "sheetHeight": 208
+}

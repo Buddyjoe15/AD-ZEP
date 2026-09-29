@@ -5,19 +5,22 @@
    Two kinds of entry share the atlas:
    - Canvas art from visuals.js, one 512 px cell per frame at 4 atlas px per world px,
      rotated to the unit's heading when drawn.
-   - Pixel art (pixelart.js), 128 px slots at 2 atlas px per world px, one frame per facing
-     and animation step; never rotated, the facing is picked from the heading instead. */
+   - Pixel art (pixelart.js), 256 px slots at 2 atlas px per world px, one frame per facing
+     and animation step (added on first use); never rotated, the facing is picked from the
+     heading instead. */
 (function(){
   'use strict';
   const G = GW;
   // Atlas cell: a 128×128 world-px box around the unit, stored at 4 px per world px so
   // Canvas art stays sharp at maximum zoom on high-DPI screens.
-  const BOX = 128, RES = 4, CELL = BOX * RES, ATLAS_W = 4096, PER_ROW = ATLAS_W / CELL;
+  const BOX = 128, RES = 4, CELL = BOX * RES, ATLAS_W = 4096, PER_ROW = ATLAS_W / CELL, ATLAS_MAX_H = 8192;
   const ORIGIN_X = 64, ORIGIN_Y = 76;   // unit position inside the box (tall art reaches up)
-  // Pixel art: 2 atlas px per world px, which is 1 atlas px per art px for sprites drawn at
-  // 2 art px per world px. A slot holds frames up to 64 world px (the 49×49 Spider and Vance
-  // are 98×98 art px).
-  const SLOT = 128, SLOTS_PER_CELL = (CELL / SLOT) ** 2, PIXEL_DENSITY = 2;   // pixel art: atlas px per world px
+  const UNIT_SIZE = 2;                   // units are shown at twice the size their Canvas art was drawn for
+  // Pixel art: 2 atlas px per world px, which is 1 atlas px per art px for unit sprites (drawn
+  // at 2 art px per world px on the map). A slot holds frames up to 128 world px (the 98 × 98
+  // Spider and Vance are 196 × 196 art px). Frames go into the atlas the first time they are
+  // drawn, so only the facings and animation steps in use take room.
+  const SLOT = 256, SLOTS_PER_CELL = (CELL / SLOT) ** 2, PIXEL_DENSITY = 2;   // pixel art: atlas px per world px
 
   G.SpriteAtlas = {
     RES, CELL,
@@ -35,6 +38,12 @@
       if (this.canvas){ this.canvas.height = CELL; this.g = this.canvas.getContext('2d', { willReadFrequently: true }); }
       this.version++;
     },
+    // Starts the atlas over (entries repaint as they are next drawn) when it is nearly full, so
+    // new frames never land past its last row, where they would draw as nothing. Called by the
+    // renderers before they pick any entries for a frame.
+    ensureRoom(){
+      if (this.canvas && (ATLAS_MAX_H / CELL) * PER_ROW - this.next < 24) this.reset();
+    },
     cellX(idx){ return (idx % PER_ROW) * CELL; },
     cellY(idx){ return Math.floor(idx / PER_ROW) * CELL; },
     // Next free cell, growing the atlas (and keeping what is already drawn) when full.
@@ -43,7 +52,7 @@
       if ((row + 1) * CELL > this.canvas.height){
         // One row at a time: rows are large at this resolution, so doubling would waste memory.
         const old = this.canvas, grown = document.createElement('canvas');
-        grown.width = ATLAS_W; grown.height = Math.min(8192, (row + 1) * CELL);
+        grown.width = ATLAS_W; grown.height = Math.min(ATLAS_MAX_H, (row + 1) * CELL);
         const gg = grown.getContext('2d', { willReadFrequently: true });
         gg.drawImage(old, 0, 0);
         this.canvas = grown; this.g = gg;
@@ -102,7 +111,11 @@
       if (e.pixel){
         const a = G.PixelArt.anim(e.anims, u), step = a.frames > 1 ? Math.floor((t + u.id * 0.37) * a.fps) % a.frames : 0;
         const block = e.variants ? G.PixelArt.variant(e.variants, u) * e.variants.framesEach : 0;
-        return e.facings[G.PixelArt.facing(u.heading)][block + a.start + step];
+        const row = e.facings[G.PixelArt.facing(u.heading)], i = row[block + a.start + step];
+        // The first time a frame is needed, paint the whole animation for this facing, so a
+        // walk cycle costs one atlas upload instead of one per step.
+        if (!e.at[i]) for (let s = 0; s < a.frames; s++){ const j = row[block + a.start + s]; if (j != null && !e.at[j]) this.paintFrame(e, j); }
+        return i;
       }
       const frames = u.path.length && e.move.length ? e.move : e.idle;
       return frames.length > 1 ? frames[Math.floor(((t + u.id * 0.37) / e.period) * frames.length) % frames.length] : frames[0];
@@ -121,12 +134,15 @@
       e = { idle: [], move: [], period: anim.period, upright: !!fn.upright, cellIdx: [], at: [], scale: RES, shadow: null };
       const render = (moving, t) => {
         const idx = A.allocCell(), g = A.g, cx = A.cellX(idx), cy = A.cellY(idx);
-        const fake = { id: 0, type: def.key, team, x: 0, y: 0, heading: 0, radius: def.radius, hp: 1, maxHp: 1,
+        // Canvas art is drawn at the size it was designed for (half today's unit radius) and
+        // scaled up by UNIT_SIZE, like the pixel art; the ship keeps its size.
+        const k = def.key === 'ship' ? 1 : UNIT_SIZE;
+        const fake = { id: 0, type: def.key, team, x: 0, y: 0, heading: 0, radius: def.radius / k, hp: 1, maxHp: 1,
           path: moving ? [{ x: 1, y: 0 }] : [], pathIndex: 0, cargo: {}, cargoCapacity: def.cargoCapacity || 1, isHero: false };
         g.save();
         g.clearRect(cx, cy, CELL, CELL);
         g.beginPath(); g.rect(cx, cy, CELL, CELL); g.clip();
-        g.setTransform(RES, 0, 0, RES, cx + ORIGIN_X * RES, cy + ORIGIN_Y * RES);
+        g.setTransform(RES * k, 0, 0, RES * k, cx + ORIGIN_X * RES, cy + ORIGIN_Y * RES);
         g.fillStyle = G.CONFIG.COLORS[team] || '#ccc';
         fn(g, fake, 1, t, def);
         g.restore();
@@ -162,19 +178,23 @@
       e = { pixel: true, upright: true, anims: sp.animations, variants: sp.variants || null, facings: [], at: [], scale: PIXEL_DENSITY,
         shadow: sp.shadow.offset.map(v => v * k),
         rect: { x: -(sp.origin[0] + 0.5) * k, y: -(sp.origin[1] + 0.5) * k, w: w * k, h: h * k } };
+      e.src = []; e.team = team; e.w = w; e.h = h; e.res = res; e.pad = pad;
       for (const row of sp.frames){
         const list = [];
-        for (const str of row){
-          const [sx, sy] = A.allocSlot(), x = sx + pad[0], y = sy + pad[1], g = A.g;   // (the atlas may have grown)
-          g.imageSmoothingEnabled = false;
-          g.clearRect(sx, sy, SLOT, SLOT);
-          g.drawImage(P.canvas(str, w, h, team), x, y, w * res, h * res);
-          list.push(e.at.length); e.at.push([x, y]);
-        }
+        for (const str of row){ list.push(e.at.length); e.at.push(null); e.src.push(str); }
         e.facings.push(list);
       }
-      A.cells.set(key, e); A.version++;
+      A.cells.set(key, e);
       return e;
+    },
+    // Paints pixel-art frame i of entry e into a slot (the first time it is needed).
+    paintFrame(e, i){
+      const P = G.PixelArt, [sx, sy] = this.allocSlot(), x = sx + e.pad[0], y = sy + e.pad[1], g = this.g;   // (the atlas may have grown)
+      g.imageSmoothingEnabled = false;
+      g.clearRect(sx, sy, SLOT, SLOT);
+      g.drawImage(P.canvas(e.src[i], e.w, e.h, e.team), x, y, e.w * e.res, e.h * e.res);
+      e.at[i] = [x, y];
+      this.version++;
     }
   };
 })();

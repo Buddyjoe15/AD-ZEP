@@ -20,6 +20,7 @@
         const p = this.p(e), c = G.State.camera, w = G.worldFromScreen(p.x, p.y);
         c.z = G.clamp(c.z * (e.deltaY < 0 ? 1.13 : 1 / 1.13), C.ZOOM_MIN, C.ZOOM_MAX);
         c.x = w.x - p.x / c.z; c.y = w.y - p.y / c.z; G.clampCamera();
+        this.zoomedAt = performance.now(); this.zoomAnchor = p;
       }, { passive: false });
       cv.addEventListener('pointerdown', e => this.down(e));
       cv.addEventListener('pointermove', e => this.move(e));
@@ -31,9 +32,14 @@
       addEventListener('blur', () => this.keys.clear());
       document.addEventListener('visibilitychange', () => this.keys.clear());
       document.getElementById('minimap').addEventListener('pointerdown', e => {
-        const r = e.currentTarget.getBoundingClientRect();
-        G.centerCamera((e.clientX - r.left) / r.width * C.WORLD_W, (e.clientY - r.top) / r.height * C.WORLD_H);
+        const r = e.currentTarget.getBoundingClientRect(), q = G.Renderer.miniToWorld((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+        G.centerCamera(q.x, q.y);
       });
+      // Minimap zoom: the + and − buttons, or the wheel over the minimap.
+      const miniZoom = dir => { G.Renderer.zoomMinimap(dir); G.UI.refreshMiniZoom(); };
+      document.getElementById('miniZoomIn').addEventListener('click', () => miniZoom(1));
+      document.getElementById('miniZoomOut').addEventListener('click', () => miniZoom(-1));
+      document.getElementById('minimap').addEventListener('wheel', e => { e.preventDefault(); miniZoom(e.deltaY < 0 ? 1 : -1); }, { passive: false });
     },
     key(e){
       if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
@@ -61,30 +67,40 @@
       const S = G.State, r = this.radius();
       let best = null, bd = r;
       for (const u of S.spatial.query(wx, wy, r + 20)){
-        if (u.hp <= 0 || u.isShip || (!anyTeam && u.team !== 'blue') || (!ignoreFog && !G.Fog.canSee(u))) continue;
+        if (u.hp <= 0 || u.isShip || (!anyTeam && u.team !== 'blue') || (!ignoreFog && !G.Fog.canSee(u)) || !G.CaveView.here(u)) continue;
         const d = Math.hypot(u.x - wx, u.y - wy);
         if (d < bd){ bd = d; best = u; }
       }
       if (best) return best;
       const sh = G.Units.ship(), T = G.CONFIG.TILE;
-      return sh && Math.abs(wx - sh.x) <= sh.w * T / 2 && Math.abs(wy - sh.y) <= sh.h * T / 2 ? sh : null;
+      return sh && G.CaveView.here(sh) && Math.abs(wx - sh.x) <= sh.w * T / 2 && Math.abs(wy - sh.y) <= sh.h * T / 2 ? sh : null;
     },
     containerAt(wx, wy){
       let best = null, bd = this.radius();
       for (const c of G.State.containers){
-        if (c.type === 'ground_item' && !c.items.length) continue;
+        if ((c.type === 'ground_item' && !c.items.length) || !G.CaveView.here(c)) continue;
         const d = Math.hypot(c.x - wx, c.y - wy);
         if (d < bd){ bd = d; best = c; }
       }
       return best;
     },
-    buildingAt(wx, wy){ const T = G.CONFIG.TILE; return G.Buildings.at(Math.floor(wx / T), Math.floor(wy / T)); },
+    buildingAt(wx, wy){ const b = G.Buildings.atPoint(wx, wy); return b && G.CaveView.here(b) ? b : null; },
     nodeAt(wx, wy){ const r = 32 / G.State.camera.z; return G.State.resourceNodes.find(n => n.remaining > 0 && Math.hypot(n.x - wx, n.y - wy) < r) || null; },
-    // Something a gatherer can be sent to: a Mine Building, or a scavenge / deposit node.
+    // Something a gatherer can be sent to: a Mine Building, or a scavenge / deposit node;
+    // or, with a unit that saws selected, a tree, stump or fallen tree ({ tree: index }).
     gatherTarget(wx, wy){
       const b = this.buildingAt(wx, wy);
       if (b && G.Gather.isMine(b)) return b;
-      return this.nodeAt(wx, wy);
+      const n = this.nodeAt(wx, wy);
+      if (n) return n;
+      if (this.selectedUnits().some(u => G.Gather.canChop(u))){ const k = G.Trees.at(wx, wy), p = k >= 0 && G.Trees.pos(k); if (p && G.CaveView.here(p)) return { tree: k }; }
+      return null;
+    },
+    // Sends the selection to a gather target: every sawing unit to a tree, else the first gatherer.
+    gatherOrder(target){
+      if (target.tree != null) return G.Gather.chop(this.selectedUnits(), target.tree).length > 0;
+      const gatherer = this.gatherer();
+      return !!gatherer && G.Gather.command(gatherer, target);
     },
     canInteract(){ const S = G.State; return S.camera.z >= G.CONFIG.INTERACT_MIN_ZOOM && S.selected.has(S.heroId); },
     selectedUnits(){ return G.Selection.units(); },
@@ -123,8 +139,9 @@
       // A pointer consumed here must not also act as a tap / click on release.
       const consume = () => { const o = this.ptr.get(e.pointerId); if (o) o.handled = true; };
       if (e.button === 2){
-        const us = this.selectedUnits(), target = this.gatherTarget(q.x, q.y), gatherer = this.gatherer();
-        if (target && gatherer) G.Gather.command(gatherer, target);
+        const us = this.selectedUnits(), target = this.gatherTarget(q.x, q.y), door = G.CaveView.doorAt(q.x, q.y);
+        if (door >= 0 && us.length){ G.CaveView.useDoor(door, us); return; }   // through a cave's entrance
+        if (target && (target.tree != null || this.gatherer())) this.gatherOrder(target);
         else if (us.length) G.Orders.move(us, q.x, q.y);
         return;
       }
@@ -154,11 +171,14 @@
         G.UI.toast(this.commandMode === 'guard' ? 'Guard location set' : 'Patrol route set');
         this.commandMode = null; G.UI.refreshSelection(true); return;
       }
+      // A cave's entrance: selected units go through it; with none, the view does.
+      const door = G.CaveView.doorAt(q.x, q.y);
+      if (door >= 0 && (e.pointerType !== 'mouse' || e.button === 0)){ consume(); G.CaveView.useDoor(door, this.selectedUnits()); return; }
       this.startInspect(e.pointerId, e.clientX, e.clientY, q);
       const chest = this.canInteract() && this.containerAt(q.x, q.y);
       if (chest){ consume(); G.InventoryUI.openContainer(chest); return; }
-      const target = this.gatherTarget(q.x, q.y), gatherer = this.gatherer();
-      if (target && gatherer){ consume(); G.Gather.command(gatherer, target); return; }
+      const target = this.gatherTarget(q.x, q.y);
+      if (target && (target.tree != null || this.gatherer())){ consume(); this.gatherOrder(target); return; }
       const hit = this.unitAt(q.x, q.y);
       // Clicking a hostile unit shows its details (right-click still orders a move).
       if (!hit && e.pointerType === 'mouse' && e.button === 0){
@@ -192,6 +212,8 @@
     },
     move(e){
       const o = this.ptr.get(e.pointerId);
+      // A mouse hovering in build mode: the outline of the structure follows the pointer.
+      if (!o && e.pointerType === 'mouse' && G.BuildUI.placing() && !G.State.paused){ const p = this.p(e), q = G.worldFromScreen(p.x, p.y); G.BuildUI.previewAt(q.x, q.y); return; }
       if (!o) return;
       const p = this.p(e), dist = Math.hypot(p.x - o.sx, p.y - o.sy);
       if (this.editGesture && this.editGesture.id === e.pointerId){
@@ -216,6 +238,7 @@
         const a = [...this.ptr.values()], d = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), mx = (a[0].x + a[1].x) / 2, my = (a[0].y + a[1].y) / 2, c = G.State.camera;
         c.z = G.clamp(this.pinch.z * d / Math.max(10, this.pinch.d), G.CONFIG.ZOOM_MIN, G.CONFIG.ZOOM_MAX);
         c.x = this.pinch.anchor.x - mx / c.z; c.y = this.pinch.anchor.y - my / c.z; G.clampCamera();
+        this.zoomedAt = performance.now(); this.zoomAnchor = { x: mx, y: my };
         return;
       }
       if (this.box){ this.box.x1 = p.x; this.box.y1 = p.y; }
@@ -260,7 +283,7 @@
         if (Math.hypot(x1 - x0, y1 - y0) > 8){
           const ids = e.shiftKey ? [...S.selected] : [];
           for (const u of S.units){
-            if (u.team !== 'blue' || u.isShip || u.hp <= 0) continue;
+            if (u.team !== 'blue' || u.isShip || u.hp <= 0 || !G.CaveView.here(u)) continue;
             const s = G.screenFromWorld(u.x, u.y);
             if (s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1 && !ids.includes(u.id)) ids.push(u.id);
           }
@@ -315,7 +338,23 @@
       this.inspect = null;
     },
     // Keyboard camera pan, driven by real frame time.
+    // Pixel-perfect zoom: once the zoom has been left alone for a moment, close up (where a
+    // pixel of art covers about one to five screen pixels) it eases to the nearest zoom at which
+    // every art pixel covers a whole number of screen pixels, keeping the point under the
+    // cursor still, so pixel art stays crisp and even instead of shimmering.
+    snapZoom(dt){
+      const c = G.State.camera, P = G.PixelArt, dpr = G.Renderer.dpr || 1;
+      if (!P.enabled || !this.zoomedAt || this.pinch || performance.now() - this.zoomedAt < 180) return;
+      const apw = P.tileArt() / G.CONFIG.TILE, s = c.z * dpr / apw;   // screen px per art px
+      if (s < 0.9 || s > 5.5){ this.zoomedAt = 0; return; }
+      const target = G.clamp(Math.max(1, Math.round(s)) * apw / dpr, G.CONFIG.ZOOM_MIN, G.CONFIG.ZOOM_MAX);
+      const a = this.zoomAnchor || { x: G.Renderer.w / 2, y: G.Renderer.h / 2 }, w = G.worldFromScreen(a.x, a.y);
+      const z = Math.abs(target - c.z) < 0.002 ? target : c.z + (target - c.z) * Math.min(1, dt * 14);
+      c.z = z; c.x = w.x - a.x / z; c.y = w.y - a.y / z; G.clampCamera();
+      if (z === target) this.zoomedAt = 0;
+    },
     update(dt){
+      if (dt > 0) this.snapZoom(dt);
       if (G.State.paused || !this.keys.size || !(dt > 0)) return;
       const k = this.keys, c = G.State.camera, s = 700 / c.z;
       if (k.has('a') || k.has('arrowleft')) c.x -= s * dt;

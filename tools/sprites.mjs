@@ -5,8 +5,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { PALETTE, TEAMS, ALPHABET, C, Grid, rng, painter, rotate, finish, png, sheetRGBA } from './pixelart.mjs';
-import { renderSprite, renderStructure, LIFT, OUTLINE } from './sprite-kit.mjs';
+import { renderSprite, renderStructure, LIFT, OUTLINE, RES as KIT_RES } from './sprite-kit.mjs';
 import salvageCrawler from '../art/sprite-lab/specs/salvage_crawler.mjs';
+import { genesisTrees, rle } from './genesis-trees.mjs';
 import sentryTurret from '../art/sprite-lab/specs/sentry_turret.mjs';
 import laserTurret from '../art/sprite-lab/specs/laser_turret.mjs';
 import woodWall from '../art/sprite-lab/specs/wood_wall.mjs';
@@ -26,11 +27,16 @@ export const DATA_FILE = path.join(ROOT, 'src/render/pixel-data.js');
 
 export const FACINGS = ['up', 'up-right', 'right', 'down-right', 'down', 'down-left', 'left', 'up-left'];
 const DIAG = Math.PI / 4;
-// World scale. Everything is drawn at 2 art px per world px. Terrain: a 48 world px tile is
+// World scale. Terrain tiles are drawn at 2 art px per world px: a 48 world px tile is
 // TILE_ART = 96 art px, and terrain features are sized in world px times K. Units and
-// structures are drawn at SPRITE_RES art px per world px: their shapes are given in world px
-// and drawn with twice the pixels across, so a Spider is 49 world px and 98 art px.
-const TERRAIN_RES = 2, K = TERRAIN_RES, WORLD_PX_PER_ART_PX = 1 / TERRAIN_RES, TILE_ART = 48 * TERRAIN_RES, SPRITE_RES = 2;
+// structures are drawn at SPRITE_RES (the sprite kit's RES, 4) art px per world px: their
+// shapes are given in world px and drawn with four times the pixels across, so a Spider is
+// 49 world px and 196 art px.
+const TERRAIN_RES = 2, K = TERRAIN_RES, WORLD_PX_PER_ART_PX = 1 / TERRAIN_RES, TILE_ART = 48 * TERRAIN_RES, SPRITE_RES = KIT_RES;
+// Units and structures are shown at SIZE times the size they are modelled at (their art is
+// drawn at SPRITE_RES art px per modelled world px, so on the map it is SPRITE_RES / SIZE art
+// px per world px, and a structure modelled on 1 × 1 tiles stands on SIZE × SIZE).
+const SIZE = 2, SPRITE_WORLD = SIZE / SPRITE_RES;
 
 // ---- Units: draw(p, anim, frame) in local coordinates, forward = -y ----
 
@@ -194,18 +200,21 @@ function modelFrames(def){
 // Walls have connecting states (16 frames, one per neighbour mask); vertical gates are the
 // horizontal model turned (spec.heading). Keyed by the game's buildable key.
 const STRUCTURE = { shadow: [4, 4], elevation: 'structure' };
+// Walls and gates stay at the size they are modelled at (a wall section is one tile, a thin
+// line of wall through it, so rows join end to end); other structures are shown at SIZE.
+const FENCE = { ...STRUCTURE, size: 1 };
 export const MODELLED_STRUCTURES = {
   sentry_turret: { spec: sentryTurret, ...STRUCTURE },
   laser_turret: { spec: laserTurret, ...STRUCTURE },
-  wood_wall: { spec: woodWall, ...STRUCTURE },
-  defensive_wall: { spec: metalWall, ...STRUCTURE },
-  reinforced_wall: { spec: reinforcedWall, ...STRUCTURE },
-  gate: { spec: gate2, ...STRUCTURE }, gate_3: { spec: gate3, ...STRUCTURE }, gate_4: { spec: gate4, ...STRUCTURE },
-  gate_v: { spec: gate2v, ...STRUCTURE }, gate_3_v: { spec: gate3v, ...STRUCTURE }, gate_4_v: { spec: gate4v, ...STRUCTURE }
+  wood_wall: { spec: woodWall, ...FENCE },
+  defensive_wall: { spec: metalWall, ...FENCE },
+  reinforced_wall: { spec: reinforcedWall, ...FENCE },
+  gate: { spec: gate2, ...FENCE }, gate_3: { spec: gate3, ...FENCE }, gate_4: { spec: gate4, ...FENCE },
+  gate_v: { spec: gate2v, ...FENCE }, gate_3_v: { spec: gate3v, ...FENCE }, gate_4_v: { spec: gate4v, ...FENCE }
 };
 function structureFrames(spec){
   const F = spec.frame, render = (model, heading = spec.heading || 0) => {
-    const { px } = renderStructure(model, F, { heading, bleed: spec.bleed || 0 });
+    const { px } = renderStructure(model, F, { heading, bleed: (spec.bleed || 0) * SPRITE_RES / 2 });   // (bleed is given at 2 art px per world px)
     const g = new Grid(F.w, F.h); g.p.set(px); return g;
   };
   const cols = [], states = {};
@@ -747,10 +756,10 @@ export function build(){
     const N = def.size * SPRITE_RES;
     const meta = {
       name, frameWidth: N, frameHeight: N, origin: [(N - 1) / 2, (N - 1) / 2],
-      worldPxPerArtPx: 1 / SPRITE_RES, rows: 'facing', facings: FACINGS, authoredFacings: ['up', 'up-right'],
+      worldPxPerArtPx: SPRITE_WORLD, rows: 'facing', facings: FACINGS, authoredFacings: ['up', 'up-right'],
       animations, shadow: { drawnBy: 'engine', offset: def.shadow.map(v => v * SPRITE_RES), elevation: def.elevation }, team: 'team0..team2 (magenta ramp)'
     };
-    sprites[name] = { ...meta, frames: rows.map(r => r.map(g => g.encode())) };
+    sprites[name] = { ...meta, frames: rows.map(r => r.map(g => rle(g.encode()))) };
     sheets[name] = { meta, rows };
   }
   for (const [name, def] of Object.entries(MODELLED)){
@@ -759,35 +768,35 @@ export function build(){
     for (const [anim, { frames, fps }] of Object.entries(def.spec.animations)){ animations[anim] = { start, frames, fps }; start += frames; }
     const meta = {
       name, frameWidth: N, frameHeight: N, origin: [(N - 1) / 2, (N - 1) / 2],
-      worldPxPerArtPx: 1 / SPRITE_RES, rows: 'facing', facings: FACINGS, renderedFacings: 'all 8, each from the model', model: 'art/sprite-lab/specs/' + def.spec.key + '.mjs',
+      worldPxPerArtPx: SPRITE_WORLD, rows: 'facing', facings: FACINGS, renderedFacings: 'all 8, each from the model', model: 'art/sprite-lab/specs/' + def.spec.key + '.mjs',
       animations, ...(V ? { variants: { by: V.by, values: V.values, at: V.at, framesEach: start, column: 'variant index × framesEach + start + frame' } } : {}),
       shadow: { drawnBy: 'engine', offset: def.shadow.map(v => v * SPRITE_RES), elevation: def.elevation }, team: 'team0..team2 (magenta ramp)'
     };
-    sprites[name] = { ...meta, frames: rows.map(r => r.map(g => g.encode())) };
+    sprites[name] = { ...meta, frames: rows.map(r => r.map(g => rle(g.encode()))) };
     sheets[name] = { meta, rows };
   }
   for (const [name, def] of Object.entries(MODELLED_STRUCTURES)){
-    const spec = def.spec, { cols, states, head } = structureFrames(spec), [fw, fh] = spec.footprint;
+    const spec = def.spec, { cols, states, head } = structureFrames(spec), [fw, fh] = spec.footprint, size = def.size || SIZE, world = size / SPRITE_RES;
     const shadow = { drawnBy: 'engine', offset: def.shadow.map(v => v * SPRITE_RES), elevation: def.elevation };
     const meta = {
-      name, frameWidth: spec.frame.w, frameHeight: spec.frame.h, origin: [0, 0], footprintTiles: [fw, fh],
-      worldPxPerArtPx: 1 / SPRITE_RES, rows: head ? 'row 0 states; the head sheet has one row per facing' : 'single row', model: 'art/sprite-lab/specs/' + spec.key + '.mjs',
+      name, frameWidth: spec.frame.w, frameHeight: spec.frame.h, origin: [0, 0], footprintTiles: [fw * size, fh * size],
+      worldPxPerArtPx: world, rows: head ? 'row 0 states; the head sheet has one row per facing' : 'single row', model: 'art/sprite-lab/specs/' + spec.key + '.mjs',
       states, shadow, team: 'team0..team2 (magenta ramp)'
     };
     const headMeta = head && { facings: head.facings, rows: 'facing, clockwise from up', pivot: 'footprint centre', states: head.states, on: head.on, turnRate: head.turnRate, firing: head.firing, chargeTime: head.chargeTime, flashTime: head.flashTime, muzzle: head.muzzle };
-    sprites[name] = { ...meta, frames: [cols.map(g => g.encode())], ...(head ? { head: { ...headMeta, frames: head.rows.map(r => r.map(g => g.encode())) } } : {}) };
+    sprites[name] = { ...meta, frames: [cols.map(g => rle(g.encode()))], ...(head ? { head: { ...headMeta, frames: head.rows.map(r => r.map(g => rle(g.encode()))) } } : {}) };
     sheets[name] = { meta: { ...meta, ...(head ? { head: { ...headMeta, image: name + '_head.png' } } : {}) }, rows: [cols] };
-    if (head) sheets[name + '_head'] = { meta: { name: name + '_head', frameWidth: spec.frame.w, frameHeight: spec.frame.h, origin: [spec.frame.ox, spec.frame.oy], worldPxPerArtPx: 1 / SPRITE_RES, ...headMeta, shadow }, rows: head.rows };
+    if (head) sheets[name + '_head'] = { meta: { name: name + '_head', frameWidth: spec.frame.w, frameHeight: spec.frame.h, origin: [spec.frame.ox, spec.frame.oy], worldPxPerArtPx: world, ...headMeta, shadow }, rows: head.rows };
   }
   const st = stationFrames(), states = {};
   st.forEach(([state], i) => { (states[state] ||= { start: i, frames: 0 }).frames++; });
   states.working.fps = 6;
   const stationMeta = {
-    name: 'repair_station', frameWidth: S, frameHeight: S, origin: [0, 0], footprintTiles: [2, 2],
-    worldPxPerArtPx: 1 / SPRITE_RES, rows: 'single row', states, shadow: { drawnBy: 'engine', offset: [2 * SPRITE_RES, 2 * SPRITE_RES], elevation: 'ground' },
+    name: 'repair_station', frameWidth: S, frameHeight: S, origin: [0, 0], footprintTiles: [2 * SIZE, 2 * SIZE],
+    worldPxPerArtPx: SPRITE_WORLD, rows: 'single row', states, shadow: { drawnBy: 'engine', offset: [2 * SPRITE_RES, 2 * SPRITE_RES], elevation: 'ground' },
     team: 'team0..team2 (magenta ramp)'
   };
-  sprites.repair_station = { ...stationMeta, frames: [st.map(([, g]) => g.encode())] };
+  sprites.repair_station = { ...stationMeta, frames: [st.map(([, g]) => rle(g.encode()))] };
   sheets.repair_station = { meta: stationMeta, rows: [st.map(([, g]) => g)] };
   const terrain = {};
   for (const [v, T] of Object.entries(TERRAIN)){
@@ -815,9 +824,13 @@ export function build(){
     meta: { name: 'woodlands_tree', frameWidth: TILE_ART, frameHeight: TILE_ART, origin: [0, 0], rows: TREE_TYPES, columns: 'variant 1 frames 0-8, variant 2 frames 0-8 (frame = lean * 3 + rustle)', animations, shadow },
     rows: TREE_TYPES.map(k => trees[k].flat())
   };
+  // Genesis: free-standing trees in three sizes (tools/genesis-trees.mjs).
+  const genesis = genesisTrees();
+  Object.assign(sheets, genesis.sheets);
   const data = {
     alphabet: ALPHABET, palette: PALETTE.map(([name, hex]) => ({ name, hex })), teamIndex: [C.team0, C.team1, C.team2], teams: TEAMS,
-    tileArt: TILE_ART, worldPxPerArtPx: WORLD_PX_PER_ART_PX, sprites, terrain, woodlands
+    // Sprite frames are run-length encoded (a palette character, then its count when it repeats).
+    spriteEncoding: 'rle', tileArt: TILE_ART, worldPxPerArtPx: WORLD_PX_PER_ART_PX, sprites, terrain, woodlands, genesis: { trees: genesis.data }
   };
   return { data, sheets };
 }

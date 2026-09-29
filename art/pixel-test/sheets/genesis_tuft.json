@@ -1,0 +1,28 @@
+{
+  "name": "genesis_tuft",
+  "frameWidth": 44,
+  "frameHeight": 44,
+  "origin": [
+    21.5,
+    21.5
+  ],
+  "worldPxPerArtPx": 0.25,
+  "rows": [
+    "{\"r\":5}"
+  ],
+  "frameSizes": [
+    44
+  ],
+  "columns": "3 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      1,
+      1
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_tuft.png",
+  "sheetWidth": 132,
+  "sheetHeight": 44
+}

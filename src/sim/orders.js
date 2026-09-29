@@ -54,7 +54,10 @@
       const S = G.State, a = angle == null ? (S.formationAngle || 0) : angle;
       const slots = G.Formations.slots(units, S.formation || 'square', x, y, a);
       for (const s of slots) G.Units.clearOrders(s.unit);
-      S.paths.groupMove(slots, x, y);
+      // Units on another layer than the target (in a cave, or going into one) go by the entrance.
+      const through = slots.filter(s => G.Caves.layer(s.unit) !== G.Caves.layerAt(x, y));
+      for (const s of through) S.paths.request(s.unit, x, y);   // (the point itself: a formation slot might fall on the rock)
+      S.paths.groupMove(through.length ? slots.filter(s => !through.includes(s)) : slots, x, y);
       S.formationAngle = a;
       G.Events.emit('orders:issued', { kind: 'move', units });
     },

@@ -45,7 +45,8 @@ async function startGame(page, url){
   await page.fill('#ezSeedInput', '72491');
   await page.click('#launchVance');
   await page.click('#introSkipBtn');
-  await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.State.introCamera, null, { timeout: 8000 });
+  // (The whole-map picture is painted first, behind the loading screen; the arrival follows.)
+  await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.WorldPicture.loading && !GW.State.introCamera, null, { timeout: 90000 });
   await page.waitForTimeout(1500);   // disembark
 }
 
@@ -107,7 +108,7 @@ for (const target of ['index.html', 'dist/ad-ezp.html']){
       await page.mouse.click(p.x, p.y);
       const site = await page.evaluate(() => GW.State.constructionSites.find(s => s.type === 'mine_building'));
       assert.ok(site, 'mine site queued');
-      assert.deepEqual([site.gx, site.gy, site.w, site.h], [dep.gx - 1, dep.gy - 1, 3, 3], '3×3 centred on the 1×1 deposit');
+      assert.deepEqual([site.gx, site.gy, site.w, site.h], [dep.gx - 3, dep.gy - 3, 7, 7], '7×7 centred on the 1×1 deposit');
       await page.screenshot({ path: path.join(OUT, `${tag}-mine-site.png`) });
 
       // Follow: select the Security Drone, press Follow, tap the Survey Drone.
@@ -148,7 +149,7 @@ for (const target of ['index.html', 'dist/ad-ezp.html']){
       const before = await page.evaluate(() => GW.State.buildings.length);
       const spot = await page.evaluate(() => { const T = 48, g = GW.State.grid, c = GW.State.camera, R = GW.Renderer;
         for (let gy = Math.floor((c.y + 200 / c.z) / T); gy < (c.y + (R.h - 250) / c.z) / T; gy++) for (let gx = Math.floor((c.x + 420 / c.z) / T); gx < (c.x + (R.w - 420) / c.z) / T; gx++)
-          if (GW.Buildings.canPlace(gx, gy, 2, 2)) return { x: gx * T + 10, y: gy * T + 10 }; });
+          { const x = gx * T + 10, y = gy * T + 10, at = GW.Buildings.placementAt('sensor', x, y); if (GW.Buildings.canPlaceKey('sensor', at.gx, at.gy, at.sx, at.sy)) return { x, y }; } });
       p = await screen(page, spot.x, spot.y);
       await page.mouse.click(p.x, p.y);
       assert.equal(await page.evaluate(() => GW.State.buildings.length), before + 1);
@@ -194,7 +195,7 @@ for (const target of ['index.html', 'dist/ad-ezp.html']){
       await page.click('[data-menu-tab="saves"]');
       await page.click('[data-save-slot="2"]');
       await page.click('[data-load-slot="2"]');
-      await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.State.paused);
+      await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.State.paused && !GW.WorldPicture.loading, null, { timeout: 90000 });
       assert.equal(await page.evaluate(() => GW.State.activeSaveSlot), 2);
       await page.waitForTimeout(500);
       await page.screenshot({ path: path.join(OUT, `${tag}-desktop.png`) });
@@ -635,6 +636,8 @@ test('pixel-art walls join their neighbours and gate ends (never diagonally); ga
       const side = add('defensive_wall', 3, 1), down = add('wood_wall', 0, 1);
       const lone = add('defensive_wall', 8, 4), d1 = add('wood_wall', 10, 4), d2 = add('wood_wall', 11, 5);
       const vg = add('gate_v', 0, 2), below = add('wood_wall', 0, 4);
+      // Two walls a quarter tile off the tile grid, flush against each other, join.
+      const q1 = G.Buildings.add('wood_wall', x0 + 8, y0 + 7, { team: 'blue', sx: 1, sy: 1 }), q2 = G.Buildings.add('wood_wall', x0 + 9, y0 + 7, { team: 'blue', sx: 1, sy: 1 });
       const mask = w => P.joins(w);
       G.centerCamera((x0 + 3) * T, (y0 + 2) * T, 1); G.Renderer.draw();
       const sp = P.data.sprites.defensive_wall;
@@ -642,7 +645,7 @@ test('pixel-art walls join their neighbours and gate ends (never diagonally); ga
       // Open the gate by bringing Vance to it.
       h.x = gate.x; h.y = gate.y - 1.5 * T; h.path = []; G.rebuildSpatial(); G.Gates.update();
       const open = P.buildingState(gate, P.data.sprites.gate_3);
-      return { a: mask(a), b: mask(b), c: mask(c), side: mask(side), down: mask(down), lone: mask(lone), d1: mask(d1), d2: mask(d2), below: mask(below), col, finished: sp.states.finished.start, open };
+      return { a: mask(a), b: mask(b), c: mask(c), side: mask(side), down: mask(down), lone: mask(lone), d1: mask(d1), d2: mask(d2), below: mask(below), q1: mask(q1), q2: mask(q2), col, finished: sp.states.finished.start, open };
     });
     assert.equal(r.a, 2 | 4, 'wood wall joins the metal wall east and the wood wall south');
     assert.equal(r.b, 2 | 8, 'metal wall joins the wood wall west and the gate end east');
@@ -652,6 +655,7 @@ test('pixel-art walls join their neighbours and gate ends (never diagonally); ga
     assert.equal(r.below, 1, 'and the vertical gate end north');
     assert.equal(r.lone, 0);
     assert.equal(r.d1, 0, 'no diagonal joins'); assert.equal(r.d2, 0);
+    assert.equal(r.q1, 2, 'walls off the tile grid join east'); assert.equal(r.q2, 8, 'and west');
     assert.equal(r.col, r.finished + (2 | 8), 'the sheet column is the finished piece for its mask');
     assert.equal(r.open, 'open', 'an open gate shows its open state');
     await page.screenshot({ path: path.join(OUT, 'pixel-art-walls.png') });
@@ -682,12 +686,17 @@ test('building walls: press and drag builds a row in the direction dragged, prev
       S.resources.metal = 2000; S.resources.steel = 200;
       const free = (x, y) => { for (let j = 0; j < 8; j++) for (let i = 0; i < 8; i++) if (!G.Buildings.canPlace(x + i, y + j, 1, 1)) return false; return true; };
       let spot = null;
-      for (let r = 3; r < 20 && !spot; r++) for (let dx = -r; dx <= r && !spot; dx++){ const x = Math.floor(u.x / T) + dx, y = Math.floor(u.y / T) + r; if (free(x, y)) spot = { gx: x, gy: y }; }
+      for (let r = 3; r < 30 && !spot; r++) for (let dx = -r; dx <= r && !spot; dx++){ const x = Math.floor(u.x / T) + dx, y = Math.floor(u.y / T) + r; if (free(x, y)) spot = { gx: x, gy: y }; }
       G.centerCamera((spot.gx + 4) * T, (spot.gy + 4) * T, 1);
       G.BuildUI.enter(u); G.BuildUI.choose('wood_wall');
       return spot;
     });
+    // Placement centres a structure on the pointer: point at the middle of a 1 × 1 wall section.
     const cellCentre = async (gx, gy) => screen(page, (gx + 0.5) * 48, (gy + 0.5) * 48);
+    // Hovering (no button) shows the outline where the section would go.
+    const h = await cellCentre(at.gx + 2, at.gy + 2);
+    await page.mouse.move(h.x - 30, h.y); await page.mouse.move(h.x, h.y, { steps: 3 });
+    assert.deepEqual(await page.evaluate(() => { const p = GW.State.buildPreview; return p && [p.gx, p.gy, p.sx, p.sy]; }), [at.gx + 2, at.gy + 2, 0, 0], 'the outline follows the mouse');
     // Drag east 4 tiles (and a little south): a row of 5 east-west.
     let a = await cellCentre(at.gx, at.gy), b = await cellCentre(at.gx + 4, at.gy + 1);
     await page.mouse.move(a.x, a.y); await page.mouse.down();
@@ -764,7 +773,9 @@ test('Ore Processor window lists its three products and queues them; the top bar
     assert.equal(await page.$$eval('#economyBar .resource-pill:not(.power)', els => els.length), 1, 'only metal before anything else is stocked');
     const pr = await page.evaluate(() => {
       Object.assign(GW.State.resources, { metal: 100, copper: 12 });
-      const b = GW.State.buildings.find(b => b.type === 'ore_processor'); GW.centerCamera(b.x, b.y + 150, 0.8); return { x: b.x, y: b.y };
+      // (Built here: the testing zone has none.)
+      const sh = GW.Units.ship(), p = GW.State.grid.nearestOpen(sh.gx + 14, sh.gy + 16, 6), b = GW.Buildings.add('ore_processor', p.x, p.y, { team: 'blue' });
+      GW.centerCamera(b.x, b.y + 150, 0.8); return { x: b.x, y: b.y };
     });
     const p = await screen(page, pr.x, pr.y);
     await page.touchscreen.tap(p.x, p.y);
@@ -866,6 +877,155 @@ test('Shield Projector window switches the field on and off; its state survives 
     await page.click('#shClose');
     assert.ok(await page.isHidden('#shieldPanel'));
     await page.evaluate(() => localStorage.clear());
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('caves are underground: click the entrance to look inside or send units in, and the way out to come back up', { skip, timeout: 90000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await page.goto(pathToFileURL(path.join(ROOT, 'index.html')).href);
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'mainMenu');
+    await page.click('[data-home="new"]'); await page.click('[data-new-slot="1"]');
+    if (await page.$('#confirmOverwriteBtn')) await page.click('#confirmOverwriteBtn');
+    await page.fill('#ezSeedInput', '72491'); await page.selectOption('#ezMapInput', 'genesis');
+    await page.click('#launchVance'); await page.click('#introSkipBtn');
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.WorldPicture.loading && !GW.State.introCamera, null, { timeout: 90000 });
+    const c = await page.evaluate(() => { GW.Fog.set(false); const c = GW.Caves.list()[0]; GW.centerCamera((c.x + 0.5) * 48, (c.y - 2) * 48, 1); GW.Selection.clear(); return c; });
+    const at = (x, y) => page.evaluate(([x, y]) => GW.screenFromWorld(x, y), [x, y]);
+    // On the surface the cavern isn't drawn: the ground over it is the surface copy's.
+    assert.ok(await page.evaluate(c => { const sg = GW.CaveView.terrainGrid(), i = (c.inside.y) * GW.State.grid.cols + c.inside.x; return sg !== GW.State.grid && sg.tiles[i] !== GW.State.grid.tiles[i]; }, c));
+    // With nothing selected, clicking the mouth looks inside.
+    let p = await at((c.x + 0.5) * 48, (c.y + 0.5) * 48);
+    await page.mouse.click(p.x, p.y);
+    assert.equal(await page.evaluate(() => GW.CaveView.cave), 0, 'the view goes into the cave');
+    assert.ok(await page.isVisible('#caveReturnBtn'));
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: path.join(OUT, 'cave-inside.png') });
+    await page.click('#caveReturnBtn');
+    assert.equal(await page.evaluate(() => GW.CaveView.cave), -1);
+    assert.ok(await page.isHidden('#caveReturnBtn'));
+    // Vance selected, click the entrance: he walks in, and the view follows him down.
+    await page.evaluate(c => { const h = GW.Units.hero(), q = GW.openPoint((c.outside.x + 0.5) * 48, (c.outside.y + 4) * 48); h.x = q.x; h.y = q.y; GW.Units.clearOrders(h); GW.rebuildSpatial(); GW.Selection.set([h.id]); GW.centerCamera((c.x + 0.5) * 48, (c.y + 1) * 48, 1); }, c);
+    p = await at((c.x + 0.5) * 48, (c.y + 0.5) * 48);
+    await page.mouse.click(p.x, p.y);
+    await page.waitForFunction(() => GW.CaveView.cave === 0 && GW.Caves.layer(GW.Units.hero()) === 0, null, { timeout: 20000 });
+    // And back out through the way out.
+    p = await at((c.inside.x + 0.5) * 48, (c.inside.y + 0.5) * 48);
+    await page.mouse.click(p.x, p.y);
+    await page.waitForFunction(() => GW.Caves.layer(GW.Units.hero()) === -1 && GW.CaveView.cave === -1, null, { timeout: 20000 });
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('houses: a unit walks in through the door and the roof comes off to show the room; it goes back on when he leaves', { skip, timeout: 90000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await page.goto(pathToFileURL(path.join(ROOT, 'index.html')).href);
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'mainMenu');
+    await page.click('[data-home="new"]'); await page.click('[data-new-slot="1"]');
+    if (await page.$('#confirmOverwriteBtn')) await page.click('#confirmOverwriteBtn');
+    await page.fill('#ezSeedInput', '72491'); await page.selectOption('#ezMapInput', 'genesis');
+    await page.click('#launchVance'); await page.click('#introSkipBtn');
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.WorldPicture.loading && !GW.State.introCamera, null, { timeout: 90000 });
+    // The first intact house with more than one floor tile; Vance at its door step, sent inside.
+    const H = await page.evaluate(() => {
+      GW.Fog.set(false);
+      const g = GW.CaveView.terrainGrid(), T = 48;
+      let H = null;
+      for (let i = 0; i < g.size && !H; i++){ const h = GW.Structures.houseInside(g, i % g.cols, (i / g.cols) | 0); if (h && h.w > 3 && h.h > 3) H = h; }
+      const d = H.door, out = d.y === H.y + H.h - 1 ? [0, 1] : d.y === H.y ? [0, -1] : d.x === H.x ? [-1, 0] : [1, 0];
+      const h = GW.Units.hero();
+      h.x = (d.x + out[0] + 0.5) * T; h.y = (d.y + out[1] + 0.5) * T; GW.Units.clearOrders(h); GW.rebuildSpatial();
+      GW.centerCamera((H.x + H.w / 2) * T, (H.y + H.h / 2) * T, 1.5);
+      GW.Orders.move([h], (H.x + H.w / 2) * T, (H.y + H.h / 2) * T);
+      return { x: H.x, y: H.y, w: H.w, h: H.h, door: d, out };
+    });
+    await page.waitForFunction(H => {
+      const h = GW.Units.hero(), in_ = GW.Structures.houseInside(GW.CaveView.terrainGrid(), Math.floor(h.x / 48), Math.floor(h.y / 48));
+      return in_ && in_.x === H.x && in_.y === H.y && in_.roofOff === 1;
+    }, H, { timeout: 20000 });
+    await page.screenshot({ path: path.join(OUT, 'house-inside.png') });
+    // Out again: the roof goes back on.
+    await page.evaluate(H => { const T = 48; GW.Orders.move([GW.Units.hero()], (H.door.x + H.out[0] * 3 + 0.5) * T, (H.door.y + H.out[1] * 3 + 0.5) * T); }, H);
+    await page.waitForFunction(H => { const h = GW.Units.hero(); return !GW.Structures.houseInside(GW.CaveView.terrainGrid(), Math.floor(h.x / 48), Math.floor(h.y / 48)) && !GW.Structures.open.size; }, H, { timeout: 20000 });
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('minimap zooms in and out with + and −; the zoom indicator shows 0% furthest out and 100% closest in', { skip, timeout: 60000 }, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await page.goto(pathToFileURL(path.join(ROOT, 'index.html')).href);
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'mainMenu');
+    await page.click('[data-home="new"]'); await page.click('[data-new-slot="1"]');
+    if (await page.$('#confirmOverwriteBtn')) await page.click('#confirmOverwriteBtn');
+    await page.fill('#ezSeedInput', '72491');
+    await page.click('#launchVance'); await page.click('#introSkipBtn');
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.WorldPicture.loading && !GW.State.introCamera, null, { timeout: 90000 });
+    await page.waitForTimeout(400);
+    assert.equal(await page.evaluate(() => GW.Renderer.miniZoom), 1);
+    assert.ok(await page.isDisabled('#miniZoomOut'));
+    for (let i = 0; i < 4; i++) await page.click('#miniZoomIn', { force: true });
+    assert.equal(await page.evaluate(() => GW.Renderer.miniZoom), 8, 'zoomed in to its limit');
+    await page.waitForTimeout(400);
+    assert.ok(await page.isDisabled('#miniZoomIn'));
+    // A click on the zoomed minimap centres the camera on that point of the window shown.
+    const box = await page.locator('#minimap').boundingBox();
+    const want = await page.evaluate(() => GW.Renderer.miniToWorld(0.25, 0.75));
+    await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.75);
+    const cam = await page.evaluate(() => { const c = GW.State.camera, R = GW.Renderer; return { x: c.x + R.w / c.z / 2, y: c.y + R.h / c.z / 2 }; });
+    assert.ok(Math.abs(cam.x - want.x) < 60 && Math.abs(cam.y - want.y) < 60, JSON.stringify({ cam, want }));
+    await page.click('#miniZoomOut');
+    assert.equal(await page.evaluate(() => GW.Renderer.miniZoom), 4);
+    // Zoom indicator, top right.
+    const pct = () => page.evaluate(() => document.querySelector('#zoomPct b').textContent);
+    await page.evaluate(() => { GW.State.camera.z = GW.CONFIG.ZOOM_MIN; });
+    await page.waitForFunction(() => document.querySelector('#zoomPct b').textContent === '0%');
+    await page.evaluate(() => { GW.State.camera.z = GW.CONFIG.ZOOM_MAX; });
+    await page.waitForFunction(() => document.querySelector('#zoomPct b').textContent === '100%');
+    assert.equal(await pct(), '100%');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('the whole map is painted before play (loading screen), so a jump anywhere shows it at once; changed terrain is painted again', { skip, timeout: 120000 }, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await page.goto(pathToFileURL(path.join(ROOT, 'index.html')).href);
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'mainMenu');
+    await page.click('[data-home="new"]'); await page.click('[data-new-slot="1"]');
+    if (await page.$('#confirmOverwriteBtn')) await page.click('#confirmOverwriteBtn');
+    await page.fill('#ezSeedInput', '72491'); await page.selectOption('#ezMapInput', 'genesis');
+    await page.click('#launchVance'); await page.click('#introSkipBtn');
+    // The loading screen shows while the picture is painted, and the game waits.
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay');
+    assert.ok(await page.evaluate(() => GW.WorldPicture.loading));
+    assert.ok(await page.isVisible('#mapLoading'));
+    const t0 = await page.evaluate(() => GW.State.time);
+    await page.waitForTimeout(500);
+    assert.deepEqual(await page.evaluate(() => [GW.WorldPicture.loading, GW.State.time]), [true, t0], 'no game time passes while loading');
+    await page.waitForFunction(() => !GW.WorldPicture.loading, null, { timeout: 90000 });
+    assert.ok(await page.isHidden('#mapLoading'));
+    const info = await page.evaluate(() => {
+      const WP = GW.WorldPicture, far = WP.blocks[WP.blocks.length - 1], px = far.getContext('2d').getImageData(far.width - 4, far.height - 4, 1, 1).data;
+      return { done: WP.done, cells: WP.count, all: WP.ncx * WP.ncy, alpha: px[3] };
+    });
+    assert.deepEqual(info, { done: true, cells: info.all, all: info.all, alpha: 255 }, 'every cell painted, the far corner too');
+    // Changed terrain: its cells are painted again in spare time.
+    await page.evaluate(() => GW.TerrainCache.invalidate({ x: 300, y: 300, w: 4, h: 4 }));
+    assert.equal(await page.evaluate(() => GW.WorldPicture.done), false);
+    await page.waitForFunction(() => GW.WorldPicture.done, null, { timeout: 10000 });
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

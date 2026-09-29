@@ -1,0 +1,28 @@
+{
+  "name": "genesis_barrel",
+  "frameWidth": 52,
+  "frameHeight": 52,
+  "origin": [
+    25.5,
+    25.5
+  ],
+  "worldPxPerArtPx": 0.25,
+  "rows": [
+    "{\"r\":6}"
+  ],
+  "frameSizes": [
+    52
+  ],
+  "columns": "3 variants",
+  "shadow": {
+    "drawnBy": "engine",
+    "offset": [
+      3,
+      3
+    ],
+    "elevation": "ground prop"
+  },
+  "image": "genesis_barrel.png",
+  "sheetWidth": 156,
+  "sheetHeight": 52
+}
