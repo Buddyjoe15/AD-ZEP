@@ -4,7 +4,7 @@
 usage: build_demo.py --parts DIR --meta meta.json --unit unit.json --out demo.html
 
 DIR holds body.png (or core.png when the unit has legs), optional turret.png and
-leg*.png, all 192x192. meta.json comes from process.py (leg pivots). unit.json
+leg*.png, all the same square size (192x192 for a 1-tile unit, 384x384 for 2x2). meta.json comes from process.py (leg pivots). unit.json
 holds the behaviour settings; any key left out uses the default below.
 """
 import argparse, base64, json, os
@@ -25,6 +25,7 @@ a = ap.parse_args()
 meta = json.load(open(a.meta)); unit = {**DEFAULTS, **json.load(open(a.unit))}
 P = lambda f: os.path.join(a.parts, f)
 body = P('core.png') if os.path.exists(P('core.png')) else P('body.png')
+unit['size'] = meta.get('size', 192)
 unit['body'] = uri(body)
 unit['turret'] = uri(P('turret.png')) if os.path.exists(P('turret.png')) else None
 unit['legs'] = [{'img': uri(P(l['n'] + '.png')), 'px': l['px'], 'py': l['py'], 'g': l['g']}

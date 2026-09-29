@@ -22,12 +22,14 @@ Animation-ready rules:
 ```
 
 ## ASSET block templates
-Canvas is always 192×192 px (2×2 tiles at 96 px). Pick the template that matches how
-the unit moves and what rotates.
+Tiles are 192 px. The canvas is the footprint × 192 px: 192×192 for a standard
+1-tile unit (Spider-sized), 384×384 for a 2×2 unit or building, 128×128 for a
+drone-sized unit. Put the right size in `<canvas>` below. Pick the template that
+matches how the unit moves and what rotates.
 
 Unit with a rotating turret (ask for two images):
 ```
-Asset: "<Name>", sprite canvas 192×192 px (2×2 tiles at 96 px). <shape, armor, locomotion, role>. One central <weapon> turret.
+Asset: "<Name>", sprite canvas <canvas> px (<footprint> tiles at 192 px per tile). <shape, armor, locomotion, role>. One central <weapon> turret.
 
 Output two separate images:
 1) the <unit> WITHOUT the turret (empty circular mount in the center)
@@ -39,7 +41,7 @@ add to the description: "legs spread evenly and symmetrical around the body, cle
 
 Hover/floating unit: add "floating hover unit, no legs or wheels, <n> engine exhausts at the rear shown as dark openings".
 
-Building: add "square footprint filling the canvas, <n> tiles". Parts that animate
+Building: add "square footprint filling the canvas, <n>×<n> tiles" (canvas <n>×192 px). Parts that animate
 (radar dish, fan, crane arm) are requested as separate images like a turret.
 
 ## Follow-up fix prompts (send in the same ChatGPT chat)

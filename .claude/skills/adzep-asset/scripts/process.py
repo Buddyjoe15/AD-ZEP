@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""AD-ZEP sprite processing. Every output part is a 192x192 transparent PNG
-whose center (96,96) is the unit's pivot, so parts stack with no offsets.
+"""AD-ZEP sprite processing. Tiles are 192 art px (48 world px at 4 art px per
+world px). Every output part is a square transparent PNG of footprint x 192 px
+(192x192 for a standard 1-tile unit, 384x384 for 2x2), whose center is the
+unit's pivot, so parts stack with no offsets.
 
 Subcommands
   inspect  IMG...            size, real alpha, content bbox, cyan-light count, white-bg check
-  body     IMG --out F --meta M [--center X Y] [--half H]
+  body     IMG --out F --meta M [--tiles T] [--center X Y] [--half H]
            square crop around CENTER (default: opaque-bbox center; for turret units use
-           the mount-hole center), scaled to 192. Saves the frame to META so the
-           turret and legs use the exact same frame.
+           the mount-hole center), scaled to T x 192 px (T = footprint in tiles,
+           default 1; 2 for a 2x2 unit, 0.667 for a drone-sized 128 px unit). Saves
+           the frame and size to META so turret, legs, preview and check match.
   turret   IMG --meta M --pivot PX PY --scale S --out F
            turret PIVOT (source px, usually the middle of its base plate) lands on the
            body center; S = turret size relative to the body source image.
@@ -15,13 +18,14 @@ Subcommands
            split radial legs off a body image: writes core.png + leg0..N.png, hip
            pivots and alternating gait groups into META. Auto-detects if not given.
   preview  --meta M --parts D --out F   rest pose (+ two gait poses if legs) at 3x
-  check    DIR                           confirm every PNG is 192x192
+  check    DIR [--meta M]                confirm every PNG is the META size (default 192)
 """
 import sys, json, math, argparse, glob, os
 import numpy as np
 from PIL import Image
 
-SIZE = 192
+TILE = 192  # art px per tile
+SIZE = TILE  # canvas side for this unit; set from --tiles or meta.json
 def load(p): return Image.open(p).convert('RGBA')
 def harden(im, t=100):
     a = im.split()[3].point(lambda v: 255 if v > t else 0); im.putalpha(a); return im
@@ -150,17 +154,21 @@ def cmd_check(a):
     for p in sorted(glob.glob(os.path.join(a.dir, '*.png'))):
         im = load(p); good = im.size == (SIZE, SIZE); ok &= good
         print(f"{'OK ' if good else 'BAD'} {os.path.basename(p)} {im.size} content={im.getbbox()}")
-    print('ALL 192x192' if ok else 'SIZE PROBLEMS FOUND'); sys.exit(0 if ok else 1)
+    print(f'ALL {SIZE}x{SIZE}' if ok else 'SIZE PROBLEMS FOUND'); sys.exit(0 if ok else 1)
 
 ap = argparse.ArgumentParser(); sp = ap.add_subparsers(dest='cmd', required=True)
 p = sp.add_parser('inspect'); p.add_argument('imgs', nargs='+')
 p = sp.add_parser('keyout'); p.add_argument('img'); p.add_argument('--out', required=True); p.add_argument('--color', choices=['white', 'magenta'], default='magenta')
 p = sp.add_parser('body'); p.add_argument('img'); p.add_argument('--out', required=True); p.add_argument('--meta', required=True)
+p.add_argument('--tiles', type=float, default=1.0)
 p.add_argument('--center', nargs=2, type=int); p.add_argument('--half', type=int)
 p = sp.add_parser('turret'); p.add_argument('img'); p.add_argument('--meta', required=True); p.add_argument('--out', required=True)
 p.add_argument('--pivot', nargs=2, type=float, required=True); p.add_argument('--scale', type=float, default=1.0)
 p = sp.add_parser('legs'); p.add_argument('img'); p.add_argument('--meta', required=True); p.add_argument('--outdir', required=True)
 p.add_argument('--core-radius', type=int); p.add_argument('--angles', nargs='+', type=float)
 p = sp.add_parser('preview'); p.add_argument('--meta', required=True); p.add_argument('--parts', required=True); p.add_argument('--out', required=True)
-p = sp.add_parser('check'); p.add_argument('dir')
-a = ap.parse_args(); globals()['cmd_'+a.cmd](a)
+p = sp.add_parser('check'); p.add_argument('dir'); p.add_argument('--meta')
+a = ap.parse_args()
+if a.cmd == 'body': SIZE = round(TILE * a.tiles); SIZE += SIZE % 2
+elif getattr(a, 'meta', None): SIZE = rmeta(a.meta).get('size', TILE)
+globals()['cmd_'+a.cmd](a)

@@ -1,7 +1,7 @@
 ---
 name: adzep-asset
 description: >-
-  End-to-end art pipeline for the game Abyssal Dawn: Earth Zero Protocol (AD-EZP / AD-ZEP) — writes image-model prompts in the locked project style, reviews the art the user brings back, cuts it into 192×192 animation parts, and builds a live animation demo (turret tracking, walking legs, lights, muzzle flashes, lasers, engine smoke). Use this whenever the user wants a new unit, building or other sprite for AD-ZEP/Abyssal Dawn, says /adzep-asset, uploads ChatGPT or other generated art for the game, asks for a prompt for game art, or wants a sprite checked, cut up, resized or animated — even if they only name the unit ("let's do the Pulse Drone next").
+  End-to-end art pipeline for the game Abyssal Dawn: Earth Zero Protocol (AD-EZP / AD-ZEP) — writes image-model prompts in the locked project style, reviews the art the user brings back, cuts it into animation parts at 192 px per tile, and builds a live animation demo (turret tracking, walking legs, lights, muzzle flashes, lasers, engine smoke). Use this whenever the user wants a new unit, building or other sprite for AD-ZEP/Abyssal Dawn, says /adzep-asset, uploads ChatGPT or other generated art for the game, asks for a prompt for game art, or wants a sprite checked, cut up, resized or animated — even if they only name the unit ("let's do the Pulse Drone next").
 ---
 
 # AD-ZEP asset pipeline
@@ -11,9 +11,11 @@ checks the results, processes them into parts and animates them in code. The use
 works from a phone, so keep replies short, put copyable prompts in code blocks, and
 deliver results as a published demo plus downloadable parts.
 
-Project constants (don't re-ask): straight top-down view, 96 px tiles, every sprite
-part 192×192 px transparent PNG, the unit's pivot at the canvas center (96,96),
-front of the unit = top of the image. Check memory for anything newer about the
+Project constants (don't re-ask): straight top-down view, 192 art px per tile
+(48 world px at 4 art px per world px, as in `art/PIXEL_ART_RULES.md`). Every sprite
+part is a square transparent PNG of footprint × 192 px: 192×192 for a standard
+1-tile unit (Spider-sized), 384×384 for 2×2, 128×128 for a drone-sized unit. The
+unit's pivot is the canvas center, front of the unit = top of the image. Check memory for anything newer about the
 project (unit roles, sizes, style changes) and let that win over this file.
 
 ## Where this is running
@@ -34,7 +36,7 @@ Ask only what the conversation and memory don't already answer, in one short mes
 - How it moves: legs / hover / wheels-tracks / static building
 - What rotates or animates separately: turret, dish, fan, arm — or nothing
 - Weapon effect: bullets, laser, artillery, melee, none
-- Footprint if not 2×2 (then the canvas changes: 96 px per tile)
+- Footprint if not 1×1 (then the canvas changes: 192 px per tile, e.g. 384×384 for 2×2)
 
 If the user already described the unit in memory (e.g. Guard Spider: slow, very fast
 central gun; Pulse Drone: fast floating tank with a large slow-firing laser), confirm
@@ -69,7 +71,9 @@ version) can be kept as a portrait/icon.
 ## 4. Process into parts
 Work in `/home/claude/<unit_slug>/`. Scripts are in this skill's `scripts/` folder.
 - Background not transparent: `process.py keyout IMG --color magenta|white --out F` first.
-- Body: `process.py body BODY.png --out parts/body.png --meta meta.json [--center X Y]`
+- Body: `process.py body BODY.png --out parts/body.png --meta meta.json [--tiles T] [--center X Y]`
+  T = footprint in tiles (default 1 → 192 px; 2 → 384 px; 0.667 → 128 px drone).
+  Every later step reads the size from `meta.json`.
   For a turret unit, pass `--center` = the mount-hole center (look at the image;
   the default bbox center is often off because legs/armor are asymmetric).
 - Legs: `process.py legs BODY.png --meta meta.json --outdir parts` then delete
@@ -83,7 +87,7 @@ Work in `/home/claude/<unit_slug>/`. Scripts are in this skill's `scripts/` fold
 - Always: `process.py preview --meta meta.json --parts parts --out preview.png`
   (write it outside `parts/`) and look at it. Fix and repeat until the turret sits
   right, leg cuts are clean in both gait poses, nothing is clipped at the edge.
-- `process.py check parts` must print ALL 192x192 before delivering.
+- `process.py check parts --meta meta.json` must print ALL <size>x<size> before delivering.
 
 ## 5. Animate
 Write `unit.json` (only keys that differ from defaults; see `scripts/build_demo.py`):
@@ -106,7 +110,7 @@ tap once, screenshot, confirm no page errors.
   the reference for Claude Code to port into AD-ZEP.
 
 ## Worked example: Guard Spider
-Six-legged spider, central 3-barrel rapid-fire turret. Body mount center (627,598) in
+Six-legged spider, 1×1 tile (192×192 canvas), central 3-barrel rapid-fire turret. Body mount center (627,598) in
 a 1254 px source; turret pivot (626,880), scale 0.62; legs auto-detected at
 ~0/52/128/178/232/308°. unit.json:
 `{"name":"Guard Spider","muzzles":[[0,-68],[-9,-62],[9,-62]]}` (defaults: speed 55,

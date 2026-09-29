@@ -28,8 +28,9 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 </div>
 <script>
 /* ---- unit config, injected by build_demo.py ----
- U.body        data URI (body or leg-less core), 192x192, front = up
- U.turret      data URI or null (192x192, pivot at center, barrels up)
+ U.size        sprite side in art px (192 per tile: 192 for 1x1, 384 for 2x2)
+ U.body        data URI (body or leg-less core), size x size, front = up
+ U.turret      data URI or null (size x size, pivot at center, barrels up)
  U.legs        [{img,px,py,g}] hip pivots in sprite px, gait group A/B
  U.move        "legs" | "hover" | "wheels"
  U.speed       px/s    U.turnRate rad/s   U.turretRate rad/s
@@ -38,7 +39,7 @@ button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
  U.exhausts    [[x,y]] smoke points relative to center, body pointing up
  U.swing       leg swing (rad)   U.stride px per gait radian            */
 const U=/*UNIT*/null;
-const TILE=96,SPRITE=192;
+const TILE=192,SPRITE=U.size||192,K=SPRITE/192;
 document.getElementById('ttl').textContent=U.name;
 document.getElementById('sub').textContent='Tap to move.'+(U.weapon!=='none'?' It attacks the nearest target.':'');
 const c=document.getElementById('c'),x=c.getContext('2d');
@@ -135,7 +136,7 @@ function draw(){const T=S.t;
   if(U.move==='hover'&&!reduced){hover=Math.sin(T*2.2)*1.5;sway=Math.sin(T*1.3)*0.02}
   // shadow (further away when hovering)
   x.save();x.translate(S.x,S.y);x.fillStyle=U.move==='hover'?'rgba(0,0,0,0.25)':'rgba(0,0,0,0.35)';
-  const so=U.move==='hover'?12+hover:4;x.beginPath();x.ellipse(so,so+2,62,58,0,0,6.28);x.fill();x.restore();
+  const so=U.move==='hover'?12+hover:4;x.beginPath();x.ellipse(so,so+2,62*K,58*K,0,0,6.28);x.fill();x.restore();
   x.save();x.translate(S.x,S.y);x.rotate(S.bodyAng+Math.PI/2+sway);x.translate(0,bob+hover);
   for(const L of legs){const ph=L.g==='A'?S.walk:S.walk+Math.PI;
     const sw=Math.sin(ph)*U.swing*amp,lift=1+(Math.cos(ph)>0?Math.cos(ph)*0.06*amp:0),side=L.px>SPRITE/2?1:-1;
