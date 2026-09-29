@@ -12,10 +12,10 @@ const { data } = build();
 const plain = s => /\d/.test(s) ? s.replace(/(\D)(\d+)/g, (_, ch, n) => ch.repeat(+n)) : s;   // sprite frames are run-length encoded
 const decode = (s, w) => { s = plain(s); const g = new Grid(w, s.length / w); [...s].forEach((ch, i) => g.p[i] = ALPHABET.indexOf(ch)); return g; };
 
-test('palette has 48 distinct colours', () => {
-  assert.equal(PALETTE.length, 48);
-  assert.equal(new Set(PALETTE.map(([, h]) => h)).size, 48);
-  assert.equal(ALPHABET.length, 49);
+test('palette has 52 distinct colours', () => {
+  assert.equal(PALETTE.length, 52);
+  assert.equal(new Set(PALETTE.map(([, h]) => h)).size, 52);
+  assert.equal(ALPHABET.length, 53);
 });
 
 test('every facing except up and up-right is a lossless rotation, shaded after rotating', () => {

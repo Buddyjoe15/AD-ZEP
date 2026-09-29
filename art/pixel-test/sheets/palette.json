@@ -191,6 +191,22 @@
     {
       "name": "water3",
       "hex": "#9fcfd8"
+    },
+    {
+      "name": "olive0",
+      "hex": "#303525"
+    },
+    {
+      "name": "olive1",
+      "hex": "#474a31"
+    },
+    {
+      "name": "olive2",
+      "hex": "#646645"
+    },
+    {
+      "name": "olive3",
+      "hex": "#8a8a63"
     }
   ],
   "teams": {

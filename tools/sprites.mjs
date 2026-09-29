@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { PALETTE, TEAMS, ALPHABET, C, Grid, rng, painter, rotate, finish, png, sheetRGBA } from './pixelart.mjs';
 import { renderSprite, renderStructure, LIFT, OUTLINE, RES as KIT_RES } from './sprite-kit.mjs';
+import { imageUnitFrames } from './image-units.mjs';
 import salvageCrawler from '../art/sprite-lab/specs/salvage_crawler.mjs';
 import { genesisTrees, rle } from './genesis-trees.mjs';
 import sentryTurret from '../art/sprite-lab/specs/sentry_turret.mjs';
@@ -39,63 +40,6 @@ const TERRAIN_RES = 2, K = TERRAIN_RES, WORLD_PX_PER_ART_PX = 1 / TERRAIN_RES, T
 const SIZE = 2, SPRITE_WORLD = SIZE / SPRITE_RES;
 
 // ---- Units: draw(p, anim, frame) in local coordinates, forward = -y ----
-
-// Utility Spider, 49×49 world px. Eight legs in a radial layout (front pair forward-diagonal, middle
-// pairs sideways, back pair back-diagonal) so the up-right facing keeps an X of legs
-// instead of turning into a plus sign. Each leg has a hip actuator, a thick upper segment,
-// a gold knee joint, a thinner lower segment and a clawed foot.
-const SPIDER_LEGS = [   // hip, knee, foot (right side; the left side mirrors x)
-  { hip: [5, -8], knee: [10, -12.5], foot: [12, -15] },
-  { hip: [7, -3], knee: [14, -4.5], foot: [18.5, -5.5] },
-  { hip: [7, 3], knee: [14, 4.5], foot: [18.5, 6] },
-  { hip: [5, 9], knee: [10, 13], foot: [11.5, 15] }
-];
-function spider(p, anim, f){
-  for (const side of [-1, 1]) SPIDER_LEGS.forEach((L, i) => {
-    let [kx, ky] = L.knee, [fx, fy] = L.foot;
-    if (anim === 'walk'){
-      // Alternating tetrapod gait: one diagonal set steps while the other pushes.
-      const setA = (i + (side > 0 ? 1 : 0)) % 2 === 0, ph = (f + (setA ? 0 : 2)) % 4;
-      const d = [-2.5, 0, 2.5, 0][ph];
-      fy += d; ky += d * 0.5;
-      if (ph === 1){ fx -= 2; kx -= 1; }          // lifted leg tucks in
-    }
-    if (anim === 'work' && i === 0){
-      // Front pair become manipulators reaching forward to the work point.
-      const reach = [0, 1, 0, -1][f];
-      kx = 7; ky = -15; fx = 3; fy = -19 - reach;
-    }
-    const hx = side * L.hip[0], hy = L.hip[1];
-    p.thick(hx, hy, side * kx, ky, 3, 'steel2');
-    p.thick(side * kx, ky, side * fx, fy, 2, 'steel1');
-    p.line(side * fx, fy, side * (fx + (fx - kx) * 0.15), fy + (fy - ky) * 0.15, 'steel0');   // claw
-    p.ellipse(side * kx, ky, 1.6, 1.6, 'gold1');
-    p.ellipse(hx, hy, 2, 2, 'steel1');
-    p.dot(hx, hy, 'steel3');
-  });
-  // Abdomen / cargo hold with the team plate, hatch seams, rivets and side vents.
-  p.ellipse(0, 6, 9, 11, 'steel2');
-  p.ellipse(0, 7, 6, 8, 'team1');
-  p.rect(-4, 3, 4, 3, 'team0'); p.rect(-4, 10, 4, 10, 'team0'); p.rect(0, 3, 0, 10, 'team0');
-  p.ellipse(0, 13, 3, 1.5, 'team2');
-  for (const y of [-1, 2, 5, 8, 11]) for (const x of [-8, 8]) p.dot(x * (1 - Math.abs(y - 6) / 18), y, 'steel0');
-  for (const [x, y] of [[-5, 0], [5, 0], [-5, 14], [5, 14]]) p.dot(x, y, 'steel3');
-  p.rect(-3, -3, 3, -1, 'steel1');                   // neck joint
-  p.dot(-2, -2, 'gold1'); p.dot(2, -2, 'gold1');
-  // Head: sensor dome, visor band with twin eyes, mandibles.
-  p.ellipse(0, -8, 7, 6, 'plate1');
-  p.ellipse(-2, -9, 2.5, 2, 'plate2');
-  p.rect(-4, -12, 4, -11, 'visor');
-  const eye = anim === 'idle' && f === 1 ? 'visor' : 'cyan2';
-  p.rect(-3, -12, -2, -11, eye); p.rect(2, -12, 3, -11, eye);
-  p.dot(0, -12, 'cyan0');
-  p.line(-2, -14, -3, -16, 'steel1'); p.line(2, -14, 3, -16, 'steel1');
-  p.dot(0, -6, 'steel2');
-  if (anim === 'work'){
-    p.ellipse(0, -21, 1.2, 1.2, ['amber2', 'white', 'amber1', 'white'][f]);
-    if (f % 2){ p.dot(f === 1 ? -2 : 2, -19, 'amber2'); p.dot(f === 1 ? 2 : -2, -22, 'amber2'); }
-  }
-}
 
 // Security / hostile drone, 33×33 world px. Quad rotor on four arms; the rotors spin through four frames.
 function drone(p, anim, f){
@@ -157,7 +101,6 @@ function vance(p, anim, f){
 
 // `size` and `shadow` are in world px.
 export const UNITS = {
-  spider: { size: 49, draw: spider, anims: { idle: [2, 2], walk: [4, 8], work: [4, 6] }, shadow: [2, 4], elevation: 'ground' },
   drone: { size: 33, draw: drone, anims: { fly: [4, 16] }, shadow: [8, 10], elevation: 'air' },
   vance: { size: 49, draw: vance, anims: { idle: [4, 5], walk: [4, 8] }, shadow: [6, 8], elevation: 'hover' }
 };
@@ -176,6 +119,17 @@ function unitFrames(def){
     return frames;
   });
   return FACINGS.map((_, i) => authored[i % 2].map(g => finish(rotate(g, i >> 1))));
+}
+
+// Units drawn from image parts (tools/image-units.mjs, made with the adzep-asset skill). The up and
+// up-right facings are composed from the parts; the other six are lossless 90° turns of those.
+// The art keeps its own lighting and outline, so it is not shaded or outlined again.
+export const IMAGE_UNITS = {
+  spider: { size: 49, dir: 'art/adzep-asset/utility_spider', shadow: [2, 4], elevation: 'ground' }
+};
+function imageFrames(def){
+  const N = def.size * SPRITE_RES, r = imageUnitFrames(path.join(ROOT, def.dir), N, [0, DIAG], SPRITE_RES);
+  return { ...r, rows: FACINGS.map((_, i) => r.facings[i % 2].map(g => rotate(g, i >> 1))) };
 }
 
 // Units modelled in 3D in the sprite lab (art/sprite-lab/specs/, rules section 5). Every facing
@@ -749,6 +703,17 @@ export const WOODLANDS = {
 // ---- Build everything in memory ----
 export function build(){
   const sprites = {}, sheets = {};
+  for (const [name, def] of Object.entries(IMAGE_UNITS)){
+    const { rows, anims: animations, muzzle } = imageFrames(def), N = def.size * SPRITE_RES;
+    const meta = {
+      name, frameWidth: N, frameHeight: N, origin: [(N - 1) / 2, (N - 1) / 2],
+      worldPxPerArtPx: SPRITE_WORLD, rows: 'facing', facings: FACINGS, renderedFacings: 'up and up-right from the image parts, the rest turned 90°', source: def.dir,
+      animations, muzzle: Math.round(muzzle * SPRITE_WORLD * 10) / 10,
+      shadow: { drawnBy: 'engine', offset: def.shadow.map(v => v * SPRITE_RES), elevation: def.elevation }
+    };
+    sprites[name] = { ...meta, frames: rows.map(r => r.map(g => rle(g.encode()))) };
+    sheets[name] = { meta, rows };
+  }
   for (const [name, def] of Object.entries(UNITS)){
     const rows = unitFrames(def), animations = {};
     let start = 0;

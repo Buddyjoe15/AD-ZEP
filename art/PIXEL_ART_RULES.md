@@ -117,6 +117,7 @@ Save change: none | <what and why>
 | Green (repair, OK status) | `green0` #2f8a4c · `green1` #6fe08e |
 | Red (warning lights) | `red0` #8a2a2a · `red1` #e85e55 |
 | Other | `white` #ffffff · `visor` #16343e · `gold0` #9a7a3e · `gold1` #e1bd76 · `blur` #6d7c84 (rotor blur) |
+| Olive (armour, image-part units) | `olive0` #303525 · `olive1` #474a31 · `olive2` #646645 · `olive3` #8a8a63 |
 
 - **Team colour** uses only the magenta ramp `team0`–`team2`. The game swaps it at load for blue (#1f5a99 #49a4ff #a8d6ff), red (#8a2622 #ef5b55 #ffb0a6) or neutral (#8a7a36 #d4c46c #f0e6a8). Never use magenta for anything else, and never paint a real team colour.
 - Use the `dust` colours only for terrain. Use `blur` only for motion blur, such as rotors.
@@ -210,7 +211,7 @@ For each asset:
 3. **Preview** at ⅓, ⅔ and 1 zoom on a phone-sized screen, on dust terrain, next to Spiders and drones for scale. Show blue and red team versions.
 
 Inside this repository:
-- Add the art as a draw function in `tools/sprites.mjs` (`UNITS` for units, or next to the station for structures). A unit modelled in the sprite lab goes in `MODELLED` instead, pointing at its spec: every facing is rendered from the model at the game's odd frame size (49 world px, 98 art px, for a one-tile unit). A structure modelled in the lab goes in `MODELLED_STRUCTURES`, with its head layer if it has one. Run `npm run sprites`, which writes `art/pixel-test/sheets/` and `src/render/pixel-data.js`. Never edit `pixel-data.js` by hand.
+- Add the art as a draw function in `tools/sprites.mjs` (`UNITS` for units, or next to the station for structures). A unit modelled in the sprite lab goes in `MODELLED` instead, pointing at its spec: every facing is rendered from the model at the game's odd frame size (49 world px, 98 art px, for a one-tile unit). A structure modelled in the lab goes in `MODELLED_STRUCTURES`, with its head layer if it has one. A unit drawn from image parts (the `adzep-asset` skill: body, legs and turret PNGs with `meta.json` and `unit.json`, like `art/adzep-asset/utility_spider/`) goes in `IMAGE_UNITS`: `tools/image-units.mjs` composes the up and up-right facings from the parts, fits them inside the inscribed circle and maps their colours onto the palette, and the other six facings are 90° turns. Run `npm run sprites`, which writes `art/pixel-test/sheets/` and `src/render/pixel-data.js`. Never edit `pixel-data.js` by hand.
 - Map the game's `visual` or buildable key to the sprite in `G.PixelArt.UNITS` or `G.PixelArt.BUILDINGS` (`src/render/pixelart.js`).
 - Add it to the preview scene in `art/pixel-test/preview.html` and run `npm run sprites:preview`.
 - `npm test` and `npm run test:browser` must pass.

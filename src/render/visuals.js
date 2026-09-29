@@ -330,7 +330,10 @@
     for (const u of units){
       const target = this.laserTarget(u);
       if (!target || G.Defs.units.get(u.type)?.beam === false) continue;   // cuts with tools, not a laser
-      const sx = u.x + Math.cos(u.heading) * 21, sy = u.y + Math.sin(u.heading) * 21;
+      // From the pixel-art sprite's emitter (along the facing it is drawn at), else 21 px ahead.
+      const P = G.PixelArt, name = P.unitSprite(G.Defs.units.get(u.type)), m = name && P.sprite(name).muzzle;
+      const a = m ? Math.round((u.heading + Math.PI / 2) / (Math.PI / 4)) * (Math.PI / 4) - Math.PI / 2 : u.heading, d = m || 21;
+      const sx = u.x + Math.cos(a) * d, sy = u.y + Math.sin(a) * d;
       const tx = target.x + Math.sin(t * 7) * 4, ty = target.y + Math.cos(t * 11) * 4, col = target.mode === 'mine' ? '#72e9ff' : '#f1cc78';
       g.save();
       g.globalAlpha = 0.25; g.strokeStyle = col; g.lineWidth = 7; g.beginPath(); g.moveTo(sx, sy); g.lineTo(tx, ty); g.stroke();
