@@ -32,9 +32,14 @@
       addEventListener('blur', () => this.keys.clear());
       document.addEventListener('visibilitychange', () => this.keys.clear());
       document.getElementById('minimap').addEventListener('pointerdown', e => {
-        const r = e.currentTarget.getBoundingClientRect();
-        G.centerCamera((e.clientX - r.left) / r.width * C.WORLD_W, (e.clientY - r.top) / r.height * C.WORLD_H);
+        const r = e.currentTarget.getBoundingClientRect(), q = G.Renderer.miniToWorld((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+        G.centerCamera(q.x, q.y);
       });
+      // Minimap zoom: the + and − buttons, or the wheel over the minimap.
+      const miniZoom = dir => { G.Renderer.zoomMinimap(dir); G.UI.refreshMiniZoom(); };
+      document.getElementById('miniZoomIn').addEventListener('click', () => miniZoom(1));
+      document.getElementById('miniZoomOut').addEventListener('click', () => miniZoom(-1));
+      document.getElementById('minimap').addEventListener('wheel', e => { e.preventDefault(); miniZoom(e.deltaY < 0 ? 1 : -1); }, { passive: false });
     },
     key(e){
       if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;

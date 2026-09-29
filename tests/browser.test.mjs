@@ -957,3 +957,41 @@ test('houses: a unit walks in through the door and the roof comes off to show th
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });
+
+test('minimap zooms in and out with + and −; the zoom indicator shows 0% furthest out and 100% closest in', { skip, timeout: 60000 }, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await page.goto(pathToFileURL(path.join(ROOT, 'index.html')).href);
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'mainMenu');
+    await page.click('[data-home="new"]'); await page.click('[data-new-slot="1"]');
+    if (await page.$('#confirmOverwriteBtn')) await page.click('#confirmOverwriteBtn');
+    await page.fill('#ezSeedInput', '72491');
+    await page.click('#launchVance'); await page.click('#introSkipBtn');
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.State.introCamera, null, { timeout: 15000 });
+    await page.waitForTimeout(400);
+    assert.equal(await page.evaluate(() => GW.Renderer.miniZoom), 1);
+    assert.ok(await page.isDisabled('#miniZoomOut'));
+    for (let i = 0; i < 4; i++) await page.click('#miniZoomIn', { force: true });
+    assert.equal(await page.evaluate(() => GW.Renderer.miniZoom), 8, 'zoomed in to its limit');
+    await page.waitForTimeout(400);
+    assert.ok(await page.isDisabled('#miniZoomIn'));
+    // A click on the zoomed minimap centres the camera on that point of the window shown.
+    const box = await page.locator('#minimap').boundingBox();
+    const want = await page.evaluate(() => GW.Renderer.miniToWorld(0.25, 0.75));
+    await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.75);
+    const cam = await page.evaluate(() => { const c = GW.State.camera, R = GW.Renderer; return { x: c.x + R.w / c.z / 2, y: c.y + R.h / c.z / 2 }; });
+    assert.ok(Math.abs(cam.x - want.x) < 60 && Math.abs(cam.y - want.y) < 60, JSON.stringify({ cam, want }));
+    await page.click('#miniZoomOut');
+    assert.equal(await page.evaluate(() => GW.Renderer.miniZoom), 4);
+    // Zoom indicator, top right.
+    const pct = () => page.evaluate(() => document.querySelector('#zoomPct b').textContent);
+    await page.evaluate(() => { GW.State.camera.z = GW.CONFIG.ZOOM_MIN; });
+    await page.waitForFunction(() => document.querySelector('#zoomPct b').textContent === '0%');
+    await page.evaluate(() => { GW.State.camera.z = GW.CONFIG.ZOOM_MAX; });
+    await page.waitForFunction(() => document.querySelector('#zoomPct b').textContent === '100%');
+    assert.equal(await pct(), '100%');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});

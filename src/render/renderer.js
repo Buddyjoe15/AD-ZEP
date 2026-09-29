@@ -527,13 +527,34 @@
       g.stroke(); g.setLineDash([]);
       g.restore();
     },
+    // Minimap zoom: 1 shows the whole map, 2, 4 and 8 a window that many times smaller,
+    // centred on the camera (kept inside the map).
+    miniZoom: 1,
+    MINI_ZOOMS: [1, 2, 4, 8],
+    zoomMinimap(dir){
+      const Z = this.MINI_ZOOMS, i = Math.max(0, Math.min(Z.length - 1, Z.indexOf(this.miniZoom) + dir));
+      this.miniZoom = Z[i];
+      this.drawMinimap();
+      return this.miniZoom;
+    },
+    // The world rect the minimap shows.
+    miniRect(){
+      const C = G.CONFIG, c = G.State.camera, k = this.miniZoom, w = C.WORLD_W / k, h = C.WORLD_H / k;
+      const mx = c.x + this.w / c.z / 2, my = c.y + this.h / c.z / 2;
+      return { x: G.clamp(mx - w / 2, 0, C.WORLD_W - w), y: G.clamp(my - h / 2, 0, C.WORLD_H - h), w, h };
+    },
+    // World point under (fx, fy), fractions across and down the minimap.
+    miniToWorld(fx, fy){ const r = this.shown || this.miniRect(); return { x: r.x + fx * r.w, y: r.y + fy * r.h }; },
     drawMinimap(){
       const m = this.mini, S = G.State, C = G.CONFIG;
       if (!m || !S.grid) return;
       if (!this.miniBase){ this.miniBase = document.createElement('canvas'); }
-      const base = this.miniBase, W = base.width = m.width, H = base.height = m.height;
-      const g = base.getContext('2d'), sx = W / C.WORLD_W, sy = H / C.WORLD_H;
-      g.drawImage(G.TerrainCache.getOverview(), 0, 0, W, H);
+      const base = this.miniBase, W = base.width = m.width, H = base.height = m.height, r = this.shown = this.miniRect();
+      const g = base.getContext('2d'), sx = W / r.w, sy = H / r.h, ov = G.TerrainCache.getOverview();
+      g.imageSmoothingEnabled = this.miniZoom === 1;
+      g.drawImage(ov, r.x / C.WORLD_W * ov.width, r.y / C.WORLD_H * ov.height, r.w / C.WORLD_W * ov.width, r.h / C.WORLD_H * ov.height, 0, 0, W, H);
+      g.imageSmoothingEnabled = true;
+      g.save(); g.translate(-r.x * sx, -r.y * sy);
       for (const n of S.resourceNodes) if (n.remaining > 0){ g.fillStyle = G.Gather.isDeposit(n) ? G.Gather.def(n).ore || '#c9d4dc' : '#d0a65b'; g.fillRect(n.x * sx - 1, n.y * sy - 1, 3, 3); }
       for (const b of S.buildings){ if (G.Caves.layer(b) >= 0) continue; g.fillStyle = '#adb5ad'; g.fillRect(b.x * sx - 1, b.y * sy - 1, 3, 3); }   // (not underground)
       for (const s of S.constructionSites){ g.fillStyle = '#d4b96b'; g.fillRect(s.x * sx - 1, s.y * sy - 1, 3, 3); }
@@ -543,7 +564,7 @@
         g.fillStyle = '#ff5a4a'; g.beginPath();
         g.moveTo(x + e.nx * 7, y + e.ny * 7); g.lineTo(x - e.ny * 5, y + e.nx * 5); g.lineTo(x + e.ny * 5, y - e.nx * 5); g.fill();
       }
-      if (G.Fog.enabled && G.Fog.canvas){ G.Fog.update(); g.imageSmoothingEnabled = true; g.drawImage(G.Fog.canvas, 0, 0, W, H); }
+      if (G.Fog.enabled && G.Fog.canvas){ G.Fog.update(); g.imageSmoothingEnabled = true; g.drawImage(G.Fog.canvas, 0, 0, C.WORLD_W * sx, C.WORLD_H * sy); }
       // Ordinary units batched per team; ship and Vance on top.
       const byTeam = new Map();
       for (const u of S.units){
@@ -564,16 +585,19 @@
         g.fillStyle = u.isShip ? '#d5e1e5' : C.COLORS[u.team] || '#ccc';
         g.fillRect(u.x * sx - sz / 2, u.y * sy - sz / 2, sz, sz);
       }
+      g.restore();
       this.drawMinimapCamera();
     },
     // Between full redraws only the camera rectangle moves.
     drawMinimapCamera(){
       const m = this.mini, S = G.State, C = G.CONFIG;
       if (!m || !this.miniBase) return;
-      const g = m.getContext('2d'), c = S.camera;
+      const g = m.getContext('2d'), c = S.camera, r = this.shown;
+      // Zoomed in, the window follows the camera: redraw it when the camera has left it.
+      if (this.miniZoom > 1){ const q = this.miniRect(); if (Math.abs(q.x - r.x) > r.w * 0.02 || Math.abs(q.y - r.y) > r.h * 0.02) return this.drawMinimap(); }
       g.drawImage(this.miniBase, 0, 0);
       g.strokeStyle = '#fff'; g.lineWidth = 1;
-      g.strokeRect(c.x / C.WORLD_W * m.width, c.y / C.WORLD_H * m.height, (this.w / c.z) / C.WORLD_W * m.width, (this.h / c.z) / C.WORLD_H * m.height);
+      g.strokeRect((c.x - r.x) / r.w * m.width, (c.y - r.y) / r.h * m.height, (this.w / c.z) / r.w * m.width, (this.h / c.z) / r.h * m.height);
     }
   };
 })();
