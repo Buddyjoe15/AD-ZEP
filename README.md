@@ -54,6 +54,7 @@ The code is split into a DOM-free **simulation** (`src/core`, `src/data`, `src/w
 
 ## What changed in v0.7
 
+- **New main menu and menu font.** The space scene behind the main menu is gone: the Abyssal Dawn: Zero Earth Protocol logo (`assets/logo.webp`) stands top centre on black, with the menu bottom middle. Every menu and panel uses Montserrat (`assets/fonts/montserrat.woff2`, SIL Open Font License), the lettering of the logo's "ZERO EARTH PROTOCOL". `npm run build` now also inlines images and fonts, so `dist/ad-ezp.html` stays a single offline file.
 - **Trails, natural cliffs, spray and mist, and stepping stones (Genesis maps).**
   - **Trails** are drawn along contours like the water: packed dirt with pebbles and a worn middle, fraying into grass at the edges, so a stair-stepped trail becomes a smooth band.
   - **Cliff faces** are natural fractured rock (slabs of different sizes and tones, broken cracks, water stains, moss, grass hanging over the lip, a ragged foot and scree below). Grassy slopes and carved steps now run in the same band as the rock, as a grassy ramp or a flight of steps, instead of flat squares.

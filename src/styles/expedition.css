@@ -14,13 +14,13 @@ body.in-game #ezToggle, body.in-game #status, body.in-game #dbgBtn { display: bl
 #toast { top: 112px; z-index: 90; max-width: 80vw; text-align: center; }
 #selectionPanel { background: #0b1c24ef; border-color: #38555f; }
 
-.ezEyebrow { font: 10px/1.5 ui-monospace, monospace; letter-spacing: 2px; color: #81c7c6; margin-bottom: 8px; }
+.ezEyebrow { font: 10px/1.5 Montserrat, sans-serif; letter-spacing: 2px; color: #81c7c6; margin-bottom: 8px; }
 .ezHint, #ezBody small { color: #8babb9; }
 
 /* Expedition log */
 #ezToggle {
   position: fixed; left: 50%; right: auto; top: 38px; transform: translateX(-50%); z-index: 22;
-  min-height: 30px; padding: 5px 12px; border-radius: 0 0 7px 7px; font: 11px system-ui; letter-spacing: .5px;
+  min-height: 30px; padding: 5px 12px; border-radius: 0 0 7px 7px; font: 11px Montserrat, sans-serif; letter-spacing: .5px;
   background: #102630ef; color: white; border: 1px solid #71b4bc;
 }
 #ezToggle:active { transform: translateX(-50%) translateY(1px); }
@@ -28,7 +28,7 @@ body.in-game #ezToggle, body.in-game #status, body.in-game #dbgBtn { display: bl
   position: fixed; left: 50%; transform: translateX(-50%); top: 76px; bottom: auto; z-index: 45;
   width: min(370px, calc(100vw - 20px)); max-height: min(560px, calc(100vh - 88px));
   background: #101e27f7; border: 1px solid #395e6b; border-radius: 12px; color: #dce9ee;
-  box-shadow: 0 12px 80px #0009; font: 14px/1.5 system-ui;
+  box-shadow: 0 12px 80px #0009; font: 14px/1.5 Montserrat, sans-serif;
 }
 #ezBody { max-height: min(560px, calc(100vh - 88px)); overflow: auto; padding: 16px; box-sizing: border-box; font-size: 12px; touch-action: pan-y; }
 #ezBody h2 { font-size: 22px; margin: 8px 0; color: #fff; }
@@ -38,11 +38,11 @@ body.in-game #ezToggle, body.in-game #status, body.in-game #dbgBtn { display: bl
 .ezGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 #ezLog { white-space: pre-line; color: #b6cbd5; }
 .ezEarthDetails { padding: 10px 0 14px; line-height: 1.6; color: #afd2d9; }
-.ezEarthDetails b { display: block; font: 11px/1.6 ui-monospace, monospace; }
+.ezEarthDetails b { display: block; font: 11px/1.6 Montserrat, sans-serif; }
 .ezEarthDetails span { display: block; font-size: 10px; color: #87a9b4; }
 .ezStats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ezStats > div { background: #142c35; padding: 10px; border: 1px solid #294852; border-radius: 6px; }
-.ezStats small { display: block; font: 9px monospace; letter-spacing: 1.5px; color: #97b9c5; }
+.ezStats small { display: block; font: 9px Montserrat, sans-serif; letter-spacing: 1.5px; color: #97b9c5; }
 .ezStats b { display: block; font-size: 21px; margin-top: 5px; font-weight: 500; }
 .ezStats em { font-size: 12px; font-style: normal; color: #a0bbc3; }
 .ezChecklist { list-style: none; padding: 0; margin: 10px 0 16px; color: #c2d6d8; font-size: 13px; }
@@ -54,7 +54,7 @@ body.in-game #ezToggle, body.in-game #status, body.in-game #dbgBtn { display: bl
 #ezFabrication, #spawnerPanel, #shieldPanel {
   position: fixed; left: 8px; top: 76px; width: min(264px, calc(100vw - 16px)); z-index: 46;
   background: #101e27f7; border: 1px solid #51818d; border-radius: 12px; color: #dce9ee;
-  box-shadow: 0 12px 80px #0009; font: 12px/1.5 system-ui;
+  box-shadow: 0 12px 80px #0009; font: 12px/1.5 Montserrat, sans-serif;
 }
 #ezFabrication.ezOpening, #spawnerPanel.ezOpening, #shieldPanel.ezOpening { pointer-events: none; }
 #ezFabBody, #spawnerBody, #shieldBody { box-sizing: border-box; max-height: min(320px, calc(100vh - 94px)); overflow: auto; touch-action: pan-y; padding: 10px; }
@@ -81,7 +81,7 @@ body.in-game #ezToggle, body.in-game #status, body.in-game #dbgBtn { display: bl
 .spChips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 #spawnerPanel .spChip { min-height: 32px; min-width: 40px; padding: 4px 8px; text-align: center; }
 #spawnerPanel .spChip.active { background: #8bc9bf; color: #0c2024; border-color: #8bc9bf; }
-.spChips input { width: 72px; min-height: 32px; padding: 4px 6px; background: #10222c; color: #e7f1f1; border: 1px solid #4a727b; border-radius: 6px; font: 12px system-ui; user-select: text; touch-action: auto; }
+.spChips input { width: 72px; min-height: 32px; padding: 4px 6px; background: #10222c; color: #e7f1f1; border: 1px solid #4a727b; border-radius: 6px; font: 12px Montserrat, sans-serif; user-select: text; touch-action: auto; }
 .spActions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 12px; }
 #spawnerPanel .spPrimary { grid-column: 1 / -1; text-align: center; background: #e0685f; color: #1b0a08; border-color: #e0685f; font-weight: 700; }
 .spProgress { height: 5px; background: #0b1a20; border-radius: 3px; margin: 10px 0 8px; overflow: hidden; }
@@ -97,15 +97,15 @@ body.in-game #ezToggle, body.in-game #status, body.in-game #dbgBtn { display: bl
 .ezArrivalCard button { width: 100%; min-height: 48px; background: #79c9c0; color: #102a30; border: 0; margin-top: 8px; }
 
 /* Launch screen */
-.ezSeed { display: block; font: 11px monospace; letter-spacing: 2px; color: #abd9d6; margin: 22px 0; }
-.ezSeed select { display: block; width: 100%; max-width: 280px; margin-top: 8px; padding: 12px; background: #10222c; color: #e7f1f1; border: 1px solid #4a727b; border-radius: 6px; font: 16px monospace; }
+.ezSeed { display: block; font: 11px Montserrat, sans-serif; letter-spacing: 2px; color: #abd9d6; margin: 22px 0; }
+.ezSeed select { display: block; width: 100%; max-width: 280px; margin-top: 8px; padding: 12px; background: #10222c; color: #e7f1f1; border: 1px solid #4a727b; border-radius: 6px; font: 16px Montserrat, sans-serif; }
 .ezLandXY { display: flex; gap: 12px; max-width: 280px; }
 .ezLandXY.hidden { display: none; }
 .ezLandXY .ezSeed { flex: 1; margin: 0 0 12px; }
-.ezSeed input { display: block; width: 100%; max-width: 280px; margin-top: 8px; padding: 14px; background: #10222c; color: #e7f1f1; border: 1px solid #4a727b; border-radius: 6px; font: 18px monospace; user-select: text; touch-action: auto; }
+.ezSeed input { display: block; width: 100%; max-width: 280px; margin-top: 8px; padding: 14px; background: #10222c; color: #e7f1f1; border: 1px solid #4a727b; border-radius: 6px; font: 18px Montserrat, sans-serif; user-select: text; touch-action: auto; }
 
 /* Stack count badge for stackable items */
-.inv-count { position: absolute; right: 3px; bottom: 2px; font: 700 9px system-ui; color: #f1f5f1; text-shadow: 0 1px 2px #000; }
+.inv-count { position: absolute; right: 3px; bottom: 2px; font: 700 9px Montserrat, sans-serif; color: #f1f5f1; text-shadow: 0 1px 2px #000; }
 
 @media (max-width: 700px) {
   #gameTitle { display: none; }
