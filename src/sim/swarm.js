@@ -59,7 +59,9 @@
           const nx = x + DX[d], ny = y + DY[d];
           if (!open(nx, ny)) continue;
           if (d >= 4 && (!open(x + DX[d], y) || !open(x, y + DY[d]))) continue;
-          const ni = ny * cols + nx, nc = key + STEP[d] * costTable[tiles[ni]] + dens[ni] * cc;
+          // (Rounded to the field's 32-bit floats before comparing: compared at full precision, a
+          // stored value that rounded up looks improvable forever, and far builds never finish.)
+          const ni = ny * cols + nx, nc = Math.fround(key + STEP[d] * costTable[tiles[ni]] + dens[ni] * cc);
           if (nc < work[ni]){ work[ni] = nc; heap.push(ni, nc); }
         }
         if (++n >= budget) return false;

@@ -213,10 +213,17 @@
       const climate = this.climate();
       if (climate.hazard && !G.Cheats.god && Math.hypot(h.x - sh.x, h.y - sh.y) > rules.hazardSafeRadius) h.hp -= climate.hazard * dt;
       if (climate.hostiles && E.elapsed >= E.waveAt){
+        const wave = Math.round((E.waveAt - rules.firstWave) / rules.waveInterval);
         E.waveAt += rules.waveInterval;
-        const n = Math.min(rules.waveMax, rules.waveBase + E.world);
-        for (let i = 0; i < n; i++){ const p = G.openPoint(sh.x - 650 + i * 90, sh.y + 1050); G.Units.spawn('hostile_machine', p.x, p.y); }
-        this.log('ARIA: Hostile machine signatures south of the landing zone.');
+        const n = Math.min(rules.waveMax, rules.waveBase + E.world), list = this.entries();
+        // Each wave comes in at one of the map's entry points, on the edge of the map, and
+        // marches in from there (hostiles advance on Vance down the swarm's flow field).
+        const at = list.length ? list[Math.floor(G.hashRandom(S.seed, E.world, wave) * list.length)] : null;
+        for (let i = 0; i < n; i++){
+          const p = at ? G.openPoint(at.x + (at.nx ? 0 : (i - (n - 1) / 2) * 40), at.y + (at.ny ? 0 : (i - (n - 1) / 2) * 40), at.region) : G.openPoint(sh.x - 650 + i * 90, sh.y + 1050);
+          G.Units.spawn('hostile_machine', p.x, p.y);
+        }
+        this.log(at ? `ARIA: Hostile machines entering from the ${at.side} edge of the map.` : 'ARIA: Hostile machine signatures south of the landing zone.');
       }
       for (const u of S.units){
         if (!u.recallPoint || u.team !== 'blue' || u.hp <= 0) continue;
@@ -232,6 +239,53 @@
         }
       }
       if (E.auto >= G.CONFIG.AUTOSAVE_SECONDS){ E.auto = 0; G.Events.emit('expedition:autosave'); }
+    },
+    // Where hostiles enter the map: on its outer edge, where a trail leaves it (or, on a map
+    // without trails to the edge, the middle of each side), on ground connected to the ship
+    // and at least ENTRY_MIN_TILES from it. Each is { x, y (world px), gx, gy, side, nx, ny
+    // (the inward direction), region }. Rebuilt from the terrain when it changes; not saved.
+    ENTRY_MIN_TILES: 90,
+    entries(){
+      const S = G.State, grid = S.grid, sh = G.Units.ship();
+      if (!grid || !sh) return [];
+      if (grid._entries && grid._entries.version === grid.version && grid._entries.ship === sh.id) return grid._entries.list;
+      const W = grid.cols, H = grid.rows, T = G.CONFIG.TILE, region = grid.regionAt(sh.gx + 3, sh.gy + sh.h);
+      const PATHS = new Set(['path', 'bridge', 'steps'].map(k => G.Defs.terrain.get(k)?.id).filter(v => v != null));
+      const sides = [
+        { side: 'north', n: W, at: i => [i, 0], nx: 0, ny: 1 }, { side: 'south', n: W, at: i => [i, H - 1], nx: 0, ny: -1 },
+        { side: 'west', n: H, at: i => [0, i], nx: 1, ny: 0 }, { side: 'east', n: H, at: i => [W - 1, i], nx: -1, ny: 0 }
+      ];
+      const trails = [], mids = [];
+      for (const sd of sides){
+        // Runs of open edge tiles in the ship's region; a run with trail tiles gives an entry
+        // at the middle of its trail, and the longest run on the side is the fallback.
+        let run = null, best = null;
+        const close = () => {
+          if (!run) return;
+          if (run.path.length) trails.push({ sd, i: run.path[Math.floor(run.path.length / 2)] });
+          if (!best || run.len > best.len) best = run;
+          run = null;
+        };
+        for (let i = 0; i < sd.n; i++){
+          const [x, y] = sd.at(i), open = grid.passable(x, y) && (!region || grid.regionAt(x, y) === region);
+          if (!open){ close(); continue; }
+          if (!run) run = { start: i, len: 0, path: [] };
+          run.len++;
+          if (PATHS.has(grid.tiles[y * W + x])) run.path.push(i);
+        }
+        close();
+        if (best) mids.push({ sd, i: best.start + Math.floor(best.len / 2) });
+      }
+      const make = ({ sd, i }) => { const [gx, gy] = sd.at(i); return { gx, gy, x: (gx + 0.5) * T, y: (gy + 0.5) * T, side: sd.side, nx: sd.nx, ny: sd.ny, region }; };
+      const far = e => Math.hypot(e.gx - sh.gx, e.gy - sh.gy) >= this.ENTRY_MIN_TILES;
+      let list = (trails.length ? trails : mids).map(make).filter(far);
+      if (!list.length) list = mids.map(make).filter(far);
+      if (!list.length) list = mids.map(make);
+      // One entry per trail: drop any within 16 tiles of one already kept.
+      const kept = [];
+      for (const e of list) if (!kept.some(k => Math.abs(k.gx - e.gx) + Math.abs(k.gy - e.gy) < 16)) kept.push(e);
+      grid._entries = { version: grid.version, ship: sh.id, list: kept };
+      return kept;
     },
     // Signals progress while a surveyor stands nearby or a sensor structure covers them.
     studySignals(dt){

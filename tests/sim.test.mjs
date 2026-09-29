@@ -284,6 +284,33 @@ test('fabrication queues, respects capacity and refunds destroyed owners', () =>
   assert.equal(S.units.filter(u => u.type === 'utility_spider').length, 2);
 });
 
+test('hostile waves enter on the map edge where trails leave it, and march in from across the map', () => {
+  const G = loadSim();
+  G.Scenario.newGame({ seed: 72491, map: 'genesis' });
+  const S = G.State, E = S.expedition, sh = G.Units.ship(), W = S.grid.cols, PATH = G.Defs.terrain.get('path').id;
+  const list = G.Expedition.entries();
+  assert.ok(list.length >= 2, 'several entry points: ' + list.length);
+  for (const e of list){
+    assert.ok(e.gx === 0 || e.gy === 0 || e.gx === W - 1 || e.gy === W - 1, 'on the edge of the map');
+    assert.equal(S.grid.tiles[e.gy * W + e.gx], PATH, 'where a trail leaves the map');
+    assert.ok(S.grid.reachable(e.gx, e.gy, sh.gx + 3, sh.gy + sh.h), 'connected to the base');
+    assert.ok(Math.hypot(e.gx - sh.gx, e.gy - sh.gy) >= G.Expedition.ENTRY_MIN_TILES, 'not beside the base');
+  }
+  const before = new Set(S.units.map(u => u.id));
+  E.elapsed = E.waveAt - 0.01; S.paused = false; G.Sim.run(0.1);
+  const wave = S.units.filter(u => !before.has(u.id) && u.team === 'red');
+  assert.equal(wave.length, Math.min(G.EXPEDITION_RULES.waveMax, G.EXPEDITION_RULES.waveBase + E.world));
+  const at = list.find(e => wave.every(u => Math.hypot(u.x - e.x, u.y - e.y) < 5 * T));
+  assert.ok(at, 'the wave appears together at one entry point');
+  assert.match(E.log[0], new RegExp(at.side + ' edge'));
+  // The swarm's flow field spans the map (a regression: far builds never finished) and the
+  // wave marches in toward Vance.
+  const hero = G.Units.hero(), d0 = Math.hypot(wave[0].x - hero.x, wave[0].y - hero.y);
+  G.Sim.run(40);
+  assert.ok(G.Swarm.field.ready, 'flow field built');
+  assert.ok(Math.hypot(wave[0].x - hero.x, wave[0].y - hero.y) < d0 - 60 * T, 'marching in');
+});
+
 test('hostile waves fight, walls reduce damage and repair stations heal', () => {
   const G = newGame();
   const S = G.State, E = S.expedition;

@@ -331,6 +331,17 @@
     // Everything drawn above units, in world coordinates.
     drawOverlay(g, visible, z, t, inView, lod2d){
       const S = G.State, C = G.CONFIG, T = C.TILE;
+      // Hostile entry points on the map's edge: red chevrons pointing into the map.
+      if (S.expedition) for (const e of G.Expedition.entries()){
+        if (!inView(e.x, e.y, 200)) continue;
+        const pulse = 0.55 + 0.35 * Math.sin(t * 3), px = -e.ny, py = e.nx;
+        g.save(); g.lineWidth = 6; g.lineJoin = 'round'; g.strokeStyle = `rgba(255,80,64,${pulse.toFixed(3)})`;
+        for (let k = 0; k < 3; k++){
+          const d = 20 + k * 34, cx = e.x + e.nx * d, cy = e.y + e.ny * d;
+          g.beginPath(); g.moveTo(cx + px * 30 - e.nx * 18, cy + py * 30 - e.ny * 18); g.lineTo(cx, cy); g.lineTo(cx - px * 30 - e.nx * 18, cy - py * 30 - e.ny * 18); g.stroke();
+        }
+        g.restore();
+      }
       // Treetops over the units under them, then falling trees, dust and sawdust (Genesis).
       G.TreeArt.drawOverUnits(g, S.grid, visible, t, z);
       for (const u of visible){ const p = u.command === 'gather' && G.Gather.chopTarget(u) >= 0 && G.Visuals.laserTarget(u); if (p) G.TreeFX.saw(p.x, p.y); }
@@ -487,6 +498,12 @@
       for (const n of S.resourceNodes) if (n.remaining > 0){ g.fillStyle = G.Gather.isDeposit(n) ? G.Gather.def(n).ore || '#c9d4dc' : '#d0a65b'; g.fillRect(n.x * sx - 1, n.y * sy - 1, 3, 3); }
       for (const b of S.buildings){ g.fillStyle = '#adb5ad'; g.fillRect(b.x * sx - 1, b.y * sy - 1, 3, 3); }
       for (const s of S.constructionSites){ g.fillStyle = '#d4b96b'; g.fillRect(s.x * sx - 1, s.y * sy - 1, 3, 3); }
+      // Where hostile waves enter the map: red wedges on the edge, pointing in.
+      if (S.expedition) for (const e of G.Expedition.entries()){
+        const x = e.x * sx, y = e.y * sy;
+        g.fillStyle = '#ff5a4a'; g.beginPath();
+        g.moveTo(x + e.nx * 7, y + e.ny * 7); g.lineTo(x - e.ny * 5, y + e.nx * 5); g.lineTo(x + e.ny * 5, y - e.nx * 5); g.fill();
+      }
       if (G.Fog.enabled && G.Fog.canvas){ G.Fog.update(); g.imageSmoothingEnabled = true; g.drawImage(G.Fog.canvas, 0, 0, W, H); }
       // Ordinary units batched per team; ship and Vance on top.
       const byTeam = new Map();
