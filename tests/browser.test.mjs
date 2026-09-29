@@ -45,7 +45,8 @@ async function startGame(page, url){
   await page.fill('#ezSeedInput', '72491');
   await page.click('#launchVance');
   await page.click('#introSkipBtn');
-  await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.State.introCamera, null, { timeout: 8000 });
+  // (The whole-map picture is painted first, behind the loading screen; the arrival follows.)
+  await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.WorldPicture.loading && !GW.State.introCamera, null, { timeout: 90000 });
   await page.waitForTimeout(1500);   // disembark
 }
 
@@ -194,7 +195,7 @@ for (const target of ['index.html', 'dist/ad-ezp.html']){
       await page.click('[data-menu-tab="saves"]');
       await page.click('[data-save-slot="2"]');
       await page.click('[data-load-slot="2"]');
-      await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.State.paused);
+      await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.State.paused && !GW.WorldPicture.loading, null, { timeout: 90000 });
       assert.equal(await page.evaluate(() => GW.State.activeSaveSlot), 2);
       await page.waitForTimeout(500);
       await page.screenshot({ path: path.join(OUT, `${tag}-desktop.png`) });
@@ -892,7 +893,7 @@ test('caves are underground: click the entrance to look inside or send units in,
     if (await page.$('#confirmOverwriteBtn')) await page.click('#confirmOverwriteBtn');
     await page.fill('#ezSeedInput', '72491'); await page.selectOption('#ezMapInput', 'genesis');
     await page.click('#launchVance'); await page.click('#introSkipBtn');
-    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.State.introCamera, null, { timeout: 15000 });
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.WorldPicture.loading && !GW.State.introCamera, null, { timeout: 90000 });
     const c = await page.evaluate(() => { GW.Fog.set(false); const c = GW.Caves.list()[0]; GW.centerCamera((c.x + 0.5) * 48, (c.y - 2) * 48, 1); GW.Selection.clear(); return c; });
     const at = (x, y) => page.evaluate(([x, y]) => GW.screenFromWorld(x, y), [x, y]);
     // On the surface the cavern isn't drawn: the ground over it is the surface copy's.
@@ -932,7 +933,7 @@ test('houses: a unit walks in through the door and the roof comes off to show th
     if (await page.$('#confirmOverwriteBtn')) await page.click('#confirmOverwriteBtn');
     await page.fill('#ezSeedInput', '72491'); await page.selectOption('#ezMapInput', 'genesis');
     await page.click('#launchVance'); await page.click('#introSkipBtn');
-    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.State.introCamera, null, { timeout: 15000 });
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.WorldPicture.loading && !GW.State.introCamera, null, { timeout: 90000 });
     // The first intact house with more than one floor tile; Vance at its door step, sent inside.
     const H = await page.evaluate(() => {
       GW.Fog.set(false);
@@ -969,7 +970,7 @@ test('minimap zooms in and out with + and −; the zoom indicator shows 0% furth
     if (await page.$('#confirmOverwriteBtn')) await page.click('#confirmOverwriteBtn');
     await page.fill('#ezSeedInput', '72491');
     await page.click('#launchVance'); await page.click('#introSkipBtn');
-    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.State.introCamera, null, { timeout: 15000 });
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.WorldPicture.loading && !GW.State.introCamera, null, { timeout: 90000 });
     await page.waitForTimeout(400);
     assert.equal(await page.evaluate(() => GW.Renderer.miniZoom), 1);
     assert.ok(await page.isDisabled('#miniZoomOut'));
@@ -992,6 +993,39 @@ test('minimap zooms in and out with + and −; the zoom indicator shows 0% furth
     await page.evaluate(() => { GW.State.camera.z = GW.CONFIG.ZOOM_MAX; });
     await page.waitForFunction(() => document.querySelector('#zoomPct b').textContent === '100%');
     assert.equal(await pct(), '100%');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('the whole map is painted before play (loading screen), so a jump anywhere shows it at once; changed terrain is painted again', { skip, timeout: 120000 }, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await page.goto(pathToFileURL(path.join(ROOT, 'index.html')).href);
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'mainMenu');
+    await page.click('[data-home="new"]'); await page.click('[data-new-slot="1"]');
+    if (await page.$('#confirmOverwriteBtn')) await page.click('#confirmOverwriteBtn');
+    await page.fill('#ezSeedInput', '72491'); await page.selectOption('#ezMapInput', 'genesis');
+    await page.click('#launchVance'); await page.click('#introSkipBtn');
+    // The loading screen shows while the picture is painted, and the game waits.
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay');
+    assert.ok(await page.evaluate(() => GW.WorldPicture.loading));
+    assert.ok(await page.isVisible('#mapLoading'));
+    const t0 = await page.evaluate(() => GW.State.time);
+    await page.waitForTimeout(500);
+    assert.deepEqual(await page.evaluate(() => [GW.WorldPicture.loading, GW.State.time]), [true, t0], 'no game time passes while loading');
+    await page.waitForFunction(() => !GW.WorldPicture.loading, null, { timeout: 90000 });
+    assert.ok(await page.isHidden('#mapLoading'));
+    const info = await page.evaluate(() => {
+      const WP = GW.WorldPicture, far = WP.blocks[WP.blocks.length - 1], px = far.getContext('2d').getImageData(far.width - 4, far.height - 4, 1, 1).data;
+      return { done: WP.done, cells: WP.count, all: WP.ncx * WP.ncy, alpha: px[3] };
+    });
+    assert.deepEqual(info, { done: true, cells: info.all, all: info.all, alpha: 255 }, 'every cell painted, the far corner too');
+    // Changed terrain: its cells are painted again in spare time.
+    await page.evaluate(() => GW.TerrainCache.invalidate({ x: 300, y: 300, w: 4, h: 4 }));
+    assert.equal(await page.evaluate(() => GW.WorldPicture.done), false);
+    await page.waitForFunction(() => GW.WorldPicture.done, null, { timeout: 10000 });
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

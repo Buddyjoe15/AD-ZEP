@@ -19,6 +19,8 @@
     // world px, up to TERRAIN_RES_MAX; from SUB_RES up, chunks are half as many tiles across.
     // QUICK_RES: chunks painted first where the view has nothing, before the sharp ones.
     TERRAIN_RES: 2, TERRAIN_RES_MAX: 4, SUB_RES: 2, QUICK_RES: 0.5,
+    // The whole-map picture (G.WorldPicture) is painted PICTURE_LOAD_MS a frame while the game loads.
+    PICTURE_LOAD_MS: 120,
     // Between LOD_ZOOM and FAR_CHUNK_ZOOM (1.5× further out) terrain uses lower-resolution
     // chunks (FAR_CHUNK_SCALE of full size, trees drawn in at rest) before the overview image.
     FAR_CHUNK_ZOOM: 0.20, FAR_CHUNK_SCALE: 1 / 3, FAR_CHUNK_CACHE_MAX: 176,

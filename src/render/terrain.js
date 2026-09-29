@@ -29,6 +29,7 @@
     drop(key){ const cv = this.chunks.get(key); if (cv){ this.used -= cost(cv.res); this.chunks.delete(key); } },
     invalidate(rect){
       this.jobs.clear();   // (a half-painted chunk may be stale)
+      if (G.WorldPicture) G.WorldPicture.invalidate(rect);
       if (!rect){ this.chunks.clear(); this.used = 0; this.farChunks.clear(); this.overviewDirty = true; return; }
       const C = G.CONFIG, hit = (k, ct) => { const [cx, cy] = k.replace(/^f/, '').split(',').map(Number); return cx * ct <= rect.x + rect.w && (cx + 1) * ct > rect.x && cy * ct <= rect.y + rect.h && (cy + 1) * ct > rect.y; };
       for (const k of [...this.chunks.keys()]) if (hit(k, tilesFor(+k.split(',')[2]))) this.drop(k);

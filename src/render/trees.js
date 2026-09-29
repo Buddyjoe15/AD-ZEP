@@ -153,9 +153,10 @@
   const artScale = () => { const A = pixelArt(); return A ? AK(A) : 2; };
   // How much bigger than drawn a kind stands on the map (trees and dead wood: 2).
   const SC = (A, kind) => (A && A.scale && A.scale[kind]) || 1;
+  const MIP_MAX = 5;   // down to 1/32: painted small (middle zoom, the whole-map picture), a tree is a quick copy
   function levelFor(g, sc = 1){
     const perArt = Math.abs(g.getTransform().a) * sc / artScale();   // device px per art px
-    const level = perArt >= 1 ? 0 : perArt >= 0.5 ? 1 : perArt >= 0.25 ? 2 : 3;
+    const level = perArt >= 1 ? 0 : Math.min(MIP_MAX, Math.floor(-Math.log2(perArt) + 1e-9));
     return { level, shrink: perArt * (1 << level) < 1 - 1e-6 };
   }
   let DECOR = null;

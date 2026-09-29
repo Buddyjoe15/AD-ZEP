@@ -861,3 +861,12 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
 #mainMenuPanel .ezSeed input,#mainMenuPanel .ezSeed select{margin-left:auto;margin-right:auto}
 #caveReturnBtn{position:absolute;left:50%;top:78px;transform:translateX(-50%);z-index:40;padding:8px 18px;background:#0b1320e6;border:1px solid #8fd8f0;color:#e4f7ff;font-weight:600;letter-spacing:.12em;text-transform:uppercase;font-size:11px}
 #caveReturnBtn.hidden{display:none}
+
+/* Loading the whole-map picture before play. */
+#mapLoading{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  background:#000;color:#e8e2c8;font-family:Montserrat,sans-serif;pointer-events:auto}
+#mapLoading.hidden{display:none}
+#mapLoading b{font-size:13px;letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+.map-loading-bar{width:min(320px,70vw);height:6px;border-radius:3px;background:#1d2620;overflow:hidden;border:1px solid #3c4a3f}
+.map-loading-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#5d7a4f,#c9d4a0)}
+#mapLoading small{font-size:10px;color:#a8b5a9;font-variant-numeric:tabular-nums}

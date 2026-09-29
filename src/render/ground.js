@@ -120,7 +120,7 @@
     // texel covers two world px (four when the chunk is painted smaller).
     paintChunk(ctx, grd, x0, y0, ct, r0 = 0, r1 = ct){
       const T = G.CONFIG.TILE, cols = grd.cols, rows = grd.rows, tiles = grd.tiles, KD = kinds();
-      const sc = Math.abs(ctx.getTransform().a), tex = sc >= 2 ? 1 : sc >= 0.75 ? 2 : 4, per = T / tex, N = ct * per;
+      const sc = Math.abs(ctx.getTransform().a), tex = sc >= 2 ? 1 : sc >= 0.75 ? 2 : sc >= 0.25 ? 4 : 8, per = T / tex, N = ct * per;
       const s = image(N), d = new Uint32Array(s.img.data.buffer);
       d.fill(0, r0 * per * N, r1 * per * N);
       const kindAt = (gx, gy) => KD[tiles[Math.min(rows - 1, Math.max(0, gy)) * cols + Math.min(cols - 1, Math.max(0, gx))]];

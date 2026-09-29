@@ -58,7 +58,8 @@
       const c = S.camera, z = c.z, t = S.time, v = this.view(), inView = (x, y, p) => x > v.x0 - p && y > v.y0 - p && x < v.x1 + p && y < v.y1 + p;
       // Surface or a cave (Genesis): the terrain comes from the surface copy of the grid, and
       // only what is on the layer in view is drawn.
-      const CV = G.CaveView, inCave = CV.cave >= 0, TG = CV.terrainGrid(), here = o => CV.here(o);
+      const CV = G.CaveView, inCave = CV.cave >= 0, TG = CV.terrainGrid(), here = o => CV.here(o), WP = G.WorldPicture;
+      let pending = 0;   // chunks the view still wants
       g.save(); g.scale(z, z); g.translate(-c.x, -c.y);
 
       // Terrain: overview image underneath, detailed chunks on top when close enough.
@@ -88,7 +89,12 @@
       L.live = false;
       const bake = trees && !L.live, live = trees && near ? new Set() : null;
       if (inCave) CV.drawCave(g, v, z, t);
-      else { g.imageSmoothingEnabled = false; g.drawImage(TC.getOverview(), 0, 0, C.WORLD_W, C.WORLD_H); g.imageSmoothingEnabled = true; }
+      else {
+        g.imageSmoothingEnabled = false; g.drawImage(TC.getOverview(), 0, 0, C.WORLD_W, C.WORLD_H); g.imageSmoothingEnabled = true;
+        // The whole-map picture over it (all of it once loaded), under the chunks.
+        const X0 = Math.max(0, v.x0), Y0 = Math.max(0, v.y0), X1 = Math.min(C.WORLD_W, v.x1), Y1 = Math.min(C.WORLD_H, v.y1);
+        if (X1 > X0 && Y1 > Y0) WP.draw(g, X0, Y0, X1 - X0, Y1 - Y0, X0, Y0, X1 - X0, Y1 - Y0);
+      }
       let chunks = 0;
       // The best copy at hand for the world rect of chunk (cx, cy) while it is painted: another
       // resolution (its chunk may be larger or smaller: the matching part, or the parts), the
@@ -142,7 +148,9 @@
         // The budget: the most while part of the view shows nothing but the overview (quick chunks
         // still to paint: a few slow frames beat seconds of blur), then less while it sharpens,
         // so the game stays smooth as the view fills in.
-        const t1 = now(), budget = jobs.length && jobs[0][2] === Q ? C.CHUNK_BLANK_MS : want.length ? C.CHUNK_BUILD_MS : C.CHUNK_SHARPEN_MS;
+        // (Once the whole-map picture is there, nothing is ever blank: no need to hurry.)
+        pending = want.length;
+        const t1 = now(), budget = jobs.length && jobs[0][2] === Q && !WP.done ? C.CHUNK_BLANK_MS : want.length ? C.CHUNK_BUILD_MS : C.CHUNK_SHARPEN_MS;
         for (let k = 0; k < jobs.length && (k < 1 || now() - t1 < budget); k++) if (!TC.work(jobs[k][0], jobs[k][1], jobs[k][2], bake, t1 + budget)) break;
         S.metrics.chunksBlank = jobs.filter(j => j[2] === Q && !TC.has(j[0], j[1], Q, bake)).length;   // view chunks with nothing but the overview
         // What is left of the budget for work ahead of need (time spent drawing doesn't count).
@@ -180,6 +188,10 @@
         if (near) G.WoodlandsArt.drawTrees(g, TG, v, T, t, z);
         if (live && live.size) TA.drawLive(g, TG, v, t, (cx, cy) => live.has(cy * 4096 + cx));
       }
+
+      // The whole-map picture (painted while the game loads): cells whose terrain changed are
+      // painted again in spare time, and all of it for a map made in play.
+      if (!WP.loading && !WP.done && !pending) WP.work(now() + 1);
 
       // Houses with a unit inside have their roof off, showing the room.
       if (!inCave && !far) G.Structures.interiors(g, TG, S.units.filter(u => !u.isShip && here(u) && (u.team === 'blue' || !G.Fog.enabled || G.Fog.visibleAt(u.x, u.y))), inView);
@@ -554,6 +566,7 @@
       g.imageSmoothingEnabled = this.miniZoom === 1;
       g.drawImage(ov, r.x / C.WORLD_W * ov.width, r.y / C.WORLD_H * ov.height, r.w / C.WORLD_W * ov.width, r.h / C.WORLD_H * ov.height, 0, 0, W, H);
       g.imageSmoothingEnabled = true;
+      if (this.miniZoom >= 4) G.WorldPicture.draw(g, r.x, r.y, r.w, r.h, 0, 0, W, H);   // (close enough for the picture's detail to show)
       g.save(); g.translate(-r.x * sx, -r.y * sy);
       for (const n of S.resourceNodes) if (n.remaining > 0){ g.fillStyle = G.Gather.isDeposit(n) ? G.Gather.def(n).ore || '#c9d4dc' : '#d0a65b'; g.fillRect(n.x * sx - 1, n.y * sy - 1, 3, 3); }
       for (const b of S.buildings){ if (G.Caves.layer(b) >= 0) continue; g.fillStyle = '#adb5ad'; g.fillRect(b.x * sx - 1, b.y * sy - 1, 3, 3); }   // (not underground)

@@ -169,20 +169,35 @@
       document.body.classList.add('in-game');
       G.Game.setPaused(false, true);
       G.UI.refreshSelection(true);
+      // The whole map is painted once before play starts (G.WorldPicture), behind a loading
+      // bar; the game waits, and the arrival plays after.
+      const WP = G.WorldPicture;
+      WP.work(0);   // (picks up the new map)
+      WP.loading = !WP.done;
+      G.UI.showMapLoading(WP.loading);
       if (data.introReveal){
         const ship = G.Units.ship();
         if (ship){
           G.centerCamera(ship.x, ship.y, 2.15);
           G.State.introCamera = { start: performance.now(), duration: 2600, from: 2.15, to: 0.72, cx: ship.x, cy: ship.y };
         }
-        setTimeout(() => { if (G.SceneManager.currentName === 'gameplay') G.Scenario.disembark(); }, data.skip ? 40 : 450);
+        const land = () => { if (G.SceneManager.currentName !== 'gameplay') return; if (G.WorldPicture.loading) return setTimeout(land, 100); G.Scenario.disembark(); };
+        setTimeout(land, data.skip ? 40 : 450);
         G.UI.toast('Wormhole transit complete');
       }
     },
-    exit(){ document.body.classList.remove('in-game'); G.State.clockReset = true; },
-    update(dt){ if (!document.hidden) G.Sim.step(dt); },
+    exit(){ document.body.classList.remove('in-game'); G.State.clockReset = true; G.WorldPicture.loading = false; G.UI.showMapLoading(false); },
+    update(dt){ if (!document.hidden && !G.WorldPicture.loading) G.Sim.step(dt); },
     render(t, realDt){
-      const S = G.State, ic = S.introCamera;
+      const S = G.State, WP = G.WorldPicture;
+      if (WP.loading){
+        // (Nothing else is drawn under the loading screen: all the time goes to the picture.)
+        WP.work(performance.now() + G.CONFIG.PICTURE_LOAD_MS);
+        if (WP.done){ WP.loading = false; G.UI.showMapLoading(false); if (S.introCamera) S.introCamera.start = t; }
+        else G.UI.showMapLoading(true, WP.progress());
+        return;
+      }
+      const ic = S.introCamera;
       if (ic){
         const k = Math.min(1, (t - ic.start) / ic.duration), e = 1 - Math.pow(1 - k, 3);
         G.centerCamera(ic.cx, ic.cy, ic.from + (ic.to - ic.from) * e);

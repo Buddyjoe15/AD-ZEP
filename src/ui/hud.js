@@ -315,6 +315,18 @@
       $('miniZoomOut').disabled = R.miniZoom === Z[0];
       el.title = 'Minimap zoom ×' + R.miniZoom;
     },
+    // The loading bar while the whole-map picture is painted (`p`: 0…1).
+    showMapLoading(on, p = 0){
+      const el = $('mapLoading');
+      if (!el) return;
+      el.classList.toggle('hidden', !on);
+      if (!on) return;
+      const pct = Math.floor(p * 100);
+      if (pct === this.loadSig) return;
+      this.loadSig = pct;
+      el.querySelector('i').style.width = pct + '%';
+      el.querySelector('small').textContent = pct + '%';
+    },
     // Called every rendered frame; heavier refreshes are throttled.
     update(){
       const S = G.State, t = performance.now();
