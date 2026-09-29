@@ -132,6 +132,13 @@ export function representativeGame(){
   const cp = G.openPoint(sp.x, sp.y), crawler = G.Units.spawn('salvage_crawler', cp.x, cp.y);
   if (!G.Gather.chop([crawler], sawn).length) throw new Error('representative game: chop order failed');
 
+  // A drone on its way into a cave (caves are underground: it walks to the entrance first).
+  const cave = G.Caves.list()[0];
+  if (!cave) throw new Error('representative game: no cave on the Genesis map');
+  const out = G.Caves.door(0, 'outside'), inn = G.Caves.door(0, 'inside'), caver = G.Units.spawn('survey_drone', G.openPoint(out.x, out.y + 6 * T).x, G.openPoint(out.x, out.y + 6 * T).y);
+  G.Orders.move([caver], inn.x, inn.y - T);
+  if (!caver.caveTransit) throw new Error('representative game: cave order failed');
+
   // Map Editor strokes: a pond (impassable, painted around nothing) and a path.
   G.MapEdit.paint(sh.gx + 20, sh.gy - 14, 5, G.TT.WATER);
   G.MapEdit.paint(sh.gx + 12, sh.gy - 14, 3, G.TT.PATH);

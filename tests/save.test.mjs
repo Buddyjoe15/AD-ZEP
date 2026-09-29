@@ -351,3 +351,18 @@ test('migrate_12_to_13: walls and gates shrink to one tile thick about their cen
   const S = G.Save.restore(raw, 1);
   for (const b of S.buildings){ const d = G.Defs.buildables.get(b.type); assert.deepEqual([b.w, b.h], [d.w, d.h], b.type); }
 });
+
+test('migrate_13_to_14: nobody in older saves is on the way through a cave entrance', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(13)), before = JSON.stringify(raw);
+  const up = G.Save.migrations[13](raw);
+  assert.equal(JSON.stringify(raw), before, 'the input is not modified');
+  assert.equal(up.schema, 14);
+  for (const u of up.units){ assert.equal(u.caveTransit, null); assert.equal(u.caveRetry, 0); }
+  G.Save.restore(raw, 1);
+  for (const tr of [{ cave: -1, dir: 'in', then: null }, { cave: 0, dir: 'down', then: null }, { cave: 0, dir: 'in', then: { x: 'far' } }, 'in']){
+    const bad = readJSON(fixtureFile(G.SAVE_SCHEMA));
+    bad.units[0].caveTransit = tr;
+    assert.throws(() => G.Save.validate(bad), /cave transit/, JSON.stringify(tr));
+  }
+});

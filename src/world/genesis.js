@@ -833,6 +833,12 @@
     const SOLID = { has: t => !NOT.has(t) };
     const inb = (x, y) => x >= 1 && y >= 1 && x < W - 1 && y < H - 1;
     const taken = new Uint8Array(N), out = [], props = [];
+    // The caves are underground: each cavern is sealed from the surface (its mouth stays solid
+    // rock-face, and units cross it only through the entrance, src/sim/caves.js). caveOf says
+    // which cave a tile belongs to (-1 on the surface); roof keeps what the surface looked like
+    // over each cavern (tile, height and detail before it was dug), for the surface view.
+    const caveOf = new Int16Array(N).fill(-1), roof = new Map();
+    const dig = (i, t, l) => { if (!roof.has(i)) roof.set(i, [tiles[i], lvl[i], grid.art.detail[i]]); tiles[i] = t; lvl[i] = l; grid.art.detail[i] = 0; };
     const prop = (px, py, kind, z, v) => props.push({ x: Math.round(px), y: Math.round(py), kind, z, v });
     for (let m = 0; m < N; m++){
       if (tiles[m] !== CAVE) continue;
@@ -877,13 +883,13 @@
           if (!ok) break;
         }
         if (!ok) continue;
-        cells.add(m);
         // A worn way in: path outside the mouth, so nothing grows across it.
         for (const j of [below, below + W]) if (j < N && !NOT.has(tiles[j]) && lvl[j] === lvl[below]){ tiles[j] = id('path'); grid.art.detail[j] = 0; }
-        for (const i of cells){ tiles[i] = FLOOR; lvl[i] = L - 1; taken[i] = 1; grid.art.detail[i] = 0; }
+        const k = out.length;
+        for (const i of cells){ dig(i, FLOOR, L - 1); taken[i] = 1; caveOf[i] = k; }
         for (const i of cells){
           const x = i % W, y = (i / W) | 0;
-          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){ const j = (y + dy) * W + x + dx; if (!cells.has(j) && lvl[j] >= L){ tiles[j] = CLIFF; taken[j] = 1; grid.art.detail[j] = 0; } }
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){ const j = (y + dy) * W + x + dx; if (j !== m && !cells.has(j) && lvl[j] >= L){ dig(j, CLIFF, lvl[j]); taken[j] = 1; } }
         }
         // What is in it: the chest in the deepest spot, a nest in the chamber (on a 2 × 2 of
         // floor), a recording somewhere between. Distances by walking from the mouth.
@@ -892,7 +898,10 @@
         const inner = [...cells].filter(i => [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dy]) => cells.has(i + dy * W + dx)));
         const deepest = inner.reduce((b, i) => dist.get(i) > dist.get(b) ? i : b, inner[0] ?? m);
         const at = i => ({ x: i % W, y: (i / W) | 0 });
-        const cave = { x: mx, y: my, size: size ? 'medium' : 'small', cells: cells.size, chest: { ...at(deepest), rare: h(13) < (size ? 0.6 : 0.25) }, nest: null, recording: null };
+        // The way through: `inside` is the floor just behind the mouth, `outside` the ground in
+        // front of it.
+        const cave = { x: mx, y: my, size: size ? 'medium' : 'small', cells: cells.size, inside: { x: mx, y: my - 1 }, outside: { x: mx, y: my + 1 }, level: L,
+          chest: { ...at(deepest), rare: h(13) < (size ? 0.6 : 0.25) }, nest: null, recording: null };
         // Room for the nest's footprint (the buildable's size) with floor all round it.
         const NW = G.Defs.buildables.get('cave_nest')?.w || 2, NH = G.Defs.buildables.get('cave_nest')?.h || 2;
         const block = i => { for (let dy = -1; dy <= NH; dy++) for (let dx = -1; dx <= NW; dx++){ const j = i + dy * W + dx; if (!cells.has(j) || (dx >= 0 && dy >= 0 && dx < NW && dy < NH && j === deepest)) return false; } return true; };
@@ -919,6 +928,8 @@
       }
     }
     grid.touch();
+    grid.art.caveOf = caveOf;
+    grid.art.roof = { idx: Int32Array.from(roof.keys()), tiles: Uint8Array.from([...roof.values()].map(v => v[0])), level: Uint8Array.from([...roof.values()].map(v => v[1])), detail: Uint8Array.from([...roof.values()].map(v => v[2])) };
     return { caves: out, props };
   }
 

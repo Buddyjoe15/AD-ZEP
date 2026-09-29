@@ -93,8 +93,9 @@
   // A change to the tiles rebuilds what it touches: the houses (only if it reaches one), the
   // bridges' directions and the caverns.
   G.Events.on('terrain:changed', r => {
-    const grd = G.State.grid, a = grd && grd.art;
+    const grd = G.CaveView.terrainGrid(), a = grd && grd.art;
     if (!a) return;
+    if (G.State.grid && G.State.grid.art && G.State.grid.art !== a) G.State.grid.art.cavernArt = null;   // (the caves themselves)
     a.bridgeWay = null; a.cavernArt = null;
     if (!a.houses || !r){ a.houses = null; return; }
     const k = ids(), PART = new Set([k.wall, k.floor, k.door, k.log_wall]);
@@ -431,6 +432,8 @@
       for (const C of caverns(grd)){ if (C.cv) continue; C.cv = cavernCanvas(C, grd); if (performance.now() > deadline) return false; }
       return true;
     },
+    // The cavern walls' art for `grd`, drawn now if need be (the cave view).
+    cavernArt(grd){ const L = caverns(grd); for (const C of L) if (!C.cv) C.cv = cavernCanvas(C, grd); return L; },
     // Draws cave floor tile (gx, gy) at (px, py), S world px square.
     caveFloor(ctx, gx, gy, px, py, S){
       const P = G.PixelArt, smooth = ctx.imageSmoothingEnabled;
@@ -484,5 +487,5 @@
 })();
 // A new map, or changed terrain: its houses and caverns are drawn ahead again; the contour
 // fields are built straight away.
-GW.Events.on('world:created', () => { GW.Renderer.warmed = false; GW.Landscape.warm(GW.State.grid); });
+GW.Events.on('world:created', () => { GW.Renderer.warmed = false; GW.Landscape.warm(GW.CaveView.terrainGrid()); });
 GW.Events.on('terrain:changed', () => { GW.Renderer.warmed = false; });

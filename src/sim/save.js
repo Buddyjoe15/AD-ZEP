@@ -233,8 +233,18 @@
     return v;
   }
 
-  // Keyed by the schema each step upgrades from; add { 13: migrate_13_to_14 } and so on.
-  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7, 7: migrate_7_to_8, 8: migrate_8_to_9, 9: migrate_9_to_10, 10: migrate_10_to_11, 11: migrate_11_to_12, 12: migrate_12_to_13 };
+  // Schema 14: caves are underground (Genesis). A unit on its way through a cave's entrance
+  // records it (caveTransit: { cave, dir: 'in' | 'out', then }, and caveRetry, when it next
+  // asks for a route to the entrance). Older saves have nobody on the way through.
+  function migrate_13_to_14(d){
+    const v = G.copy(d);
+    v.schema = 14;
+    for (const u of v.units || []){ u.caveTransit = null; u.caveRetry = 0; }
+    return v;
+  }
+
+  // Keyed by the schema each step upgrades from; add { 14: migrate_14_to_15 } and so on.
+  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7, 7: migrate_7_to_8, 8: migrate_8_to_9, 9: migrate_9_to_10, 10: migrate_10_to_11, 11: migrate_11_to_12, 12: migrate_12_to_13, 13: migrate_13_to_14 };
 
   // Applies the steps in order until the save reaches G.SAVE_SCHEMA. A current save is
   // returned as is; anything newer or unknown is rejected.
@@ -293,6 +303,9 @@
       if (u.team === 'red' && (u.isHero || u.isShip)) fail('hostile flags');
       for (const k of ['followId']) if (u[k] != null && !int(u[k])) fail('unit ' + k);
       for (const k of ['mineId', 'nodeId', 'spawnerId']) if (u[k] != null && typeof u[k] !== 'string') fail('unit ' + k);
+      const tr = u.caveTransit;
+      if (tr !== null && !(tr && int(tr.cave) && tr.cave >= 0 && ['in', 'out'].includes(tr.dir) && (tr.then === null || point(tr.then)))) fail('unit cave transit');
+      if (!num(u.caveRetry)) fail('unit caveRetry');
     }
     if (d.units.filter(u => u.isHero).length !== 1 || !d.units.some(u => u.isHero && u.id === d.heroId)) fail('commander');
     if (d.units.filter(u => u.isShip).length !== 1 || !d.units.some(u => u.isShip && u.id === d.shipId)) fail('ship');

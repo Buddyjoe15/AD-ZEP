@@ -56,6 +56,9 @@
       g.fillStyle = '#1a211a'; g.fillRect(0, 0, this.w, this.h);
       if (!S.grid) return;
       const c = S.camera, z = c.z, t = S.time, v = this.view(), inView = (x, y, p) => x > v.x0 - p && y > v.y0 - p && x < v.x1 + p && y < v.y1 + p;
+      // Surface or a cave (Genesis): the terrain comes from the surface copy of the grid, and
+      // only what is on the layer in view is drawn.
+      const CV = G.CaveView, inCave = CV.cave >= 0, TG = CV.terrainGrid(), here = o => CV.here(o);
       g.save(); g.scale(z, z); g.translate(-c.x, -c.y);
 
       // Terrain: overview image underneath, detailed chunks on top when close enough.
@@ -80,10 +83,11 @@
       const res = low ? C.FAR_CHUNK_SCALE : want1, ct = TC.tilesFor(res) * T;
       const [cx0, cy0, cx1, cy1] = span(ct);
       // Free-standing trees (Genesis) are drawn live up close and drawn into the chunks further out.
-      const TA = G.TreeArt, trees = TA.has(S.grid);
-      L.live = near && TA.live(S.grid, z * (L.live ? 1.08 : 0.95));
+      const TA = G.TreeArt, trees = TA.has(TG);
+      L.live = near && TA.live(TG, z * (L.live ? 1.08 : 0.95));
       const bake = trees && !L.live, live = trees && near ? new Set() : null;
-      g.imageSmoothingEnabled = false; g.drawImage(TC.getOverview(), 0, 0, C.WORLD_W, C.WORLD_H); g.imageSmoothingEnabled = true;
+      if (inCave) CV.drawCave(g, v, z, t);
+      else { g.imageSmoothingEnabled = false; g.drawImage(TC.getOverview(), 0, 0, C.WORLD_W, C.WORLD_H); g.imageSmoothingEnabled = true; }
       let chunks = 0;
       // The best copy at hand for the world rect of chunk (cx, cy) while it is painted: another
       // resolution (its chunk may be larger or smaller: the matching part, or the parts), the
@@ -112,7 +116,7 @@
         }
         return null;
       };
-      if (!far){
+      if (!far && !inCave){
         g.imageSmoothingEnabled = !(G.PixelArt.enabled && z * this.dpr >= 1);   // pixel terrain stays crisp up close
         // Chunks in view are never evicted while they are wanted. Missing ones are painted
         // nearest the middle of the screen first, as many as fit in a few milliseconds a frame
@@ -152,17 +156,17 @@
           }
         }
         // Time to spare: houses and caverns are drawn ahead of need.
-        if (!this.warmed && spare() > C.CHUNK_BUILD_MS * 0.5) this.warmed = G.Structures.warm(S.grid, now() + spare() * 0.8);
+        if (!this.warmed && spare() > C.CHUNK_BUILD_MS * 0.5) this.warmed = G.Structures.warm(TG, now() + spare() * 0.8);
         g.imageSmoothingEnabled = true;
         // Pixel-art trees moving in the wind (Woodlands); lower-resolution chunks have them drawn in.
-        if (near) G.Landscape.drawLive(g, S.grid, v, t, z);   // waterfalls and glinting water (Genesis)
-        if (near) G.WoodlandsArt.drawTrees(g, S.grid, v, T, t, z);
-        if (live && live.size) TA.drawLive(g, S.grid, v, t, (cx, cy) => live.has(cy * 4096 + cx));
+        if (near) G.Landscape.drawLive(g, TG, v, t, z);   // waterfalls and glinting water (Genesis)
+        if (near) G.WoodlandsArt.drawTrees(g, TG, v, T, t, z);
+        if (live && live.size) TA.drawLive(g, TG, v, t, (cx, cy) => live.has(cy * 4096 + cx));
       }
 
       // Resource nodes.
       for (const n of S.resourceNodes){
-        if (n.remaining <= 0 || !inView(n.x, n.y, 30)) continue;
+        if (n.remaining <= 0 || !inView(n.x, n.y, 30) || !here(n)) continue;
         if (G.Gather.isDeposit(n)){
           // 1×1 mine deposit (hidden under its Mine Building once built).
           if (G.Gather.mineOn(n)) continue;
@@ -182,7 +186,7 @@
       }
       // Containers and ground items.
       for (const ctn of S.containers){
-        if (!inView(ctn.x, ctn.y, 48)) continue;
+        if (!inView(ctn.x, ctn.y, 48) || !here(ctn)) continue;
         if (ctn.type === 'ground_item'){
           if (!ctn.items.length) continue;
           g.fillStyle = '#87d5e3'; g.fillRect(ctn.x - 7, ctn.y - 7, 14, 14);
@@ -198,7 +202,7 @@
       }
       // Construction sites.
       for (const site of S.constructionSites){
-        if (!inView(site.x, site.y, site.w * T)) continue;
+        if (!inView(site.x, site.y, site.w * T) || !here(site)) continue;
         const px = G.Buildings.fx(site) * T, py = G.Buildings.fy(site) * T, pct = 1 - site.remaining / site.buildTime;
         if (G.PixelArt.buildingSprite(site.type)) G.PixelArt.drawSite(g, site, pct);
         else {
@@ -210,15 +214,15 @@
         g.fillStyle = '#fff0b0'; g.font = (9 / z) + 'px sans-serif'; g.textAlign = 'center'; g.fillText(site.remaining.toFixed(1) + 's', site.x, py - 5);
       }
       // Structures (and, with pixel art, the rubble of recently destroyed ones).
-      if (G.PixelArt.enabled) G.PixelArt.drawRubble(g, inView);
+      if (G.PixelArt.enabled && !inCave) G.PixelArt.drawRubble(g, inView);
       // Pixel-art structures draw every shadow first, so no shadow falls on a neighbour.
       const P = G.PixelArt;
-      if (P.enabled) for (const b of S.buildings) if (inView(b.x, b.y, b.w * T) && P.buildingSprite(b.type)) P.drawBuildingShadow(g, b, t);
-      for (const b of S.buildings) if (inView(b.x, b.y, b.w * T)) G.Visuals.drawBuilding(g, b, z, t, P.enabled);
+      if (P.enabled) for (const b of S.buildings) if (inView(b.x, b.y, b.w * T) && here(b) && P.buildingSprite(b.type)) P.drawBuildingShadow(g, b, t);
+      for (const b of S.buildings) if (inView(b.x, b.y, b.w * T) && here(b)) G.Visuals.drawBuilding(g, b, z, t, P.enabled);
       G.Visuals.shields(g, z, t, inView);
       // Expedition signals.
       const E = S.expedition;
-      if (E) for (const p of E.sites){
+      if (E && !inCave) for (const p of E.sites){
         if (p.done || !inView(p.x, p.y, 50)) continue;
         g.strokeStyle = p.kind === 'Element P' ? '#c591ff' : '#70e3dd'; g.lineWidth = 2 / z;
         g.beginPath(); g.arc(p.x, p.y, 20, 0, TAU); g.stroke();
@@ -228,14 +232,15 @@
 
       // Fog of war over the map and structures; hidden enemies are not drawn at all.
       const Fog = G.Fog;
-      if (Fog.enabled){ Fog.update(); Fog.draw(g); }
+      if (Fog.enabled && !inCave){ Fog.update(); Fog.draw(g); }
+      if (!inCave) CV.drawMouths(g, z, inView);
 
       // Units. With WebGL2 they are drawn by the GPU on their own canvas (one instanced call);
       // the ship stays on this canvas and everything that must sit above units (selection,
       // routes, beams, gunfire, previews) goes on a 2D overlay canvas. Without WebGL2 the
       // same content is drawn here with Canvas 2D.
       const visible = [];
-      for (const u of S.units) if (inView(u.x, u.y, u.isShip ? 340 : 80) && (u.team === 'blue' || Fog.visibleAt(u.x, u.y))) visible.push(u);
+      for (const u of S.units) if (inView(u.x, u.y, u.isShip ? 340 : 80) && here(u) && (u.team === 'blue' || inCave || Fog.visibleAt(u.x, u.y))) visible.push(u);
       const gpu = G.GPU.ok, sprites = [], bars = [];
       for (const u of visible){
         if (u.isShip) G.Visuals.drawUnit(g, u, z, t);
@@ -332,7 +337,7 @@
     drawOverlay(g, visible, z, t, inView, lod2d){
       const S = G.State, C = G.CONFIG, T = C.TILE;
       // Hostile entry points on the map's edge: red chevrons pointing into the map.
-      if (S.expedition) for (const e of G.Expedition.entries()){
+      if (S.expedition && G.CaveView.cave < 0) for (const e of G.Expedition.entries()){
         if (!inView(e.x, e.y, 200)) continue;
         const pulse = 0.55 + 0.35 * Math.sin(t * 3), px = -e.ny, py = e.nx;
         g.save(); g.lineWidth = 6; g.lineJoin = 'round'; g.strokeStyle = `rgba(255,80,64,${pulse.toFixed(3)})`;
@@ -343,7 +348,7 @@
         g.restore();
       }
       // Treetops over the units under them, then falling trees, dust and sawdust (Genesis).
-      G.TreeArt.drawOverUnits(g, S.grid, visible, t, z);
+      if (G.CaveView.cave < 0) G.TreeArt.drawOverUnits(g, G.CaveView.terrainGrid(), visible, t, z);
       for (const u of visible){ const p = u.command === 'gather' && G.Gather.chopTarget(u) >= 0 && G.Visuals.laserTarget(u); if (p) G.TreeFX.saw(p.x, p.y); }
       G.TreeFX.draw(g, z);
       const sel = visible.filter(u => S.selected.has(u.id) && !u.isShip);
@@ -496,7 +501,7 @@
       const g = base.getContext('2d'), sx = W / C.WORLD_W, sy = H / C.WORLD_H;
       g.drawImage(G.TerrainCache.getOverview(), 0, 0, W, H);
       for (const n of S.resourceNodes) if (n.remaining > 0){ g.fillStyle = G.Gather.isDeposit(n) ? G.Gather.def(n).ore || '#c9d4dc' : '#d0a65b'; g.fillRect(n.x * sx - 1, n.y * sy - 1, 3, 3); }
-      for (const b of S.buildings){ g.fillStyle = '#adb5ad'; g.fillRect(b.x * sx - 1, b.y * sy - 1, 3, 3); }
+      for (const b of S.buildings){ if (G.Caves.layer(b) >= 0) continue; g.fillStyle = '#adb5ad'; g.fillRect(b.x * sx - 1, b.y * sy - 1, 3, 3); }   // (not underground)
       for (const s of S.constructionSites){ g.fillStyle = '#d4b96b'; g.fillRect(s.x * sx - 1, s.y * sy - 1, 3, 3); }
       // Where hostile waves enter the map: red wedges on the edge, pointing in.
       if (S.expedition) for (const e of G.Expedition.entries()){
@@ -508,7 +513,7 @@
       // Ordinary units batched per team; ship and Vance on top.
       const byTeam = new Map();
       for (const u of S.units){
-        if (u.isShip || u.isHero || !G.Fog.canSee(u)) continue;
+        if (u.isShip || u.isHero || !G.Fog.canSee(u) || G.Caves.layer(u) >= 0) continue;   // (not those underground)
         const col = C.COLORS[u.team] || '#ccc';
         let list = byTeam.get(col);
         if (!list) byTeam.set(col, list = []);

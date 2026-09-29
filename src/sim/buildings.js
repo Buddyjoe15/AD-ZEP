@@ -81,7 +81,8 @@
     canPlace(gx, gy, w = 1, h = 1, sx = 0, sy = 0){
       const S = G.State, C = G.CONFIG, grid = S.grid, cw = w + (sx ? 1 : 0), ch = h + (sy ? 1 : 0);
       if (!grid || gx < 0 || gy < 0 || gx + cw > C.COLS || gy + ch > C.ROWS) return false;
-      for (let y = gy; y < gy + ch; y++) for (let x = gx; x < gx + cw; x++) if (!grid.terrainPassable(x, y)) return false;
+      const caveOf = grid.art && grid.art.caveOf;   // (nothing is built in the caves, underground)
+      for (let y = gy; y < gy + ch; y++) for (let x = gx; x < gx + cw; x++) if (!grid.terrainPassable(x, y) || (caveOf && caveOf[y * grid.cols + x] >= 0)) return false;
       // In cells: this footprint, then anything else's.
       const c0 = gx * SUB + sx, r0 = gy * SUB + sy, c1 = c0 + w * SUB, r1 = r0 + h * SUB;
       const hits = (x, y, ww, hh) => x < c1 && x + ww > c0 && y < r1 && y + hh > r0;
@@ -136,7 +137,7 @@
       const T = G.CONFIG.TILE;
       let best = null, bd = Infinity;
       for (const b of G.State.buildings){
-        if (b.hp <= 0 || b.team === u.team || b.testZone) continue;
+        if (b.hp <= 0 || b.team === u.team || b.testZone || !G.Caves.same(u, b)) continue;
         const dx = Math.max(Math.abs(u.x - b.x) - b.w * T / 2, 0), dy = Math.max(Math.abs(u.y - b.y) - b.h * T / 2, 0), d = Math.hypot(dx, dy);
         if (d <= r && d < bd){ bd = d; best = b; }
       }

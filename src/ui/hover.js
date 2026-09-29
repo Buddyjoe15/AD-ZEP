@@ -51,7 +51,16 @@
       if (!S.grid) return null;
       const gx = Math.floor(x / T), gy = Math.floor(y / T);
       if (!S.grid.inBounds(gx, gy)) return null;
-      const F = G.Fog, seen = !F.enabled || !F.seen || F.seen[gy * F.cols + gx];
+      const CV = G.CaveView, F = G.Fog, seen = CV.cave >= 0 || !F.enabled || !F.seen || F.seen[gy * F.cols + gx];
+      // Underground: only the cave in view is there; the rest is rock.
+      if (CV.cave >= 0 && !CV.hereAt(x, y)) return { title: 'Rock', kind: 'Underground', lines: ['Solid rock round the cave.'] };
+      const door = CV.doorAt(x, y);
+      if (door >= 0){
+        const c = G.Caves.list()[door], units = I.selectedUnits().length;
+        return CV.cave < 0
+          ? { title: c.size === 'medium' ? 'Cave' : 'Small cave', kind: 'Cave entrance', lines: [units ? 'Click to send the selected units in.' : 'Click to look inside. Select units first to send them in.', 'The cave is underground: what is inside can only be seen from in there.'] }
+          : { title: 'Way out', kind: 'Cave entrance', lines: [units ? 'Click to send the selected units back to the surface.' : 'Click to return to the surface.'] };
+      }
       if (!seen) return { title: 'Unexplored', kind: 'Fog of war', lines: ['Send a unit to see what is here.'] };
       const u = I.unitAt(x, y, true);
       if (u){
@@ -73,7 +82,7 @@
       // Trees, stumps, fallen trees and the rest of the landscape (small detail included).
       if (G.Trees.has()){
         let best = -1, bd = 1e9;
-        G.Trees.within(x, y, 18, k => { const p = G.Trees.nearestPoint(k, x, y), dd = Math.hypot(p.x - x, p.y - y); if (dd < bd){ bd = dd; best = k; } });
+        G.Trees.within(x, y, 18, k => { const p = G.Trees.nearestPoint(k, x, y), dd = Math.hypot(p.x - x, p.y - y); if (dd < bd && CV.here(G.Trees.pos(k))){ bd = dd; best = k; } });
         if (best >= 0){
           const kind = G.Trees.kind(best), sp = G.TREES.species[kind], pr = G.TREES.props[kind], z = G.Trees.pos(best) && G.State.grid.art.trees.size[best];
           const name = sp ? `${['Young', 'Mature', 'Old'][z] || ''} ${sp.name.toLowerCase()}`.trim() : pr ? pr.name : kind;
@@ -85,12 +94,13 @@
           return { title: name.charAt(0).toUpperCase() + name.slice(1), kind: sp ? 'Tree' : 'Landscape', lines };
         }
       }
-      const t = S.grid.tiles[gy * S.grid.cols + gx], key = G.Defs.terrain.keys().find(k => G.Defs.terrain.get(k).id === t), d = G.Defs.terrain.get(key);
+      const TG = CV.cave >= 0 ? S.grid : CV.terrainGrid();   // (the surface: rock over the caves)
+      const t = TG.tiles[gy * S.grid.cols + gx], key = G.Defs.terrain.keys().find(k => G.Defs.terrain.get(k).id === t), d = G.Defs.terrain.get(key);
       const lines = [];
       if (TERRAIN_NOTE[key]) lines.push(TERRAIN_NOTE[key]);
       else if (!d.passable) lines.push('Impassable.');
       else if (d.speed && d.speed !== 1) lines.push(d.speed < 1 ? 'Slows units.' : 'Units move faster here.');
-      const lvl = S.grid.art && S.grid.art.level;
+      const lvl = TG.art && TG.art.level;
       if (lvl) lines.push(`Height ${lvl[gy * S.grid.cols + gx]}`);
       return { title: d.name, kind: 'Ground', lines };
     },

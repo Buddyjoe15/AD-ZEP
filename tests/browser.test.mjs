@@ -148,7 +148,7 @@ for (const target of ['index.html', 'dist/ad-ezp.html']){
       const before = await page.evaluate(() => GW.State.buildings.length);
       const spot = await page.evaluate(() => { const T = 48, g = GW.State.grid, c = GW.State.camera, R = GW.Renderer;
         for (let gy = Math.floor((c.y + 200 / c.z) / T); gy < (c.y + (R.h - 250) / c.z) / T; gy++) for (let gx = Math.floor((c.x + 420 / c.z) / T); gx < (c.x + (R.w - 420) / c.z) / T; gx++)
-          if (GW.Buildings.canPlace(gx, gy, 2, 2)) return { x: gx * T + 10, y: gy * T + 10 }; });
+          { const x = gx * T + 10, y = gy * T + 10, at = GW.Buildings.placementAt('sensor', x, y); if (GW.Buildings.canPlaceKey('sensor', at.gx, at.gy, at.sx, at.sy)) return { x, y }; } });
       p = await screen(page, spot.x, spot.y);
       await page.mouse.click(p.x, p.y);
       assert.equal(await page.evaluate(() => GW.State.buildings.length), before + 1);
@@ -876,6 +876,46 @@ test('Shield Projector window switches the field on and off; its state survives 
     await page.click('#shClose');
     assert.ok(await page.isHidden('#shieldPanel'));
     await page.evaluate(() => localStorage.clear());
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('caves are underground: click the entrance to look inside or send units in, and the way out to come back up', { skip, timeout: 90000 }, async () => {
+  fs.mkdirSync(OUT, { recursive: true });
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    const errors = track(page);
+    await page.goto(pathToFileURL(path.join(ROOT, 'index.html')).href);
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'mainMenu');
+    await page.click('[data-home="new"]'); await page.click('[data-new-slot="1"]');
+    if (await page.$('#confirmOverwriteBtn')) await page.click('#confirmOverwriteBtn');
+    await page.fill('#ezSeedInput', '72491'); await page.selectOption('#ezMapInput', 'genesis');
+    await page.click('#launchVance'); await page.click('#introSkipBtn');
+    await page.waitForFunction(() => GW.SceneManager.currentName === 'gameplay' && !GW.State.introCamera, null, { timeout: 15000 });
+    const c = await page.evaluate(() => { GW.Fog.set(false); const c = GW.Caves.list()[0]; GW.centerCamera((c.x + 0.5) * 48, (c.y - 2) * 48, 1); GW.Selection.clear(); return c; });
+    const at = (x, y) => page.evaluate(([x, y]) => GW.screenFromWorld(x, y), [x, y]);
+    // On the surface the cavern isn't drawn: the ground over it is the surface copy's.
+    assert.ok(await page.evaluate(c => { const sg = GW.CaveView.terrainGrid(), i = (c.inside.y) * GW.State.grid.cols + c.inside.x; return sg !== GW.State.grid && sg.tiles[i] !== GW.State.grid.tiles[i]; }, c));
+    // With nothing selected, clicking the mouth looks inside.
+    let p = await at((c.x + 0.5) * 48, (c.y + 0.5) * 48);
+    await page.mouse.click(p.x, p.y);
+    assert.equal(await page.evaluate(() => GW.CaveView.cave), 0, 'the view goes into the cave');
+    assert.ok(await page.isVisible('#caveReturnBtn'));
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: path.join(OUT, 'cave-inside.png') });
+    await page.click('#caveReturnBtn');
+    assert.equal(await page.evaluate(() => GW.CaveView.cave), -1);
+    assert.ok(await page.isHidden('#caveReturnBtn'));
+    // Vance selected, click the entrance: he walks in, and the view follows him down.
+    await page.evaluate(c => { const h = GW.Units.hero(), q = GW.openPoint((c.outside.x + 0.5) * 48, (c.outside.y + 4) * 48); h.x = q.x; h.y = q.y; GW.Units.clearOrders(h); GW.rebuildSpatial(); GW.Selection.set([h.id]); GW.centerCamera((c.x + 0.5) * 48, (c.y + 1) * 48, 1); }, c);
+    p = await at((c.x + 0.5) * 48, (c.y + 0.5) * 48);
+    await page.mouse.click(p.x, p.y);
+    await page.waitForFunction(() => GW.CaveView.cave === 0 && GW.Caves.layer(GW.Units.hero()) === 0, null, { timeout: 20000 });
+    // And back out through the way out.
+    p = await at((c.inside.x + 0.5) * 48, (c.inside.y + 0.5) * 48);
+    await page.mouse.click(p.x, p.y);
+    await page.waitForFunction(() => GW.Caves.layer(GW.Units.hero()) === -1 && GW.CaveView.cave === -1, null, { timeout: 20000 });
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

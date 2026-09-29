@@ -62,24 +62,24 @@
       const S = G.State, r = this.radius();
       let best = null, bd = r;
       for (const u of S.spatial.query(wx, wy, r + 20)){
-        if (u.hp <= 0 || u.isShip || (!anyTeam && u.team !== 'blue') || (!ignoreFog && !G.Fog.canSee(u))) continue;
+        if (u.hp <= 0 || u.isShip || (!anyTeam && u.team !== 'blue') || (!ignoreFog && !G.Fog.canSee(u)) || !G.CaveView.here(u)) continue;
         const d = Math.hypot(u.x - wx, u.y - wy);
         if (d < bd){ bd = d; best = u; }
       }
       if (best) return best;
       const sh = G.Units.ship(), T = G.CONFIG.TILE;
-      return sh && Math.abs(wx - sh.x) <= sh.w * T / 2 && Math.abs(wy - sh.y) <= sh.h * T / 2 ? sh : null;
+      return sh && G.CaveView.here(sh) && Math.abs(wx - sh.x) <= sh.w * T / 2 && Math.abs(wy - sh.y) <= sh.h * T / 2 ? sh : null;
     },
     containerAt(wx, wy){
       let best = null, bd = this.radius();
       for (const c of G.State.containers){
-        if (c.type === 'ground_item' && !c.items.length) continue;
+        if ((c.type === 'ground_item' && !c.items.length) || !G.CaveView.here(c)) continue;
         const d = Math.hypot(c.x - wx, c.y - wy);
         if (d < bd){ bd = d; best = c; }
       }
       return best;
     },
-    buildingAt(wx, wy){ return G.Buildings.atPoint(wx, wy); },
+    buildingAt(wx, wy){ const b = G.Buildings.atPoint(wx, wy); return b && G.CaveView.here(b) ? b : null; },
     nodeAt(wx, wy){ const r = 32 / G.State.camera.z; return G.State.resourceNodes.find(n => n.remaining > 0 && Math.hypot(n.x - wx, n.y - wy) < r) || null; },
     // Something a gatherer can be sent to: a Mine Building, or a scavenge / deposit node;
     // or, with a unit that saws selected, a tree, stump or fallen tree ({ tree: index }).
@@ -88,7 +88,7 @@
       if (b && G.Gather.isMine(b)) return b;
       const n = this.nodeAt(wx, wy);
       if (n) return n;
-      if (this.selectedUnits().some(u => G.Gather.canChop(u))){ const k = G.Trees.at(wx, wy); if (k >= 0) return { tree: k }; }
+      if (this.selectedUnits().some(u => G.Gather.canChop(u))){ const k = G.Trees.at(wx, wy), p = k >= 0 && G.Trees.pos(k); if (p && G.CaveView.here(p)) return { tree: k }; }
       return null;
     },
     // Sends the selection to a gather target: every sawing unit to a tree, else the first gatherer.
@@ -134,7 +134,8 @@
       // A pointer consumed here must not also act as a tap / click on release.
       const consume = () => { const o = this.ptr.get(e.pointerId); if (o) o.handled = true; };
       if (e.button === 2){
-        const us = this.selectedUnits(), target = this.gatherTarget(q.x, q.y);
+        const us = this.selectedUnits(), target = this.gatherTarget(q.x, q.y), door = G.CaveView.doorAt(q.x, q.y);
+        if (door >= 0 && us.length){ G.CaveView.useDoor(door, us); return; }   // through a cave's entrance
         if (target && (target.tree != null || this.gatherer())) this.gatherOrder(target);
         else if (us.length) G.Orders.move(us, q.x, q.y);
         return;
@@ -165,6 +166,9 @@
         G.UI.toast(this.commandMode === 'guard' ? 'Guard location set' : 'Patrol route set');
         this.commandMode = null; G.UI.refreshSelection(true); return;
       }
+      // A cave's entrance: selected units go through it; with none, the view does.
+      const door = G.CaveView.doorAt(q.x, q.y);
+      if (door >= 0 && (e.pointerType !== 'mouse' || e.button === 0)){ consume(); G.CaveView.useDoor(door, this.selectedUnits()); return; }
       this.startInspect(e.pointerId, e.clientX, e.clientY, q);
       const chest = this.canInteract() && this.containerAt(q.x, q.y);
       if (chest){ consume(); G.InventoryUI.openContainer(chest); return; }
@@ -274,7 +278,7 @@
         if (Math.hypot(x1 - x0, y1 - y0) > 8){
           const ids = e.shiftKey ? [...S.selected] : [];
           for (const u of S.units){
-            if (u.team !== 'blue' || u.isShip || u.hp <= 0) continue;
+            if (u.team !== 'blue' || u.isShip || u.hp <= 0 || !G.CaveView.here(u)) continue;
             const s = G.screenFromWorld(u.x, u.y);
             if (s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1 && !ids.includes(u.id)) ids.push(u.id);
           }

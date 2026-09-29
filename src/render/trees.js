@@ -80,7 +80,7 @@
     }
   }
   // The game's tree states (G.Trees) when `grd` is the game's grid; null for other grids (the preview).
-  const states = grd => grd === G.State.grid && G.Trees ? G.Trees.states() : null;
+  const states = grd => (grd === G.State.grid || (grd && grd.surfaceOf === G.State.grid)) && G.Trees ? G.Trees.states() : null;   // (or its surface copy)
   // Whether entry j is drawn, and as what: fills I.EK (kind) and I.ES (size) for it.
   function visible(I, j, st, tiles){
     if (j >= I.n0){ if (!I.live[j] || tiles[I.TL[j]] !== treeId) return false; I.EK[j] = I.KD[j]; I.ES[j] = I.SZ[j]; return true; }
@@ -97,10 +97,13 @@
     if (extras) ids.sort((p, q) => orderKey(I, p) - orderKey(I, q)); else ids.sort();
   }
   G.Events.on('terrain:changed', r => {
-    const grd = G.State.grid, I = grd && grd.art && grd.art.treeIndex;
-    if (!I) return;
-    if (!r){ grd.art.treeIndex = null; return; }   // the whole map changed
-    painted(I, r.x - 1, r.y - 1, r.w + 2, r.h + 2);
+    // (The game's grid and, on Genesis, its surface copy: the same index unless each built its own.)
+    for (const grd of new Set([G.State.grid, G.CaveView.terrainGrid()])){
+      const I = grd && grd.art && grd.art.treeIndex;
+      if (!I) continue;
+      if (!r){ grd.art.treeIndex = null; continue; }   // the whole map changed
+      painted(I, r.x - 1, r.y - 1, r.w + 2, r.h + 2);
+    }
   });
   // A tree destroyed (or a stump or fallen tree cleared): repaint the chunks it reaches into.
   G.Events.on('tree:changed', e => {

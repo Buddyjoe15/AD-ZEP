@@ -719,7 +719,7 @@
   };
   // Painted terrain changes the fields around it.
   G.Events.on('terrain:changed', r => {
-    const grd = G.State.grid;
+    const grd = G.CaveView.terrainGrid();
     if (!grd || !grd.art || !grd.art.land) return;
     if (!r) grd.art.land = null; else update(grd, r.x - 2, r.y - 2, r.w + 4, r.h + 4);
   });

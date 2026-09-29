@@ -25,7 +25,7 @@
     // Keys of the chunks the view needs this frame (set by the renderer): never evicted.
     pin: new Set(), key, tilesFor, cost,
     reset(grid){ this.grid = grid; this.jobs.clear(); this.chunks.clear(); this.used = 0; this.farChunks.clear(); this.overview = null; this.overviewDirty = true; },
-    sync(){ if (this.grid !== G.State.grid) this.reset(G.State.grid); },
+    sync(){ const g = G.CaveView.terrainGrid(); if (this.grid !== g) this.reset(g); },   // (the surface copy on Genesis: caves are underground)
     drop(key){ const cv = this.chunks.get(key); if (cv){ this.used -= cost(cv.res); this.chunks.delete(key); } },
     invalidate(rect){
       this.jobs.clear();   // (a half-painted chunk may be stale)
@@ -190,6 +190,6 @@
     }
   };
 
-  G.Events.on('world:created', () => G.TerrainCache.reset(G.State.grid));
+  G.Events.on('world:created', () => G.TerrainCache.reset(G.CaveView.terrainGrid()));
   G.Events.on('terrain:changed', rect => G.TerrainCache.invalidate(rect));
 })();

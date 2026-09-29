@@ -96,7 +96,7 @@
       for (const [team, hash] of Object.entries(S.teamSpatial)){
         if (team === b.team || !hash.count) continue;
         for (const u of hash.query(b.x, b.y, cfg.range)){
-          if (u.hp <= 0 || !this.canHit(cfg, u)) continue;
+          if (u.hp <= 0 || !this.canHit(cfg, u) || !G.Caves.same(u, b)) continue;
           const d = G.dist2(u, b);
           if (d >= min2 && d <= max2 && d < bd){ bd = d; best = u; }
         }

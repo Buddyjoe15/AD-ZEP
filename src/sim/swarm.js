@@ -115,7 +115,7 @@
       let best = null, bd = r * r;
       for (const [team, hash] of Object.entries(S.teamSpatial)){
         if (team === u.team || !hash.count) continue;
-        const v = hash.nearest(u.x, u.y, r);
+        const v = hash.nearest(u.x, u.y, r, G.Combat.sameLayer(u));
         if (v){ const d = G.dist2(u, v); if (d <= bd){ bd = d; best = v; } }
       }
       if (best || !def.attackStructures) return best;
@@ -125,7 +125,7 @@
       if (u.aiTargetId == null) return null;
       const t = G.Units.alive(u.aiTargetId) || G.State.buildings.find(b => b.id === u.aiTargetId && b.hp > 0);
       const leash = (def.aggroTiles || 10) * G.CONFIG.TILE * 1.3;
-      return t && t.team !== u.team && G.within(u, t, leash) ? t : null;
+      return t && t.team !== u.team && G.within(u, t, leash) && G.Caves.same(u, t) ? t : null;
     },
     think(u){
       const S = G.State, def = G.Defs.units.get(u.type);

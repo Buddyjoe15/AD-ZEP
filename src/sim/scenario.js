@@ -73,7 +73,7 @@
   // Fixed simulation order. Spatial indexes are rebuilt inside 'movement' (and by
   // G.rebuildSpatial() whenever a world is created or restored).
   G.SIM_ORDER = ['time', 'containers', 'economy', 'power', 'shields', 'swarm', 'commands', 'gather', 'construction', 'fabrication',
-    'gates', 'paths', 'movement', 'buildings', 'combat', 'expedition', 'cleanup', 'rules'];
+    'gates', 'paths', 'movement', 'caves', 'buildings', 'combat', 'expedition', 'cleanup', 'rules'];
 
   G.Sim = {
     // Advances the simulation by one fixed step. Safe to call headless.

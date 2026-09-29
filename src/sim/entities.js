@@ -32,7 +32,7 @@
         path: [], pathIndex: 0, pathPending: false,
         command: 'idle', guardPoint: null, patrolA: null, patrolB: null, patrolTarget: 0, commandNextPath: 0,
         recallPoint: null, recallRetry: 0, targetId: null, targetNextScan: 0, aiNextPath: 0, squad: null,
-        followId: null, crowd: 0,
+        followId: null, crowd: 0, caveTransit: null, caveRetry: 0,   // caveTransit: { cave, dir: 'in'|'out', then } on the way through a cave's entrance
         aiMode: null, aiTargetId: null, aiNextScan: 0, aiHold: false, spawnerId: null,
         cargo: null, cargoCapacity: 0, haulState: 'idle', nodeId: null, mineId: null, buildSiteId: null,
         storage: null, fabQueue: null, isHero: false, isShip: false, gx: null, gy: null, w: null, h: null
@@ -98,7 +98,7 @@
       u.path = []; u.pathIndex = 0; u.command = 'idle'; u.commandNextPath = 0;
       u.guardPoint = null; u.patrolA = null; u.patrolB = null;
       if (u.cargo){ u.nodeId = null; u.mineId = null; u.haulState = 'idle'; }
-      u.followId = null;
+      u.followId = null; u.caveTransit = null;
       if (!keepRecall) u.recallPoint = null;
     },
     navIdle(u){ return !u.path.length && !u.pathPending; }

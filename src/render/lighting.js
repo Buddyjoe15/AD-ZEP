@@ -38,7 +38,8 @@
     draw(g, cam, z, vw, vh, t){
       if (!this.enabled()) return;
       const S = G.State, dark = this.darkness(), T = G.CONFIG.TILE, art = S.grid.art;
-      const caves = art.caverns && art.caverns.length;
+      // (Caves are underground: their darkness is drawn only while one is in view.)
+      const CV = G.CaveView, view = CV.cave, caves = view >= 0 && art.caverns && art.caverns.length;
       if (dark < 0.01 && !caves) return;
       const w = Math.ceil(vw / SCALE), h = Math.ceil(vh / SCALE);
       if (!cv || cv.width !== w || cv.height !== h){ cv = document.createElement('canvas'); cv.width = w; cv.height = h; cx = cv.getContext('2d'); }
@@ -58,7 +59,7 @@
         if (!glow || glow.width !== w || glow.height !== h){ glow = document.createElement('canvas'); glow.width = w; glow.height = h; }
         const m = glow.getContext('2d');
         m.clearRect(0, 0, w, h); m.fillStyle = 'rgb(4,6,14)';
-        for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) if (tiles[gy * cols + gx] === F) m.fillRect(Math.floor(X(gx * T)), Math.floor(Y(gy * T)), Math.ceil(T * k) + 1, Math.ceil(T * k) + 1);
+        for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) if (tiles[gy * cols + gx] === F && art.caveOf[gy * cols + gx] === view) m.fillRect(Math.floor(X(gx * T)), Math.floor(Y(gy * T)), Math.ceil(T * k) + 1, Math.ceil(T * k) + 1);
         cx.globalAlpha = 0.6 - dark * 0.2; cx.drawImage(glow, 0, 0); cx.globalAlpha = 1;
       }
       // What glows.
@@ -67,7 +68,7 @@
         const ALL = G.TREES.ALL, LAMP = ALL.indexOf('lamp'), CRY = ALL.indexOf('crystal');
         for (let q = 0; q < tr.count; q++){
           const kd = tr.kind[q];
-          if ((kd !== LAMP && kd !== CRY) || !inView(tr.x[q], tr.y[q], 200) || !G.Trees.present(q)) continue;
+          if ((kd !== LAMP && kd !== CRY) || !inView(tr.x[q], tr.y[q], 200) || !G.Trees.present(q) || !CV.hereAt(tr.x[q], tr.y[q])) continue;
           if (kd === LAMP){
             if (dark < 0.05) continue;
             const f = 0.9 + 0.1 * Math.sin(t * 7 + q) * Math.sin(t * 3.1 + q * 1.7);
@@ -76,12 +77,12 @@
         }
       }
       for (const b of S.buildings){
-        if (!inView(b.x, b.y, 200)) continue;
+        if (!inView(b.x, b.y, 200) || !CV.here(b)) continue;
         if (b.type === 'cave_nest') lights.push({ x: b.x, y: b.y, r: 130, a: 0.85, col: [255, 70, 50], glow: 0.4 });
         else if (dark > 0.05 && b.team === 'blue') lights.push({ x: b.x, y: b.y, r: 90 + b.w * 25, a: dark * 0.7, col: [190, 215, 255], glow: 0.12 });
       }
       for (const u of S.units){
-        if (u.team !== 'blue' || !inView(u.x, u.y, 400)) continue;
+        if (u.team !== 'blue' || !inView(u.x, u.y, 400) || !CV.here(u)) continue;
         if (u.isShip) lights.push({ x: u.x, y: u.y, r: 360, a: 0.9, col: [200, 225, 255], glow: 0.15 });
         else if (u.isHero) lights.push({ x: u.x, y: u.y, r: 170, a: 0.95, col: [255, 235, 200], glow: 0.1 });
         else lights.push({ x: u.x, y: u.y, r: 80, a: 0.7, col: [210, 230, 255], glow: 0.06 });

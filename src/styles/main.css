@@ -848,3 +848,5 @@ button:hover{background:#34463a}button:active{transform:translateY(1px)}
   #mainMenuOverlay .main-buttons button{min-height:28px;font-size:9px}
 }
 #mainMenuPanel .ezSeed input,#mainMenuPanel .ezSeed select{margin-left:auto;margin-right:auto}
+#caveReturnBtn{position:absolute;left:50%;top:78px;transform:translateX(-50%);z-index:40;padding:8px 18px;background:#0b1320e6;border:1px solid #8fd8f0;color:#e4f7ff;font-weight:600;letter-spacing:.12em;text-transform:uppercase;font-size:11px}
+#caveReturnBtn.hidden{display:none}
