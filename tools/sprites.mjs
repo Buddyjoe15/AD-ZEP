@@ -200,14 +200,17 @@ function modelFrames(def){
 // Walls have connecting states (16 frames, one per neighbour mask); vertical gates are the
 // horizontal model turned (spec.heading). Keyed by the game's buildable key.
 const STRUCTURE = { shadow: [4, 4], elevation: 'structure' };
+// Walls and gates stay at the size they are modelled at (a wall section is one tile, a thin
+// line of wall through it, so rows join end to end); other structures are shown at SIZE.
+const FENCE = { ...STRUCTURE, size: 1 };
 export const MODELLED_STRUCTURES = {
   sentry_turret: { spec: sentryTurret, ...STRUCTURE },
   laser_turret: { spec: laserTurret, ...STRUCTURE },
-  wood_wall: { spec: woodWall, ...STRUCTURE },
-  defensive_wall: { spec: metalWall, ...STRUCTURE },
-  reinforced_wall: { spec: reinforcedWall, ...STRUCTURE },
-  gate: { spec: gate2, ...STRUCTURE }, gate_3: { spec: gate3, ...STRUCTURE }, gate_4: { spec: gate4, ...STRUCTURE },
-  gate_v: { spec: gate2v, ...STRUCTURE }, gate_3_v: { spec: gate3v, ...STRUCTURE }, gate_4_v: { spec: gate4v, ...STRUCTURE }
+  wood_wall: { spec: woodWall, ...FENCE },
+  defensive_wall: { spec: metalWall, ...FENCE },
+  reinforced_wall: { spec: reinforcedWall, ...FENCE },
+  gate: { spec: gate2, ...FENCE }, gate_3: { spec: gate3, ...FENCE }, gate_4: { spec: gate4, ...FENCE },
+  gate_v: { spec: gate2v, ...FENCE }, gate_3_v: { spec: gate3v, ...FENCE }, gate_4_v: { spec: gate4v, ...FENCE }
 };
 function structureFrames(spec){
   const F = spec.frame, render = (model, heading = spec.heading || 0) => {
@@ -773,17 +776,17 @@ export function build(){
     sheets[name] = { meta, rows };
   }
   for (const [name, def] of Object.entries(MODELLED_STRUCTURES)){
-    const spec = def.spec, { cols, states, head } = structureFrames(spec), [fw, fh] = spec.footprint;
+    const spec = def.spec, { cols, states, head } = structureFrames(spec), [fw, fh] = spec.footprint, size = def.size || SIZE, world = size / SPRITE_RES;
     const shadow = { drawnBy: 'engine', offset: def.shadow.map(v => v * SPRITE_RES), elevation: def.elevation };
     const meta = {
-      name, frameWidth: spec.frame.w, frameHeight: spec.frame.h, origin: [0, 0], footprintTiles: [fw * SIZE, fh * SIZE],
-      worldPxPerArtPx: SPRITE_WORLD, rows: head ? 'row 0 states; the head sheet has one row per facing' : 'single row', model: 'art/sprite-lab/specs/' + spec.key + '.mjs',
+      name, frameWidth: spec.frame.w, frameHeight: spec.frame.h, origin: [0, 0], footprintTiles: [fw * size, fh * size],
+      worldPxPerArtPx: world, rows: head ? 'row 0 states; the head sheet has one row per facing' : 'single row', model: 'art/sprite-lab/specs/' + spec.key + '.mjs',
       states, shadow, team: 'team0..team2 (magenta ramp)'
     };
     const headMeta = head && { facings: head.facings, rows: 'facing, clockwise from up', pivot: 'footprint centre', states: head.states, on: head.on, turnRate: head.turnRate, firing: head.firing, chargeTime: head.chargeTime, flashTime: head.flashTime, muzzle: head.muzzle };
     sprites[name] = { ...meta, frames: [cols.map(g => rle(g.encode()))], ...(head ? { head: { ...headMeta, frames: head.rows.map(r => r.map(g => rle(g.encode()))) } } : {}) };
     sheets[name] = { meta: { ...meta, ...(head ? { head: { ...headMeta, image: name + '_head.png' } } : {}) }, rows: [cols] };
-    if (head) sheets[name + '_head'] = { meta: { name: name + '_head', frameWidth: spec.frame.w, frameHeight: spec.frame.h, origin: [spec.frame.ox, spec.frame.oy], worldPxPerArtPx: SPRITE_WORLD, ...headMeta, shadow }, rows: head.rows };
+    if (head) sheets[name + '_head'] = { meta: { name: name + '_head', frameWidth: spec.frame.w, frameHeight: spec.frame.h, origin: [spec.frame.ox, spec.frame.oy], worldPxPerArtPx: world, ...headMeta, shadow }, rows: head.rows };
   }
   const st = stationFrames(), states = {};
   st.forEach(([state], i) => { (states[state] ||= { start: i, frames: 0 }).frames++; });

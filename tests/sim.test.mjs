@@ -220,9 +220,9 @@ test('a row of walls: one Spider builds each in turn, skipping blocked tiles; ca
   const G = newGame();
   const S = G.State, spider = find(G, 'utility_spider'), p = field(G, 12, 14);
   S.resources.metal = 1000;
-  // Five 2×2 wall spots east of p, with a wall already on the third.
-  const cells = [0, 1, 2, 3, 4].map(i => ({ gx: p.x + i * 2, gy: p.y }));
-  G.Buildings.add('defensive_wall', p.x + 4, p.y);
+  // Five cells east of p, with a wall already on the third.
+  const cells = [0, 1, 2, 3, 4].map(i => ({ gx: p.x + i, gy: p.y }));
+  G.Buildings.add('defensive_wall', p.x + 2, p.y);
   const sites = G.Construction.orderRow(spider, 'wood_wall', cells);
   assert.equal(sites.length, 4, 'the blocked tile is skipped');
   assert.equal(G.Economy.get('metal'), 1000 - 4 * 25, 'paid for four');
@@ -237,13 +237,13 @@ test('a row of walls: one Spider builds each in turn, skipping blocked tiles; ca
   G.State.paused = false;                                     // loading pauses the game
   G.Sim.run(40);
   const built = G.State.buildings.filter(b => b.type === 'wood_wall' && !b.testZone).map(b => b.gx - p.x).sort((a, b) => a - b);
-  assert.equal(built.join(), '0,2,6,8', 'all four built');
+  assert.equal(built.join(), '0,1,3,4', 'all four built');
   assert.equal(G.State.constructionSites.length, 0);
   const sp2 = find(G, 'utility_spider');
   assert.equal(sp2.buildSiteId, null); assert.equal(sp2.command, 'idle');
   // A new order cancels the whole queue and refunds it.
   G.State.resources.metal = 1000;
-  const row = G.Construction.orderRow(sp2, 'defensive_wall', [0, 1, 2].map(i => ({ gx: p.x + i * 2, gy: p.y + 2 })));
+  const row = G.Construction.orderRow(sp2, 'defensive_wall', [0, 1, 2].map(i => ({ gx: p.x + i, gy: p.y + 2 })));
   assert.equal(row.length, 3);
   assert.equal(G.Economy.get('metal'), 1000 - 3 * 60);
   G.Orders.move([sp2], sp2.x + 100, sp2.y);
@@ -251,7 +251,7 @@ test('a row of walls: one Spider builds each in turn, skipping blocked tiles; ca
   assert.equal(G.State.constructionSites.length, 0);
   // The row stops where the metal runs out.
   G.State.resources.metal = 130;
-  assert.equal(G.Construction.orderRow(sp2, 'defensive_wall', [0, 1, 2].map(i => ({ gx: p.x + i * 2, gy: p.y + 4 }))).length, 2);
+  assert.equal(G.Construction.orderRow(sp2, 'defensive_wall', [0, 1, 2].map(i => ({ gx: p.x + i, gy: p.y + 3 }))).length, 2);
 });
 
 test('built chests are containers, not solid buildings', () => {
@@ -1427,26 +1427,26 @@ const field = (G, dx = 14, dy = 16) => { const sh = G.Units.ship(); return G.Sta
 test('building grid: structures snap to quarter-tile cells and may share a tile; movement is blocked on every tile they touch', () => {
   const G = newGame();
   const S = G.State, B = G.Buildings, p = field(G, 16, 20);
-  // Placement snaps to cells, centred on the point: a 2 × 2 wall centred on a tile corner
+  // Placement snaps to cells, centred on the point: a 1 × 1 wall centred on a tile's centre
   // sits squarely; nudged by a cell it sits a quarter tile over.
-  assert.deepEqual({ ...B.placementAt('defensive_wall', (p.x + 1) * T, (p.y + 1) * T) }, { gx: p.x, gy: p.y, sx: 0, sy: 0, node: null });
-  assert.deepEqual({ ...B.placementAt('defensive_wall', (p.x + 1.25) * T, (p.y + 1) * T) }, { gx: p.x, gy: p.y, sx: 1, sy: 0, node: null });
-  // A wall half a tile over: it covers three tiles across, all blocked for movement.
+  assert.deepEqual({ ...B.placementAt('defensive_wall', (p.x + 0.5) * T, (p.y + 0.5) * T) }, { gx: p.x, gy: p.y, sx: 0, sy: 0, node: null });
+  assert.deepEqual({ ...B.placementAt('defensive_wall', (p.x + 0.75) * T, (p.y + 0.5) * T) }, { gx: p.x, gy: p.y, sx: 1, sy: 0, node: null });
+  // A wall half a tile over: it covers two tiles across, both blocked for movement.
   const a = B.add('defensive_wall', p.x, p.y, { sx: 2 });
-  assert.equal(a.x, (p.x + 0.5 + 1) * T);
-  assert.deepEqual({ ...B.cover(a) }, { gx: p.x, gy: p.y, w: 3, h: 2 });
-  for (let x = p.x; x < p.x + 3; x++) assert.equal(S.grid.passable(x, p.y), false, 'tile ' + (x - p.x));
+  assert.equal(a.x, (p.x + 0.5 + 0.5) * T);
+  assert.deepEqual({ ...B.cover(a) }, { gx: p.x, gy: p.y, w: 2, h: 1 });
+  for (let x = p.x; x < p.x + 2; x++) assert.equal(S.grid.passable(x, p.y), false, 'tile ' + (x - p.x));
   // Another wall may share its last tile (cells don't overlap), but not overlap it by a cell.
-  assert.equal(B.canPlaceKey('defensive_wall', p.x + 2, p.y, 2, 0), true, 'flush against it, sharing a tile');
-  assert.equal(B.canPlaceKey('defensive_wall', p.x + 2, p.y, 1, 0), false, 'one cell into it');
-  const b = B.add('defensive_wall', p.x + 2, p.y, { sx: 2 });
+  assert.equal(B.canPlaceKey('defensive_wall', p.x + 1, p.y, 2, 0), true, 'flush against it, sharing a tile');
+  assert.equal(B.canPlaceKey('defensive_wall', p.x + 1, p.y, 1, 0), false, 'one cell into it');
+  const b = B.add('defensive_wall', p.x + 1, p.y, { sx: 2 });
   // The shared tile stays blocked until both are gone.
   B.remove(a);
-  assert.equal(S.grid.passable(p.x + 2, p.y), false, 'still under the second wall');
+  assert.equal(S.grid.passable(p.x + 1, p.y), false, 'still under the second wall');
   assert.equal(S.grid.passable(p.x, p.y), true);
   // Clicks find the structure under the point, not the tile.
-  assert.equal(B.atPoint((p.x + 2.4) * T, (p.y + 0.5) * T), null, 'the free half of the shared tile');
-  assert.equal(B.atPoint((p.x + 2.6) * T, (p.y + 0.5) * T), b);
+  assert.equal(B.atPoint((p.x + 1.4) * T, (p.y + 0.5) * T), null, 'the free half of the shared tile');
+  assert.equal(B.atPoint((p.x + 1.6) * T, (p.y + 0.5) * T), b);
   // A Spider builds at an offset, and a save keeps it.
   S.resources.metal = 1000;
   const spider = find(G, 'utility_spider'), q = field(G, 12, 26);
@@ -1457,7 +1457,7 @@ test('building grid: structures snap to quarter-tile cells and may share a tile;
   G.Save.restore(JSON.parse(JSON.stringify(G.Save.serialize())), 1);
   const again = G.State.buildings.find(o => o.id === built.id);
   assert.deepEqual([again.sx, again.sy, again.x, again.y], [3, 1, built.x, built.y]);
-  assert.equal(G.State.grid.passable(q.x + 2, q.y + 2), false, 'its covered tiles are blocked again after loading');
+  assert.equal(G.State.grid.passable(q.x + 1, q.y + 1), false, 'its covered tiles are blocked again after loading');
 });
 
 test('walls: Reinforced Walls take less damage; both block movement like the old Wall', () => {
@@ -1515,7 +1515,7 @@ test('Laser Turret: charges 2.5 s with a target in range before each shot, and l
 test('gates: 1×3 and 1×4, horizontal and vertical twins; a vertical gate lets friendly units through a north-south wall', () => {
   const G = newGame();
   const S = G.State, T = 48, D = G.Defs.buildables;
-  for (const [key, w, h] of [['gate', 4, 2], ['gate_v', 2, 4], ['gate_3', 6, 2], ['gate_3_v', 2, 6], ['gate_4', 8, 2], ['gate_4_v', 2, 8]]){
+  for (const [key, w, h] of [['gate', 2, 1], ['gate_v', 1, 2], ['gate_3', 3, 1], ['gate_3_v', 1, 3], ['gate_4', 4, 1], ['gate_4_v', 1, 4]]){
     const d = D.get(key);
     assert.equal(d.w + 'x' + d.h, w + 'x' + h, key);
     assert.ok(d.gate && !d.blocksMovement, key + ' is a gate');
@@ -1524,9 +1524,9 @@ test('gates: 1×3 and 1×4, horizontal and vertical twins; a vertical gate lets 
   assert.equal(D.all().filter(d => d.wall).map(d => d.key).join(), 'wood_wall,defensive_wall,reinforced_wall');
   // A north-south wall with a vertical 1×3 gate in it.
   const p = field(G, 20, 20);
-  for (let y = p.y - 8; y <= p.y + 14; y += 2) if (y < p.y || y > p.y + 5) G.Buildings.add('reinforced_wall', p.x, y);
+  for (let y = p.y - 7; y <= p.y + 9; y++) if (y < p.y || y > p.y + 2) G.Buildings.add('reinforced_wall', p.x, y);
   const gate = G.Buildings.add('gate_3_v', p.x, p.y);
-  for (let y = p.y; y < p.y + 6; y++) assert.equal(S.grid.passable(p.x, y), true);
+  for (let y = p.y; y < p.y + 3; y++) assert.equal(S.grid.passable(p.x, y), true);
   const sp = find(G, 'utility_spider');
   G.Units.clearOrders(sp); sp.x = gate.x - 4 * T; sp.y = gate.y;
   G.rebuildSpatial();
@@ -1540,10 +1540,10 @@ test('gates: 1×3 and 1×4, horizontal and vertical twins; a vertical gate lets 
 test('gate: friendly units pass when it opens; enemies never do, and it shuts while they are near', () => {
   const G = newGame();
   const S = G.State, T = 48, p = field(G, 16, 18);
-  // A wall line with a 4×2 gate in the middle.
-  for (let x = p.x - 8; x <= p.x + 10; x += 2) if (x < p.x || x > p.x + 3) G.Buildings.add('defensive_wall', x, p.y);
+  // A wall line with a 2×1 gate in the middle.
+  for (let x = p.x - 6; x <= p.x + 7; x++) if (x < p.x || x > p.x + 1) G.Buildings.add('defensive_wall', x, p.y);
   const gate = G.Buildings.add('gate', p.x, p.y);
-  assert.equal(gate.w, 4); assert.equal(gate.h, 2);
+  assert.equal(gate.w, 2); assert.equal(gate.h, 1);
   assert.equal(S.grid.passable(p.x, p.y), true, 'the grid (and so the pathfinder) sees the gate as a way through');
   assert.equal(G.Buildings.canPlace(p.x, p.y, 1, 1), false, 'nothing can be built on a gate');
   G.Sim.run(0.1);

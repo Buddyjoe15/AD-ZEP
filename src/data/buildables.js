@@ -25,7 +25,9 @@
    `wall` marks a wall: with pixel art, walls join their neighbours on each side (other walls
    and the ends of gates) into one continuous wall; never diagonally.
    Footprints (`w`, `h`, in tiles) are twice what they were before units and structures were
-   shown at twice the size; mines stay odd (7 × 7) so they centre on their deposit.
+   shown at twice the size, except walls and gates, which stay one tile thick (a thin line of
+   wall through the tile, so sections join end to end); mines stay odd (7 × 7) so they centre
+   on their deposit.
    `rotateTo` names the same structure turned 90° (gates); the build menu lists one of the
    pair and rotates between them. `listed: false` keeps a structure out of the build menu. */
 GW.Defs.buildables.defineAll({
@@ -48,48 +50,48 @@ GW.Defs.buildables.defineAll({
   },
   // ---- Walls (join their neighbours into one wall) and gates ----
   wood_wall: {
-    name: 'Wood Wall', w: 2, h: 2, hp: 350, buildTime: 3, cost: { metal: 25 }, wall: true,
+    name: 'Wood Wall', w: 1, h: 1, hp: 350, buildTime: 3, cost: { metal: 25 }, wall: true,
     behaviors: [{ type: 'defenseAura', radiusTiles: 1, reduction: 0.15 }],
-    description: 'Quick, cheap palisade of sharpened logs with stakes angled out from its foot, one 2×2 section at a time. Weakest wall: 350 HP. Friendly units within one tile take 15% less damage.'
+    description: 'Quick, cheap palisade of sharpened logs with stakes angled out from its foot, one 1×1 section at a time. Weakest wall: 350 HP. Friendly units within one tile take 15% less damage.'
   },
   defensive_wall: {
-    name: 'Metal Wall', w: 2, h: 2, hp: 600, buildTime: 5, cost: { metal: 60 }, wall: true,
+    name: 'Metal Wall', w: 1, h: 1, hp: 600, buildTime: 5, cost: { metal: 60 }, wall: true,
     behaviors: [{ type: 'defenseAura', radiusTiles: 1, reduction: 0.20 }],
-    description: 'Standard bolted steel wall, one 2×2 section at a time. Blocks enemies and channels them into controlled approaches. Friendly units within one tile take 20% less damage.'
+    description: 'Standard bolted steel wall, one 1×1 section at a time. Blocks enemies and channels them into controlled approaches. Friendly units within one tile take 20% less damage.'
   },
   reinforced_wall: {
-    name: 'Reinforced Metal Wall', w: 2, h: 2, hp: 1600, armor: 0.35, buildTime: 8, cost: { metal: 40, steel: 12 }, wall: true,
+    name: 'Reinforced Metal Wall', w: 1, h: 1, hp: 1600, armor: 0.35, buildTime: 8, cost: { metal: 40, steel: 12 }, wall: true,
     behaviors: [{ type: 'defenseAura', radiusTiles: 1, reduction: 0.25 }],
     description: 'Heavy armoured wall: 1,600 HP and takes 35% less damage. Friendly units within one tile take 25% less damage.'
   },
   // Gates: 2, 3 or 4 tiles long, each horizontal or vertical (rotateTo). Walls join their ends.
   gate: {
-    name: 'Gate (1×2)', w: 4, h: 2, symbol: 'GATE', color: '#8f9c8a', hp: 900, armor: 0.2, buildTime: 6, cost: { metal: 80 }, blocksMovement: false, rotateTo: 'gate_v',
+    name: 'Gate (1×2)', w: 2, h: 1, symbol: 'GATE', color: '#8f9c8a', hp: 900, armor: 0.2, buildTime: 6, cost: { metal: 80 }, blocksMovement: false, rotateTo: 'gate_v',
     gate: { openTiles: 2, hostileTiles: 6 },
     description: 'Lets Vance, Utility Spiders and other friendly units through defensive walls. Always closed; opens when a friendly unit is within two tiles, and shuts automatically while hostiles are within six. Enemies can never pass. Rotate it to build it across a north-south wall.'
   },
   gate_v: {
-    name: 'Gate (1×2, vertical)', w: 2, h: 4, symbol: 'GATE', color: '#8f9c8a', hp: 900, armor: 0.2, buildTime: 6, cost: { metal: 80 }, blocksMovement: false, rotateTo: 'gate', listed: false,
+    name: 'Gate (1×2, vertical)', w: 1, h: 2, symbol: 'GATE', color: '#8f9c8a', hp: 900, armor: 0.2, buildTime: 6, cost: { metal: 80 }, blocksMovement: false, rotateTo: 'gate', listed: false,
     gate: { openTiles: 2, hostileTiles: 6 },
     description: 'The 1×2 Gate turned for a north-south wall.'
   },
   gate_3: {
-    name: 'Gate (1×3)', w: 6, h: 2, symbol: 'GATE', color: '#8f9c8a', hp: 1300, armor: 0.2, buildTime: 8, cost: { metal: 120 }, blocksMovement: false, rotateTo: 'gate_3_v',
+    name: 'Gate (1×3)', w: 3, h: 1, symbol: 'GATE', color: '#8f9c8a', hp: 1300, armor: 0.2, buildTime: 8, cost: { metal: 120 }, blocksMovement: false, rotateTo: 'gate_3_v',
     gate: { openTiles: 2, hostileTiles: 6 },
     description: 'A wider gate, three tiles across, for groups of units. Opens for friendly units within two tiles and stays shut while hostiles are within six. Rotate it for a north-south wall.'
   },
   gate_3_v: {
-    name: 'Gate (1×3, vertical)', w: 2, h: 6, symbol: 'GATE', color: '#8f9c8a', hp: 1300, armor: 0.2, buildTime: 8, cost: { metal: 120 }, blocksMovement: false, rotateTo: 'gate_3', listed: false,
+    name: 'Gate (1×3, vertical)', w: 1, h: 3, symbol: 'GATE', color: '#8f9c8a', hp: 1300, armor: 0.2, buildTime: 8, cost: { metal: 120 }, blocksMovement: false, rotateTo: 'gate_3', listed: false,
     gate: { openTiles: 2, hostileTiles: 6 },
     description: 'The 1×3 Gate turned for a north-south wall.'
   },
   gate_4: {
-    name: 'Gate (1×4)', w: 8, h: 2, symbol: 'GATE', color: '#8f9c8a', hp: 1700, armor: 0.2, buildTime: 10, cost: { metal: 160 }, blocksMovement: false, rotateTo: 'gate_4_v',
+    name: 'Gate (1×4)', w: 4, h: 1, symbol: 'GATE', color: '#8f9c8a', hp: 1700, armor: 0.2, buildTime: 10, cost: { metal: 160 }, blocksMovement: false, rotateTo: 'gate_4_v',
     gate: { openTiles: 2, hostileTiles: 6 },
     description: 'The widest gate, four tiles across, for convoys. Opens for friendly units within two tiles and stays shut while hostiles are within six. Rotate it for a north-south wall.'
   },
   gate_4_v: {
-    name: 'Gate (1×4, vertical)', w: 2, h: 8, symbol: 'GATE', color: '#8f9c8a', hp: 1700, armor: 0.2, buildTime: 10, cost: { metal: 160 }, blocksMovement: false, rotateTo: 'gate_4', listed: false,
+    name: 'Gate (1×4, vertical)', w: 1, h: 4, symbol: 'GATE', color: '#8f9c8a', hp: 1700, armor: 0.2, buildTime: 10, cost: { metal: 160 }, blocksMovement: false, rotateTo: 'gate_4', listed: false,
     gate: { openTiles: 2, hostileTiles: 6 },
     description: 'The 1×4 Gate turned for a north-south wall.'
   },

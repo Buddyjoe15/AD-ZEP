@@ -216,8 +216,25 @@
     return v;
   }
 
-  // Keyed by the schema each step upgrades from; add { 12: migrate_12_to_13 } and so on.
-  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7, 7: migrate_7_to_8, 8: migrate_8_to_9, 9: migrate_9_to_10, 10: migrate_10_to_11, 11: migrate_11_to_12 };
+  // Schema 13: walls and gates are one tile thick again (a wall section 1 × 1, gates 2 × 1 to
+  // 4 × 1 and their vertical twins), half their schema-12 size. Each shrinks about its centre
+  // on the quarter-tile building grid, so it stays where it was drawn.
+  const FENCES = ['wood_wall', 'defensive_wall', 'reinforced_wall', 'gate', 'gate_v', 'gate_3', 'gate_3_v', 'gate_4', 'gate_4_v'];
+  function migrate_12_to_13(d){
+    const v = G.copy(d), T = 48, K = 4;
+    v.schema = 13;
+    for (const b of [...(v.buildings || []), ...(v.constructionSites || [])]){
+      if (!FENCES.includes(b.type) || b.w % 2 || b.h % 2) continue;
+      b.w /= 2; b.h /= 2;
+      const c = b.gx * K + (b.sx || 0) + b.w * K / 2, r = b.gy * K + (b.sy || 0) + b.h * K / 2;
+      b.gx = Math.floor(c / K); b.sx = c - b.gx * K; b.gy = Math.floor(r / K); b.sy = r - b.gy * K;
+      b.x = (b.gx + b.sx / K + b.w / 2) * T; b.y = (b.gy + b.sy / K + b.h / 2) * T;
+    }
+    return v;
+  }
+
+  // Keyed by the schema each step upgrades from; add { 13: migrate_13_to_14 } and so on.
+  const MIGRATIONS = { 1: migrate_1_to_2, 2: migrate_2_to_3, 3: migrate_3_to_4, 4: migrate_4_to_5, 5: migrate_5_to_6, 6: migrate_6_to_7, 7: migrate_7_to_8, 8: migrate_8_to_9, 9: migrate_9_to_10, 10: migrate_10_to_11, 11: migrate_11_to_12, 12: migrate_12_to_13 };
 
   // Applies the steps in order until the save reaches G.SAVE_SCHEMA. A current save is
   // returned as is; anything newer or unknown is rejected.

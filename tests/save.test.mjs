@@ -326,8 +326,28 @@ test('migrate_11_to_12: structures and sites stand squarely on their tiles, and 
   raw.buildings.forEach((b, i) => { assert.equal(up.buildings[i].x, b.x); assert.equal(up.buildings[i].gx, b.gx); });
   G.Save.restore(raw, 1);
   for (const sx of [4, -1, 1.5, undefined]){
-    const bad = readJSON(fixtureFile(12));
+    const bad = readJSON(fixtureFile(G.SAVE_SCHEMA));
     bad.buildings[0].sx = sx;
     assert.throws(() => G.Save.validate(bad), /building/, String(sx));
   }
+});
+
+test('migrate_12_to_13: walls and gates shrink to one tile thick about their centre; nothing else changes', () => {
+  const G = loadSim();
+  const raw = readJSON(fixtureFile(12)), before = JSON.stringify(raw);
+  const up = G.Save.migrations[12](raw);
+  assert.equal(JSON.stringify(raw), before, 'the input is not modified');
+  assert.equal(up.schema, 13);
+  const fence = t => /_wall$|^gate/.test(t);
+  assert.ok(raw.buildings.some(b => fence(b.type) && b.sx), 'the fixture has a wall off the tile grid');
+  raw.buildings.forEach((b, i) => {
+    const n = up.buildings[i];
+    if (!fence(b.type)){ assert.deepEqual([n.gx, n.gy, n.sx, n.sy, n.w, n.h, n.x, n.y], [b.gx, b.gy, b.sx, b.sy, b.w, b.h, b.x, b.y], b.type); return; }
+    assert.deepEqual([n.w, n.h], [b.w / 2, b.h / 2], b.type);
+    assert.equal(n.x, b.x, b.type + ' keeps its centre'); assert.equal(n.y, b.y);
+    assert.equal((n.gx * 4 + n.sx) - (b.gx * 4 + b.sx), n.w * 2, b.type + ' moves in by half its new size');
+  });
+  // Restored, footprints match the definitions.
+  const S = G.Save.restore(raw, 1);
+  for (const b of S.buildings){ const d = G.Defs.buildables.get(b.type); assert.deepEqual([b.w, b.h], [d.w, d.h], b.type); }
 });

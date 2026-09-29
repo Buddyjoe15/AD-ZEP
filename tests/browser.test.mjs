@@ -627,9 +627,8 @@ test('pixel-art walls join their neighbours and gate ends (never diagonally); ga
     const r = await page.evaluate(() => {
       const G = GW, S = G.State, h = G.Units.hero(), T = G.CONFIG.TILE, P = G.PixelArt;
       S.paused = true;
-      const x0 = Math.floor(h.x / T) - 12, y0 = Math.floor(h.y / T) + 12;
-      // (Laid out in 2 × 2 wall sections.)
-      const add = (k, x, y) => G.Buildings.add(k, x0 + x * 2, y0 + y * 2, { team: 'blue' });
+      const x0 = Math.floor(h.x / T) - 6, y0 = Math.floor(h.y / T) + 6;
+      const add = (k, x, y) => G.Buildings.add(k, x0 + x, y0 + y, { team: 'blue' });
       // A run: wood, metal, a 1×3 gate, reinforced; a wall beside the gate's long side; a corner;
       // a lone wall; a pair touching only at a corner.
       const a = add('wood_wall', 0, 0), b = add('defensive_wall', 1, 0), gate = add('gate_3', 2, 0), c = add('reinforced_wall', 5, 0);
@@ -637,9 +636,9 @@ test('pixel-art walls join their neighbours and gate ends (never diagonally); ga
       const lone = add('defensive_wall', 8, 4), d1 = add('wood_wall', 10, 4), d2 = add('wood_wall', 11, 5);
       const vg = add('gate_v', 0, 2), below = add('wood_wall', 0, 4);
       // Two walls a quarter tile off the tile grid, flush against each other, join.
-      const q1 = G.Buildings.add('wood_wall', x0 + 16, y0 + 14, { team: 'blue', sx: 1, sy: 1 }), q2 = G.Buildings.add('wood_wall', x0 + 18, y0 + 14, { team: 'blue', sx: 1, sy: 1 });
+      const q1 = G.Buildings.add('wood_wall', x0 + 8, y0 + 7, { team: 'blue', sx: 1, sy: 1 }), q2 = G.Buildings.add('wood_wall', x0 + 9, y0 + 7, { team: 'blue', sx: 1, sy: 1 });
       const mask = w => P.joins(w);
-      G.centerCamera((x0 + 6) * T, (y0 + 4) * T, 1); G.Renderer.draw();
+      G.centerCamera((x0 + 3) * T, (y0 + 2) * T, 1); G.Renderer.draw();
       const sp = P.data.sprites.defensive_wall;
       const col = P.buildingCol(b, sp, 0);
       // Open the gate by bringing Vance to it.
@@ -680,45 +679,45 @@ test('building walls: press and drag builds a row in the direction dragged, prev
     const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
     const errors = track(page);
     await startGame(page, pathToFileURL(path.join(ROOT, 'index.html')).href);
-    // An open 16 × 16 patch south of the Spider (walls are 2 × 2), and the Spider in build mode with a wall picked.
+    // An open 8 × 8 patch south of the Spider, and the Spider in build mode with a wall picked.
     const at = await page.evaluate(() => {
       const G = GW, S = G.State, T = 48, u = S.units.find(u => u.type === 'utility_spider');
       S.resources.metal = 2000; S.resources.steel = 200;
-      const free = (x, y) => { for (let j = 0; j < 16; j++) for (let i = 0; i < 16; i++) if (!G.Buildings.canPlace(x + i, y + j, 1, 1)) return false; return true; };
+      const free = (x, y) => { for (let j = 0; j < 8; j++) for (let i = 0; i < 8; i++) if (!G.Buildings.canPlace(x + i, y + j, 1, 1)) return false; return true; };
       let spot = null;
       for (let r = 3; r < 30 && !spot; r++) for (let dx = -r; dx <= r && !spot; dx++){ const x = Math.floor(u.x / T) + dx, y = Math.floor(u.y / T) + r; if (free(x, y)) spot = { gx: x, gy: y }; }
-      G.centerCamera((spot.gx + 6.5) * T, (spot.gy + 6) * T, 0.75);
+      G.centerCamera((spot.gx + 4) * T, (spot.gy + 4) * T, 1);
       G.BuildUI.enter(u); G.BuildUI.choose('wood_wall');
       return spot;
     });
-    // Placement centres a structure on the pointer: point at the middle of a 2 × 2 wall section.
-    const cellCentre = async (gx, gy) => screen(page, (gx + 1) * 48, (gy + 1) * 48);
+    // Placement centres a structure on the pointer: point at the middle of a 1 × 1 wall section.
+    const cellCentre = async (gx, gy) => screen(page, (gx + 0.5) * 48, (gy + 0.5) * 48);
     // Hovering (no button) shows the outline where the section would go.
     const h = await cellCentre(at.gx + 2, at.gy + 2);
     await page.mouse.move(h.x - 30, h.y); await page.mouse.move(h.x, h.y, { steps: 3 });
     assert.deepEqual(await page.evaluate(() => { const p = GW.State.buildPreview; return p && [p.gx, p.gy, p.sx, p.sy]; }), [at.gx + 2, at.gy + 2, 0, 0], 'the outline follows the mouse');
-    // Drag east 8 tiles (and a little south): a row of 5 east-west.
-    let a = await cellCentre(at.gx, at.gy), b = await cellCentre(at.gx + 8, at.gy + 1);
+    // Drag east 4 tiles (and a little south): a row of 5 east-west.
+    let a = await cellCentre(at.gx, at.gy), b = await cellCentre(at.gx + 4, at.gy + 1);
     await page.mouse.move(a.x, a.y); await page.mouse.down();
     await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 3 }); await page.mouse.move(b.x, b.y, { steps: 3 });
     const pv = await page.evaluate(() => GW.State.buildPreview && GW.State.buildPreview.cells.map(c => [c.gx, c.gy, c.afford]));
     assert.equal(pv.length, 5, 'five cells previewed');
-    assert.ok(pv.every(([x, y, ok], i) => x === at.gx + i * 2 && y === at.gy && ok), JSON.stringify(pv));
+    assert.ok(pv.every(([x, y, ok], i) => x === at.gx + i && y === at.gy && ok), JSON.stringify(pv));
     await page.screenshot({ path: path.join(OUT, 'wall-row-preview.png') });
     await page.mouse.up();
     let sites = await page.evaluate(() => GW.State.constructionSites.map(s => [s.type, s.gx, s.gy]));
     assert.equal(sites.length, 5, 'a row of five queued');
-    assert.ok(sites.every(([t, x, y], i) => t === 'wood_wall' && x === at.gx + i * 2 && y === at.gy));
+    assert.ok(sites.every(([t, x, y], i) => t === 'wood_wall' && x === at.gx + i && y === at.gy));
     // Cancel it, then drag north-south with a metal wall: the row follows the drag.
     await page.evaluate(() => { const u = GW.State.units.find(u => u.type === 'utility_spider'); GW.Orders.move([u], u.x, u.y); GW.BuildUI.enter(u); GW.BuildUI.choose('defensive_wall'); });
-    a = await cellCentre(at.gx + 12, at.gy + 12); b = await cellCentre(at.gx + 13, at.gy + 2);
+    a = await cellCentre(at.gx + 6, at.gy + 6); b = await cellCentre(at.gx + 7, at.gy + 1);
     await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 5 }); await page.mouse.up();
     sites = await page.evaluate(() => GW.State.constructionSites.map(s => [s.type, s.gx, s.gy]));
     assert.equal(sites.length, 6);
-    assert.ok(sites.every(([t, x, y], i) => t === 'defensive_wall' && x === at.gx + 12 && y === at.gy + 12 - i * 2), JSON.stringify(sites));
+    assert.ok(sites.every(([t, x, y], i) => t === 'defensive_wall' && x === at.gx + 6 && y === at.gy + 6 - i), JSON.stringify(sites));
     // A tap still builds one section.
     await page.evaluate(() => { const u = GW.State.units.find(u => u.type === 'utility_spider'); GW.Orders.move([u], u.x, u.y); GW.BuildUI.enter(u); GW.BuildUI.choose('reinforced_wall'); });
-    a = await cellCentre(at.gx + 4, at.gy + 8);
+    a = await cellCentre(at.gx + 2, at.gy + 4);
     await page.mouse.click(a.x, a.y);
     assert.equal(await page.evaluate(() => GW.State.constructionSites.length), 1);
     assert.deepEqual(errors, []);
