@@ -59,10 +59,15 @@
     cache: new Map(),
     // Frame text may be run-length encoded (a character, then its count when it repeats).
     expand(str){ return /\d/.test(str) ? str.replace(/(\D)(\d+)/g, (_, ch, n) => ch.repeat(+n)) : str; },
+    // (Two levels, by the frame's own text then its colouring: a frame's text can run to tens of
+    // KB, and a key made by joining it to anything would have to be hashed on every lookup.)
     canvas(str, w, h, team, silhouette){
-      const key = str + (silhouette ? '|s' : '|' + team);
-      let c = this.cache.get(key);
+      let by = this.cache.get(str);
+      if (!by) this.cache.set(str, by = new Map());
+      const sub = silhouette ? '|s' : team || '';
+      let c = by.get(sub);
       if (c) return c;
+      const raw = str;
       str = this.expand(str);
       c = document.createElement('canvas'); c.width = w; c.height = h;
       const g = c.getContext('2d'), img = g.createImageData(w, h), ramp = TEAMS[team] || TEAMS.blue;
@@ -73,7 +78,7 @@
         img.data[i * 4] = rgb[0]; img.data[i * 4 + 1] = rgb[1]; img.data[i * 4 + 2] = rgb[2]; img.data[i * 4 + 3] = 255;
       }
       g.putImageData(img, 0, 0);
-      this.cache.set(key, c);
+      this.cache.get(raw).set(sub, c);
       return c;
     },
 

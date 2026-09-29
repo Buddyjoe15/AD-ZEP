@@ -68,7 +68,7 @@
       const k = key(cx, cy, res, bake), WA = G.WoodlandsArt;
       if (this.has(cx, cy, res, bake)) return true;
       if (!WA.isWoodlands(this.grid)){ this.chunk(cx, cy, res, bake); return true; }
-      const C = G.CONFIG, T = C.TILE, ct = tilesFor(res), BAND = res >= 2 ? 1 : 2;   // tile rows per step
+      const C = G.CONFIG, T = C.TILE, ct = tilesFor(res), BAND = 1;   // tile rows per step (small steps keep each frame's painting within its budget)
       let j = this.jobs.get(k);
       if (!j){ j = { cv: this.canvas(res, ct), row: 0 }; this.jobs.set(k, j); }
       const g = j.cv.getContext('2d');

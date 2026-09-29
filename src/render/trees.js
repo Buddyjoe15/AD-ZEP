@@ -130,14 +130,17 @@
   function mip(str, n, level, silhouette){
     const P = G.PixelArt, full = silhouette ? P.canvas(str, n, n, null, true) : P.canvas(str, n, n, 'neutral');
     if (!level) return full;
-    const key = str + (silhouette ? '|s' : '|c') + level;
-    let c = mips.get(key);
+    // (By the frame's text, then level and kind: never a joined key, see PixelArt.canvas.)
+    let by = mips.get(str);
+    if (!by) mips.set(str, by = []);
+    const slot = level * 2 + (silhouette ? 1 : 0);
+    let c = by[slot];
     if (!c){
       const src = mip(str, n, level - 1, silhouette), m = Math.ceil(n / (1 << level));
       c = document.createElement('canvas'); c.width = m; c.height = m;
       const cg = c.getContext('2d'); cg.imageSmoothingEnabled = true; cg.imageSmoothingQuality = 'medium';
       cg.drawImage(src, 0, 0, m, m);
-      mips.set(key, c);
+      by[slot] = c;
     }
     return c;
   }
@@ -205,6 +208,20 @@
     has: grd => !!(grd && grd.art && grd.art.trees),
     // True when trees are drawn every frame at zoom z (pixel art on, close enough to see them move).
     live(grd, z){ return this.has(grd) && !!pixelArt() && z >= this.LIVE_ZOOM; },
+    // Decodes every tree and prop frame ahead of need (and its silhouette), until the clock
+    // passes `deadline`, so painting a chunk never stops to decode one. True when done.
+    warmed: 0,
+    warm(deadline){
+      const A = pixelArt();
+      if (!A) return true;
+      const list = this.warmList || (this.warmList = Object.values(A.art).flatMap(sets => sets.flatMap(vs => vs.map(v => [v.frames[0], v.n]))));
+      while (this.warmed < list.length){
+        const [str, n] = list[this.warmed++];
+        mip(str, n, 0, false); mip(str, n, 0, true);
+        if (performance.now() > deadline) return this.warmed >= list.length;
+      }
+      return true;
+    },
     // Every tree reaching into the chunk of ct × ct tiles at tile (tx, ty), at rest, into a
     // chunk canvas (world px from its corner). `groundOnly`: just the ground layer (the trees
     // are drawn live).

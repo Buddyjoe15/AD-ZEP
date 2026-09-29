@@ -12,10 +12,13 @@
     // CHUNK_CACHE_MAX is a budget in full-size 1× chunks (about 2.4 MB each); a chunk at res r
     // costs r² times its share of a full chunk. Missing chunks are painted for up to
     // CHUNK_BUILD_MS a frame (at least one), centre first.
-    CHUNK_TILES: 16, CHUNK_CACHE_MAX: 128, CHUNK_BUILD_MS: 10,
+    // CHUNK_BLANK_MS while part of the view has only the overview (quick chunks), CHUNK_SHARPEN_MS
+    // once it is covered, CHUNK_AHEAD_MS for the ring round it painted ahead.
+    CHUNK_TILES: 16, CHUNK_CACHE_MAX: 128, CHUNK_BUILD_MS: 10, CHUNK_BLANK_MS: 50, CHUNK_SHARPEN_MS: 6, CHUNK_AHEAD_MS: 3,
     // Close up, terrain chunks are painted at the screen's resolution: 2, 3 or 4 canvas px per
     // world px, up to TERRAIN_RES_MAX; from SUB_RES up, chunks are half as many tiles across.
-    TERRAIN_RES: 2, TERRAIN_RES_MAX: 4, SUB_RES: 3,
+    // QUICK_RES: chunks painted first where the view has nothing, before the sharp ones.
+    TERRAIN_RES: 2, TERRAIN_RES_MAX: 4, SUB_RES: 2, QUICK_RES: 0.5,
     // Between LOD_ZOOM and FAR_CHUNK_ZOOM (1.5× further out) terrain uses lower-resolution
     // chunks (FAR_CHUNK_SCALE of full size, trees drawn in at rest) before the overview image.
     FAR_CHUNK_ZOOM: 0.20, FAR_CHUNK_SCALE: 1 / 3, FAR_CHUNK_CACHE_MAX: 176,

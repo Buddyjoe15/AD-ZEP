@@ -83,8 +83,9 @@
       const res = low ? C.FAR_CHUNK_SCALE : want1, ct = TC.tilesFor(res) * T;
       const [cx0, cy0, cx1, cy1] = span(ct);
       // Free-standing trees (Genesis) are drawn live up close and drawn into the chunks further out.
+      // (Trees stand still, so they are always drawn into the chunks: nothing to redraw each frame.)
       const TA = G.TreeArt, trees = TA.has(TG);
-      L.live = near && TA.live(TG, z * (L.live ? 1.08 : 0.95));
+      L.live = false;
       const bake = trees && !L.live, live = trees && near ? new Set() : null;
       if (inCave) CV.drawCave(g, v, z, t);
       else { g.imageSmoothingEnabled = false; g.drawImage(TC.getOverview(), 0, 0, C.WORLD_W, C.WORLD_H); g.imageSmoothingEnabled = true; }
@@ -125,12 +126,27 @@
         const mx = (v.x0 + v.x1) / 2 / ct - 0.5, my = (v.y0 + v.y1) / 2 / ct - 0.5, want = [];
         for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++){ TC.pin.add(TC.key(cx, cy, res, bake)); if (!TC.has(cx, cy, res, bake)) want.push([cx, cy]); }
         want.sort((a, b) => (a[0] - mx) ** 2 + (a[1] - my) ** 2 - (b[0] - mx) ** 2 - (b[1] - my) ** 2);
+        // First cover the view: where a chunk is missing and nothing sharper is at hand, a quick
+        // one at QUICK_RES (a fraction of the cost) is painted first, so after a jump across the
+        // map the view is whole within a few frames and then sharpens chunk by chunk.
+        const Q = C.QUICK_RES, qs = TC.tilesFor(Q) * T, jobs = [], seenQ = new Set();
+        if (res > Q) for (const [cx, cy] of want){
+          const qx = Math.floor(cx * ct / qs), qy = Math.floor(cy * ct / qs), qk = qx + ',' + qy;
+          if (seenQ.has(qk)) continue;
+          seenQ.add(qk); TC.pin.add(TC.key(qx, qy, Q, bake));
+          if (!TC.has(qx, qy, Q, bake) && !this.covered(cx, cy, ct, res, bake)) jobs.push([qx, qy, Q]);
+        }
+        for (const [cx, cy] of want) jobs.push([cx, cy, res]);
         // Painted a band of rows at a time within the frame's budget, so even a big chunk
         // never stalls a frame; a half-painted one carries on next frame.
-        const t1 = now();
-        for (let k = 0; k < want.length && (k < 1 || now() - t1 < C.CHUNK_BUILD_MS); k++) if (!TC.work(want[k][0], want[k][1], res, bake, t1 + C.CHUNK_BUILD_MS)) break;
+        // The budget: the most while part of the view shows nothing but the overview (quick chunks
+        // still to paint: a few slow frames beat seconds of blur), then less while it sharpens,
+        // so the game stays smooth as the view fills in.
+        const t1 = now(), budget = jobs.length && jobs[0][2] === Q ? C.CHUNK_BLANK_MS : want.length ? C.CHUNK_BUILD_MS : C.CHUNK_SHARPEN_MS;
+        for (let k = 0; k < jobs.length && (k < 1 || now() - t1 < budget); k++) if (!TC.work(jobs[k][0], jobs[k][1], jobs[k][2], bake, t1 + budget)) break;
+        S.metrics.chunksBlank = jobs.filter(j => j[2] === Q && !TC.has(j[0], j[1], Q, bake)).length;   // view chunks with nothing but the overview
         // What is left of the budget for work ahead of need (time spent drawing doesn't count).
-        const spare = () => C.CHUNK_BUILD_MS - (now() - t1 - drawn), t2 = now(); let drawn = 0;
+        const spare = () => C.CHUNK_AHEAD_MS - (now() - t1 - drawn), t2 = now(); let drawn = 0;
         const liveKey = (cx, cy) => { const k = ct / CT; return Math.floor(cy * k) * 4096 + Math.floor(cx * k); };   // (in the tree index's full-size chunks)
         for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++){
           if (TC.has(cx, cy, res, bake)){
@@ -146,17 +162,18 @@
         drawn = now() - t2;
         // With the view complete and time to spare, the ring of chunks round it is painted
         // ahead, so scrolling finds them ready.
-        if (!want.length || spare() > C.CHUNK_BUILD_MS * 0.5){
+        if (!want.length){
           const rx0 = Math.max(0, cx0 - 1), ry0 = Math.max(0, cy0 - 1), rx1 = Math.min(Math.ceil(C.WORLD_W / ct) - 1, cx1 + 1), ry1 = Math.min(Math.ceil(C.WORLD_H / ct) - 1, cy1 + 1);
           if (res < 1 || (rx1 - rx0 + 1) * (ry1 - ry0 + 1) * TC.cost(res) <= C.CHUNK_CACHE_MAX){
             const ring = [];
             for (let cy = ry0; cy <= ry1; cy++) for (let cx = rx0; cx <= rx1; cx++){ const k = TC.key(cx, cy, res, bake); TC.pin.add(k); if (!TC.has(cx, cy, res, bake)) ring.push([cx, cy]); }
             ring.sort((a, b) => (a[0] - mx) ** 2 + (a[1] - my) ** 2 - (b[0] - mx) ** 2 - (b[1] - my) ** 2);
-            if (ring.length && spare() > C.CHUNK_BUILD_MS * 0.5) TC.work(ring[0][0], ring[0][1], res, bake, now() + spare());
+            if (ring.length && spare() > 0) TC.work(ring[0][0], ring[0][1], res, bake, now() + spare());
           }
         }
         // Time to spare: houses and caverns are drawn ahead of need.
-        if (!this.warmed && spare() > C.CHUNK_BUILD_MS * 0.5) this.warmed = G.Structures.warm(TG, now() + spare() * 0.8);
+        if (!this.warmed && !want.length && spare() > 0) this.warmed = G.Structures.warm(TG, now() + spare());
+        if (!this.treesWarm && !want.length && spare() > 0) this.treesWarm = G.TreeArt.warm(now() + spare());
         g.imageSmoothingEnabled = true;
         // Pixel-art trees moving in the wind (Woodlands); lower-resolution chunks have them drawn in.
         if (near) G.Landscape.drawLive(g, TG, v, t, z);   // waterfalls and glinting water (Genesis)
@@ -269,6 +286,20 @@
       Object.assign(S.metrics, { lod: far ? 'overview' : low ? 'detail (low res)' : 'detail', cached: TC.chunks.size + TC.farChunks.size, visible: visible.length, chunks, drawMs: now() - t0 });
       if (now() - this.minimapAt > 1000 / C.MINIMAP_HZ){ this.minimapAt = now(); this.drawMinimap(); }
       else this.drawMinimapCamera();
+    },
+    // Whether chunk (cx, cy) at `res` (ct world px across) can be stood in for by a sharper
+    // cached chunk (another resolution at 1 or more), so it needs no quick one.
+    covered(cx, cy, ct, res, bake){
+      const TC = G.TerrainCache, T = G.CONFIG.TILE;
+      for (const r of [1, 2, 3, 4]){
+        if (r === res) continue;
+        const cs = TC.tilesFor(r) * T;
+        if (cs >= ct){ if (TC.peek(Math.floor(cx * ct / cs), Math.floor(cy * ct / cs), r, bake)) return true; continue; }
+        const n = ct / cs; let all = true;
+        for (let j = 0; j < n && all; j++) for (let i = 0; i < n; i++) if (!TC.peek(cx * n + i, cy * n + j, r, bake)){ all = false; break; }
+        if (all) return true;
+      }
+      return false;
     },
     // Canvas 2D unit drawing (fallback when hardware WebGL2 is unavailable). Units are
     // stamped from the sprite atlas with one transform + drawImage each; zoomed out,

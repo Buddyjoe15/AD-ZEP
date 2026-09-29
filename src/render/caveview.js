@@ -131,14 +131,11 @@
     drawCave(g, v, z, t){
       const S = G.State, grd = S.grid, T = G.CONFIG.TILE, cols = grd.cols, k = this.cave, of = grd.art.caveOf, cave = G.Caves.list()[k];
       g.fillStyle = '#000'; g.fillRect(v.x0 - T, v.y0 - T, v.x1 - v.x0 + 2 * T, v.y1 - v.y0 + 2 * T);
-      const cells = this.cells(k), clip = new Path2D();
-      for (const i of cells) clip.rect((i % cols) * T, ((i / cols) | 0) * T, T, T);
-      g.save(); g.clip(clip);
-      g.fillStyle = '#15120f'; g.fillRect(v.x0 - T, v.y0 - T, v.x1 - v.x0 + 2 * T, v.y1 - v.y0 + 2 * T);
-      for (const i of cells) if (of[i] === k) G.Structures.caveFloor(g, i % cols, (i / cols) | 0, (i % cols) * T, ((i / cols) | 0) * T, T);
-      for (const C of G.Structures.cavernArt(grd)) if ([...C.cells].some(i => of[i] === k)) g.drawImage(C.cv, C.x * T, C.y * T, C.w * T, C.h * T);
-      if (G.TreeArt.has(grd)) G.TreeArt.drawLive(g, grd, v, t, () => true);
-      g.restore();
+      // The cave itself is painted once into its own canvas and drawn from that.
+      const art = this.picture(k), smooth = g.imageSmoothingEnabled;
+      g.imageSmoothingEnabled = G.PixelArt.shrinks(g, art.w, art.cv.width);
+      g.drawImage(art.cv, art.x, art.y, art.w, art.h);
+      g.imageSmoothingEnabled = smooth;
       // The way out: daylight falling in at the mouth, and a marker on the floor behind it.
       const m = G.Caves.door(k, 'inside'), pulse = 0.6 + 0.3 * Math.sin(t * 3);
       const gr = g.createRadialGradient(m.x, m.y - T * 0.2, 4, m.x, m.y, T * 2.2);
@@ -148,6 +145,32 @@
       g.beginPath(); g.moveTo(m.x - 12, m.y - 2); g.lineTo(m.x, m.y + 10); g.lineTo(m.x + 12, m.y - 2); g.stroke();
       g.fillStyle = '#dff8ff'; g.font = `600 ${Math.max(9, 11 / z)}px Montserrat, sans-serif`; g.textAlign = 'center';
       g.fillText('Way out', m.x, (cave.inside.y) * T - 4);
+    },
+    // Cave k painted into a canvas: floor, walls and props, clipped to its floor and the rock
+    // round it, at up to 2 canvas px per world px (at most 2048 px across). Rebuilt when its
+    // props or the terrain change.
+    pictures: new Map(),
+    picture(k){
+      let p = this.pictures.get(k);
+      if (p) return p;
+      const grd = G.State.grid, T = G.CONFIG.TILE, cols = grd.cols, of = grd.art.caveOf, cells = this.cells(k);
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const i of cells){ const x = i % cols, y = (i / cols) | 0; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+      const ct = Math.max(x1 - x0, y1 - y0) + 1, res = Math.min(2, 2048 / (ct * T)), cv = document.createElement('canvas');
+      cv.width = Math.ceil(ct * T * res); cv.height = cv.width;
+      const g = cv.getContext('2d');
+      g.scale(res, res); g.translate(-x0 * T, -y0 * T);
+      const clip = new Path2D();
+      for (const i of cells) clip.rect((i % cols) * T, ((i / cols) | 0) * T, T, T);
+      g.save(); g.clip(clip);
+      g.fillStyle = '#15120f'; g.fillRect(x0 * T, y0 * T, ct * T, ct * T);
+      for (const i of cells) if (of[i] === k) G.Structures.caveFloor(g, i % cols, (i / cols) | 0, (i % cols) * T, ((i / cols) | 0) * T, T);
+      for (const C of G.Structures.cavernArt(grd)) if ([...C.cells].some(i => of[i] === k)) g.drawImage(C.cv, C.x * T, C.y * T, C.w * T, C.h * T);
+      if (G.TreeArt.has(grd)){ g.translate(x0 * T, y0 * T); G.TreeArt.paintChunk(g, grd, x0, y0, ct); }
+      g.restore();
+      p = { cv, x: x0 * T, y: y0 * T, w: ct * T, h: ct * T };
+      this.pictures.set(k, p);
+      return p;
     },
     // On the surface: a small label at each cave mouth, close up.
     drawMouths(g, z, inView){
@@ -161,7 +184,9 @@
     }
   };
 
-  G.Events.on('world:created', () => { G.CaveView.reset(); G.CaveView.renderButton(); });
+  G.Events.on('world:created', () => { G.CaveView.reset(); G.CaveView.pictures.clear(); G.CaveView.renderButton(); });
+  // A crystal or fungus destroyed, or the ground edited: the caves are painted again.
+  for (const ev of ['tree:changed', 'terrain:changed']) G.Events.on(ev, () => G.CaveView.pictures.clear());
   // Units sent into a cave: the view follows them in when the first of them arrives.
   G.Events.on('cave:crossed', e => {
     const CV = G.CaveView;
